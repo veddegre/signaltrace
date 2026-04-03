@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const DB_PATH = '/var/www/honeypot-data/clicks.db';
+const DB_PATH = __DIR__ . '/../data/database.db';
 const APP_TIMEZONE = 'UTC';
 
 date_default_timezone_set(APP_TIMEZONE);
