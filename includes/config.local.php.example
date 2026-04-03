@@ -1,0 +1,56 @@
+<?php
+declare(strict_types=1);
+
+/*
+|--------------------------------------------------------------------------
+| SignalTrace Local Configuration
+|--------------------------------------------------------------------------
+|
+| Copy this file to:
+|   includes/config.local.php
+|
+| Then update the values below.
+|
+| IMPORTANT:
+| - This file should NOT be committed to Git
+| - Add it to your .gitignore
+|
+*/
+
+/*
+|--------------------------------------------------------------------------
+| Admin Credentials
+|--------------------------------------------------------------------------
+|
+| Username for accessing /admin
+|
+*/
+define('ADMIN_USERNAME', 'admin');
+
+/*
+|--------------------------------------------------------------------------
+| Admin Password Hash
+|--------------------------------------------------------------------------
+|
+| Generate with:
+|   php -r "echo password_hash('your-strong-password', PASSWORD_DEFAULT) . PHP_EOL;"
+|
+| Paste the full output below.
+|
+*/
+define('ADMIN_PASSWORD_HASH', 'replace-with-password-hash');
+
+/*
+|--------------------------------------------------------------------------
+| Visitor Hash Salt
+|--------------------------------------------------------------------------
+|
+| Used to generate consistent visitor fingerprints.
+|
+| Generate with:
+|   openssl rand -hex 64
+|
+| Do NOT change this after deployment unless necessary.
+|
+*/
+define('VISITOR_HASH_SALT', 'replace-with-random-secret');
