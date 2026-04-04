@@ -18,6 +18,16 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleSaveThreatFeedSettings($pdo);
             return true;
 
+        case '/admin/save-retention-settings':
+            requireAdminAuth();
+            handleSaveRetentionSettings($pdo);
+            return true;
+
+        case '/admin/run-cleanup':
+            requireAdminAuth();
+            handleRunCleanup($pdo);
+            return true;
+
         case '/admin/create-link':
             requireAdminAuth();
             handleCreateLink($pdo);
@@ -137,6 +147,31 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
     setSetting($pdo, 'threat_feed_enabled', $enabledInput);
     setSetting($pdo, 'threat_feed_window_hours', (string)$windowHoursInput);
     setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleSaveRetentionSettings(PDO $pdo): void
+{
+    $retentionDaysInput = max(0, (int)($_POST['data_retention_days'] ?? 0));
+
+    setSetting($pdo, 'data_retention_days', (string)$retentionDaysInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleRunCleanup(PDO $pdo): void
+{
+    $days = (int)getSetting($pdo, 'data_retention_days', '0');
+
+    if ($days <= 0) {
+        header('Location: /admin', true, 302);
+        exit;
+    }
+
+    cleanupOldClicks($pdo, $days);
 
     header('Location: /admin', true, 302);
     exit;

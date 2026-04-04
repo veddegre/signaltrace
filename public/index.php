@@ -25,32 +25,59 @@ $settings = getAllSettings($pdo);
 $pixelEnabled = ($settings['pixel_enabled'] ?? '1') === '1';
 $skipPatternMap = getActiveSkipPatternMap($pdo);
 
+/**
+ * Health check
+ */
 if ($path === '/health') {
     header('Content-Type: application/json');
     echo json_encode(['status' => 'ok']);
     exit;
 }
 
+/**
+ * Threat feed
+ */
 if ($path === '/feed/ips.txt') {
     handleThreatFeed($pdo);
 }
 
+/**
+ * JSON export (admin only)
+ */
+if ($path === '/export.json') {
+    handleJsonExport($pdo);
+}
+
+/**
+ * Admin POST actions
+ */
 if (handleAdminActions($pdo, $path)) {
     exit;
 }
 
+/**
+ * Pixel tracking
+ */
 if ($pixelEnabled && preg_match('#^/pixel/(.+)\.gif$#', $path)) {
     handlePixelRequest($pdo, $path);
 }
 
+/**
+ * Admin UI
+ */
 if ($path === '/admin') {
     handleAdminPage($pdo, $settings);
 }
 
+/**
+ * Reserved paths (prevent accidental logging)
+ */
 $reserved = [
     '/admin',
     '/admin/save-settings',
     '/admin/save-threat-feed-settings',
+    '/admin/save-retention-settings',
+    '/admin/run-cleanup',
     '/admin/create-link',
     '/admin/delete-link',
     '/admin/deactivate-link',
@@ -62,13 +89,20 @@ $reserved = [
     '/admin/delete-skip-pattern',
     '/admin/delete-click',
     '/admin/delete-token-clicks',
-    '/feed/ips.txt',
     '/health',
+    '/feed/ips.txt',
+    '/export.json'
 ];
 
+/**
+ * Main tracking logic
+ */
 if (!in_array($path, $reserved, true)) {
     handleTrackedRequest($pdo, $path, $settings, $skipPatternMap);
 }
 
+/**
+ * Fallback
+ */
 http_response_code(404);
 echo 'Not found';

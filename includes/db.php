@@ -161,6 +161,7 @@ function seedDefaultSettings(PDO $pdo): void
         'threat_feed_enabled' => '1',
         'threat_feed_window_hours' => '168',
         'threat_feed_min_confidence' => 'suspicious',
+        'data_retention_days' => '0',
     ];
 
     $stmt = $pdo->prepare("
@@ -686,7 +687,7 @@ function getRecentClicksFiltered(PDO $pdo, int $limit = 100, ?string $tokenFilte
     return $stmt->fetchAll();
 }
 
-function getClickCountsByToken(PDO $pdo, bool $knownOnly = false): array
+function getClickCountsByToken(PDO $pdo, bool $knownOnly = false, ?string $dateFrom = null, ?string $dateTo = null): array
 {
     $sql = "
         SELECT
@@ -695,10 +696,23 @@ function getClickCountsByToken(PDO $pdo, bool $knownOnly = false): array
             MAX(c.clicked_at) AS last_seen,
             MAX(CASE WHEN c.link_id IS NOT NULL THEN 1 ELSE 0 END) AS is_known
         FROM clicks c
+        WHERE 1 = 1
     ";
 
+    $params = [];
+
     if ($knownOnly) {
-        $sql .= " WHERE c.link_id IS NOT NULL ";
+        $sql .= " AND c.link_id IS NOT NULL ";
+    }
+
+    if ($dateFrom !== null && $dateFrom !== '') {
+        $sql .= " AND c.clicked_at >= :dateFrom ";
+        $params[':dateFrom'] = $dateFrom;
+    }
+
+    if ($dateTo !== null && $dateTo !== '') {
+        $sql .= " AND c.clicked_at <= :dateTo ";
+        $params[':dateTo'] = $dateTo;
     }
 
     $sql .= "
@@ -706,7 +720,12 @@ function getClickCountsByToken(PDO $pdo, bool $knownOnly = false): array
         ORDER BY hit_count DESC, last_seen DESC
     ";
 
-    $stmt = $pdo->query($sql);
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    $stmt->execute();
+
     return $stmt->fetchAll();
 }
 
@@ -731,7 +750,9 @@ function getRecentClicksAdvancedFiltered(
     ?string $tokenFilter = null,
     ?string $ipFilter = null,
     ?string $visitorFilter = null,
-    bool $knownOnly = false
+    bool $knownOnly = false,
+    ?string $dateFrom = null,
+    ?string $dateTo = null
 ): array {
     $sql = "
         SELECT
@@ -764,6 +785,16 @@ function getRecentClicksAdvancedFiltered(
         $sql .= " AND c.link_id IS NOT NULL ";
     }
 
+    if ($dateFrom !== null && $dateFrom !== '') {
+        $sql .= " AND c.clicked_at >= :dateFrom ";
+        $params[':dateFrom'] = $dateFrom;
+    }
+
+    if ($dateTo !== null && $dateTo !== '') {
+        $sql .= " AND c.clicked_at <= :dateTo ";
+        $params[':dateTo'] = $dateTo;
+    }
+
     $sql .= " ORDER BY c.id DESC LIMIT :limit ";
 
     $stmt = $pdo->prepare($sql);
@@ -785,8 +816,8 @@ function getThreatFeedIps(PDO $pdo): array
         return [];
     }
 
-    $windowHours = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
-    $minConfidence = strtolower((string) getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
+    $windowHours = max(1, (int)getSetting($pdo, 'threat_feed_window_hours', '168'));
+    $minConfidence = strtolower((string)getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
 
     $allowedLabels = match ($minConfidence) {
         'bot' => ['bot'],
@@ -821,7 +852,7 @@ function getThreatFeedIps(PDO $pdo): array
 
     $ips = [];
     foreach ($stmt->fetchAll() as $row) {
-        $ip = trim((string) ($row['ip'] ?? ''));
+        $ip = trim((string)($row['ip'] ?? ''));
         if ($ip === '') {
             continue;
         }
@@ -829,4 +860,43 @@ function getThreatFeedIps(PDO $pdo): array
     }
 
     return array_values(array_unique($ips));
+}
+
+function exportClicksAsJson(
+    PDO $pdo,
+    ?string $tokenFilter = null,
+    ?string $ipFilter = null,
+    ?string $visitorFilter = null,
+    bool $knownOnly = false,
+    ?string $dateFrom = null,
+    ?string $dateTo = null,
+    int $limit = 1000
+): array {
+    return getRecentClicksAdvancedFiltered(
+        $pdo,
+        $limit,
+        $tokenFilter,
+        $ipFilter,
+        $visitorFilter,
+        $knownOnly,
+        $dateFrom,
+        $dateTo
+    );
+}
+
+function cleanupOldClicks(PDO $pdo, int $days): int
+{
+    if ($days <= 0) {
+        return 0;
+    }
+
+    $stmt = $pdo->prepare("
+        DELETE FROM clicks
+        WHERE clicked_at < datetime('now', :window)
+    ");
+    $stmt->execute([
+        ':window' => '-' . $days . ' days',
+    ]);
+
+    return $stmt->rowCount();
 }

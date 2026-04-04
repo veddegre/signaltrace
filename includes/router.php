@@ -14,6 +14,37 @@ function handleThreatFeed(PDO $pdo): void
     exit;
 }
 
+function handleJsonExport(PDO $pdo): void
+{
+    requireAdminAuth();
+
+    $tokenFilter = trim((string)($_GET['token'] ?? ''));
+    $ipFilter = trim((string)($_GET['ip'] ?? ''));
+    $visitorFilter = trim((string)($_GET['visitor'] ?? ''));
+    $knownOnly = isset($_GET['known']) && $_GET['known'] === '1';
+    $dateFrom = trim((string)($_GET['date_from'] ?? ''));
+    $dateTo = trim((string)($_GET['date_to'] ?? ''));
+
+    $rows = exportClicksAsJson(
+        $pdo,
+        $tokenFilter !== '' ? $tokenFilter : null,
+        $ipFilter !== '' ? $ipFilter : null,
+        $visitorFilter !== '' ? $visitorFilter : null,
+        $knownOnly,
+        $dateFrom !== '' ? $dateFrom : null,
+        $dateTo !== '' ? $dateTo : null,
+        1000
+    );
+
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    echo json_encode($rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 function handlePixelRequest(PDO $pdo, string $path): void
 {
     if (!preg_match('#^/pixel/(.+)\.gif$#', $path, $matches)) {
@@ -58,10 +89,27 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $ipFilter = trim((string)($_GET['ip'] ?? ''));
     $visitorFilter = trim((string)($_GET['visitor'] ?? ''));
     $knownOnly = isset($_GET['known']) && $_GET['known'] === '1';
+    $dateFrom = trim((string)($_GET['date_from'] ?? ''));
+    $dateTo = trim((string)($_GET['date_to'] ?? ''));
 
-    $clicks = getRecentClicksAdvancedFiltered($pdo, 200, $tokenFilter, $ipFilter, $visitorFilter, $knownOnly);
+    $clicks = getRecentClicksAdvancedFiltered(
+        $pdo,
+        200,
+        $tokenFilter !== '' ? $tokenFilter : null,
+        $ipFilter !== '' ? $ipFilter : null,
+        $visitorFilter !== '' ? $visitorFilter : null,
+        $knownOnly,
+        $dateFrom !== '' ? $dateFrom : null,
+        $dateTo !== '' ? $dateTo : null
+    );
+
     $links = getAllLinks($pdo);
-    $tokenCounts = getClickCountsByToken($pdo, $knownOnly);
+    $tokenCounts = getClickCountsByToken(
+        $pdo,
+        $knownOnly,
+        $dateFrom !== '' ? $dateFrom : null,
+        $dateTo !== '' ? $dateTo : null
+    );
     $skipPatterns = getSkipPatterns($pdo);
 
     $refreshParams = [];
@@ -77,6 +125,13 @@ function handleAdminPage(PDO $pdo, array $settings): void
     if ($knownOnly) {
         $refreshParams['known'] = '1';
     }
+    if ($dateFrom !== '') {
+        $refreshParams['date_from'] = $dateFrom;
+    }
+    if ($dateTo !== '') {
+        $refreshParams['date_to'] = $dateTo;
+    }
+
     $refreshUrl = '/admin' . (!empty($refreshParams) ? '?' . http_build_query($refreshParams) : '');
 
     renderAdminPage(
