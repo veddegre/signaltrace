@@ -33,6 +33,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleCreateLink($pdo);
             return true;
 
+       case '/admin/update-link':
+	    requireAdminAuth();
+	    handleUpdateLink($pdo);
+	    return true;
+
         case '/admin/delete-link':
             requireAdminAuth();
             handleDeleteLink($pdo);
@@ -88,6 +93,48 @@ function handleAdminActions(PDO $pdo, string $path): bool
     }
 }
 
+function handleUpdateLink(PDO $pdo): void
+{
+    $id = (int)($_POST['id'] ?? 0);
+    $token = trim((string)($_POST['token'] ?? ''), '/');
+    $destination = trim((string)($_POST['destination'] ?? ''));
+    $description = trim((string)($_POST['description'] ?? ''));
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid link id.';
+        exit;
+    }
+
+    if ($token === '' || $destination === '') {
+        http_response_code(400);
+        echo 'Path/token and destination are required.';
+        exit;
+    }
+
+    if (!filter_var($destination, FILTER_VALIDATE_URL)) {
+        http_response_code(400);
+        echo 'Invalid destination URL.';
+        exit;
+    }
+
+    if (!preg_match('#^[A-Za-z0-9./_-]+$#', $token)) {
+        http_response_code(400);
+        echo 'Path/token may contain only letters, numbers, dot, slash, underscore, and dash.';
+        exit;
+    }
+
+    try {
+        updateLink($pdo, $id, $token, $destination, $description);
+        header('Location: /admin?tab=links', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to update link. The token/path may already exist.';
+        exit;
+    }
+}
+
 function handleSaveSettings(PDO $pdo): void
 {
     $appNameInput = trim((string)($_POST['app_name'] ?? 'SignalTrace'));
@@ -96,6 +143,16 @@ function handleSaveSettings(PDO $pdo): void
     $unknownPathBehaviorInput = trim((string)($_POST['unknown_path_behavior'] ?? 'redirect'));
     $pixelEnabledInput = isset($_POST['pixel_enabled']) ? '1' : '0';
     $noiseFilterEnabledInput = isset($_POST['noise_filter_enabled']) ? '1' : '0';
+
+    $displayMinScoreInput = trim((string)($_POST['display_min_score'] ?? '20'));
+
+    if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
+	    http_response_code(400);
+	    echo 'Display minimum score must be numeric.';
+	    exit;
+    }
+    
+    $displayMinScoreInput = (string)max(0, min(100, (int)$displayMinScoreInput));
 
     if ($appNameInput === '') {
         http_response_code(400);
@@ -127,6 +184,7 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'unknown_path_behavior', $unknownPathBehaviorInput);
     setSetting($pdo, 'pixel_enabled', $pixelEnabledInput);
     setSetting($pdo, 'noise_filter_enabled', $noiseFilterEnabledInput);
+    setSetting($pdo, 'display_min_score', $displayMinScoreInput);
 
     header('Location: /admin', true, 302);
     exit;

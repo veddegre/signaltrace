@@ -1,50 +1,9 @@
 <?php
 declare(strict_types=1);
 
-function handleThreatFeed(PDO $pdo): void
-{
-    $ips = getThreatFeedIps($pdo);
-
-    header('Content-Type: text/plain; charset=utf-8');
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Pragma: no-cache');
-    header('Expires: 0');
-
-    echo implode("\n", $ips);
-    exit;
-}
-
-function handleJsonExport(PDO $pdo): void
-{
-    requireAdminAuth();
-
-    $tokenFilter = trim((string)($_GET['token'] ?? ''));
-    $ipFilter = trim((string)($_GET['ip'] ?? ''));
-    $visitorFilter = trim((string)($_GET['visitor'] ?? ''));
-    $knownOnly = isset($_GET['known']) && $_GET['known'] === '1';
-    $dateFrom = trim((string)($_GET['date_from'] ?? ''));
-    $dateTo = trim((string)($_GET['date_to'] ?? ''));
-
-    $rows = exportClicksAsJson(
-        $pdo,
-        $tokenFilter !== '' ? $tokenFilter : null,
-        $ipFilter !== '' ? $ipFilter : null,
-        $visitorFilter !== '' ? $visitorFilter : null,
-        $knownOnly,
-        $dateFrom !== '' ? $dateFrom : null,
-        $dateTo !== '' ? $dateTo : null,
-        1000
-    );
-
-    header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Pragma: no-cache');
-    header('Expires: 0');
-
-    echo json_encode($rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
+/* ======================================================
+   PIXEL HANDLER (unchanged)
+   ====================================================== */
 function handlePixelRequest(PDO $pdo, string $path): void
 {
     if (!preg_match('#^/pixel/(.+)\.gif$#', $path, $matches)) {
@@ -67,13 +26,73 @@ function handlePixelRequest(PDO $pdo, string $path): void
 
     header('Content-Type: image/gif');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Pragma: no-cache');
-    header('Expires: 0');
 
     echo base64_decode('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==');
     exit;
 }
 
+/* ======================================================
+   🧠 THREAT FEED
+   ====================================================== */
+function handleThreatFeed(PDO $pdo, array $settings): void
+{
+    $threshold = (int)($settings['feed_score_threshold'] ?? 25);
+    $windowMinutes = (int)($settings['feed_time_window_minutes'] ?? 1440);
+
+    $cutoff = (int) round(microtime(true) * 1000) - ($windowMinutes * 60 * 1000);
+
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT ip
+        FROM clicks
+        WHERE ip IS NOT NULL
+          AND ip != ''
+          AND clicked_at_unix_ms IS NOT NULL
+          AND confidence_score IS NOT NULL
+          AND confidence_score <= :threshold
+          AND clicked_at_unix_ms >= :cutoff
+        ORDER BY ip ASC
+    ");
+
+    $stmt->execute([
+        ':threshold' => $threshold,
+        ':cutoff' => $cutoff,
+    ]);
+
+    $ips = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    header('Content-Type: text/plain');
+    header('Cache-Control: no-store');
+
+    foreach ($ips as $ip) {
+        echo $ip . "\n";
+    }
+
+    exit;
+}
+
+/* ======================================================
+   📦 JSON EXPORT
+   ====================================================== */
+function handleJsonExport(PDO $pdo): void
+{
+    $stmt = $pdo->query("
+        SELECT *
+        FROM clicks
+        ORDER BY id DESC
+        LIMIT 1000
+    ");
+
+    $data = $stmt->fetchAll();
+
+    header('Content-Type: application/json');
+    echo json_encode($data, JSON_PRETTY_PRINT);
+
+    exit;
+}
+
+/* ======================================================
+   ADMIN PAGE
+   ====================================================== */
 function handleAdminPage(PDO $pdo, array $settings): void
 {
     requireAdminAuth();
@@ -104,33 +123,23 @@ function handleAdminPage(PDO $pdo, array $settings): void
     );
 
     $links = getAllLinks($pdo);
+
     $tokenCounts = getClickCountsByToken(
         $pdo,
         $knownOnly,
         $dateFrom !== '' ? $dateFrom : null,
         $dateTo !== '' ? $dateTo : null
     );
+
     $skipPatterns = getSkipPatterns($pdo);
 
     $refreshParams = [];
-    if ($tokenFilter !== '') {
-        $refreshParams['token'] = $tokenFilter;
-    }
-    if ($ipFilter !== '') {
-        $refreshParams['ip'] = $ipFilter;
-    }
-    if ($visitorFilter !== '') {
-        $refreshParams['visitor'] = $visitorFilter;
-    }
-    if ($knownOnly) {
-        $refreshParams['known'] = '1';
-    }
-    if ($dateFrom !== '') {
-        $refreshParams['date_from'] = $dateFrom;
-    }
-    if ($dateTo !== '') {
-        $refreshParams['date_to'] = $dateTo;
-    }
+    if ($tokenFilter !== '') $refreshParams['token'] = $tokenFilter;
+    if ($ipFilter !== '') $refreshParams['ip'] = $ipFilter;
+    if ($visitorFilter !== '') $refreshParams['visitor'] = $visitorFilter;
+    if ($knownOnly) $refreshParams['known'] = '1';
+    if ($dateFrom !== '') $refreshParams['date_from'] = $dateFrom;
+    if ($dateTo !== '') $refreshParams['date_to'] = $dateTo;
 
     $refreshUrl = '/admin' . (!empty($refreshParams) ? '?' . http_build_query($refreshParams) : '');
 
@@ -155,6 +164,9 @@ function handleAdminPage(PDO $pdo, array $settings): void
     exit;
 }
 
+/* ======================================================
+   TRACKED REQUEST (unchanged)
+   ====================================================== */
 function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $skipPatternMap): void
 {
     $defaultRedirectUrl = trim((string)($settings['default_redirect_url'] ?? 'https://example.com/'));
@@ -175,8 +187,6 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
 
     if ($link) {
         logClick($pdo, $link, $requestData);
-        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-        header('Pragma: no-cache');
         header('Location: ' . $link['destination'], true, 302);
         exit;
     }

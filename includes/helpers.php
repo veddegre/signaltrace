@@ -39,23 +39,10 @@ function hasExploitLikeQuery(?string $query): bool
     $q = strtolower($query);
 
     $patterns = [
-        'allow_url_include',
-        'auto_prepend_file',
-        'php://input',
-        'php://filter',
-        'base64_encode',
-        'base64_decode',
-        'cmd=',
-        'exec=',
-        'shell=',
-        'wget ',
-        'curl ',
-        '/bin/sh',
-        '/bin/bash',
-        'powershell',
-        '../',
-        '..%2f',
-        '%2e%2e%2f',
+        'allow_url_include','auto_prepend_file','php://input','php://filter',
+        'base64_encode','base64_decode','cmd=','exec=','shell=',
+        'wget ','curl ','/bin/sh','/bin/bash','powershell',
+        '%ad','-d+','-d%20','../','..%2f','%2e%2e%2f',
     ];
 
     foreach ($patterns as $pattern) {
@@ -76,17 +63,42 @@ function isLikelyBrowserUserAgent(?string $ua): bool
     $ua = strtolower($ua);
 
     $signals = [
-        'mozilla/5.0',
-        'chrome/',
-        'safari/',
-        'firefox/',
-        'edg/',
-        'applewebkit/',
-        'gecko/',
+        'mozilla/5.0','chrome/','crios/','safari/','firefox/',
+        'fxios/','edg/','opr/','opera/','version/',
+        'applewebkit/','gecko/',
     ];
 
-    foreach ($signals as $s) {
-        if (str_contains($ua, $s)) {
+    foreach ($signals as $signal) {
+        if (str_contains($ua, $signal)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isKnownAutomationUserAgent(?string $ua): bool
+{
+    if ($ua === null || $ua === '') {
+        return false;
+    }
+
+    $ua = strtolower($ua);
+
+    $signals = [
+        'bot','crawler','spider','preview','scanner','urlscan',
+        'wget','curl','python-requests','go-http-client',
+        'googleimageproxy','bingbot','slurp','facebookexternalhit',
+        'skypeuripreview','slackbot','discordbot','telegrambot',
+        'linkedinbot','outlook','microsoft office','safelinks',
+        'proofpoint','mimecast','barracuda','symantec','trend micro',
+        'zgrab','masscan','nmap','sqlmap','nikto','gobuster',
+        'dirbuster','feroxbuster','httpclient','java/','libwww-perl',
+        'aiohttp','httpx','restsharp','okhttp','apache-httpclient'
+    ];
+
+    foreach ($signals as $signal) {
+        if (str_contains($ua, $signal)) {
             return true;
         }
     }
@@ -102,17 +114,8 @@ function detectBot(?string $ua, string $method, string $path): array
     $host = (string)($_SERVER['HTTP_HOST'] ?? '');
     $reasons = [];
 
-    $signatures = [
-        'bot','crawler','spider','scanner','preview','wget','curl',
-        'python-requests','go-http-client','zgrab','masscan','nmap',
-        'sqlmap','nikto','gobuster','dirbuster','feroxbuster',
-        'httpclient','java/','libwww-perl','aiohttp','httpx'
-    ];
-
-    foreach ($signatures as $sig) {
-        if ($ua !== '' && str_contains($ua, $sig)) {
-            $reasons[] = "ua:$sig";
-        }
+    if ($ua !== '' && isKnownAutomationUserAgent($ua)) {
+        $reasons[] = 'ua:automation';
     }
 
     if ($method === 'HEAD') {
@@ -120,15 +123,15 @@ function detectBot(?string $ua, string $method, string $path): array
     }
 
     if ($method === 'POST' && hasExploitLikeQuery($query)) {
-        $reasons[] = 'post_exploit';
+        $reasons[] = 'method:POST_exploit_query';
     }
 
     if (hasExploitLikeQuery($query)) {
-        $reasons[] = 'query_exploit';
+        $reasons[] = 'query:exploit_like';
     }
 
     if (isRawIpHost($host)) {
-        $reasons[] = 'host_raw_ip';
+        $reasons[] = 'host:raw_ip';
     }
 
     return [
@@ -146,113 +149,156 @@ function buildVisitorHash(?string $ip, ?string $ua): ?string
     return hash('sha256', VISITOR_HASH_SALT . '|' . $ip . '|' . $ua);
 }
 
+/* ======================================================
+   🔥 UPDATED SCORING WITH PHASE 2 DETECTION
+   ====================================================== */
+
 function calculateConfidence(array $requestData): array
 {
+    $pdo = db(); // IMPORTANT
+
     $score = 50;
     $reasons = [];
 
+    $ip = (string)($requestData['ip'] ?? '');
     $ua = strtolower((string)($requestData['user_agent'] ?? ''));
     $method = strtoupper((string)($requestData['request_method'] ?? ''));
-    $referer = (string)($requestData['referer'] ?? '');
     $accept = strtolower((string)($requestData['accept'] ?? ''));
     $acceptLanguage = (string)($requestData['accept_language'] ?? '');
-    $secFetchSite = strtolower((string)($requestData['sec_fetch_site'] ?? ''));
-    $secFetchMode = strtolower((string)($requestData['sec_fetch_mode'] ?? ''));
-    $secFetchDest = strtolower((string)($requestData['sec_fetch_dest'] ?? ''));
-    $query = strtolower((string)($requestData['query_string'] ?? ''));
     $host = (string)($requestData['host'] ?? '');
+    $query = strtolower((string)($requestData['query_string'] ?? ''));
     $path = strtolower((string)($requestData['request_uri'] ?? ''));
 
-    // Method
+    /* === BASE SIGNALS === */
+
     if ($method === 'GET') {
         $score += 10;
         $reasons[] = 'get_request';
     }
 
     if ($method === 'POST') {
-        $score -= 8; // reduced
+        $score -= 25;
         $reasons[] = 'post_request';
     }
 
-    if ($method === 'HEAD') {
-        $score -= 25;
-        $reasons[] = 'head_request';
-    }
-
-    // Headers
-    if ($referer !== '') {
-        $score += 6;
-        $reasons[] = 'has_referer';
-    }
-
-    if ($accept !== '') {
-        if (str_contains($accept, 'text/html')) {
-            $score += 10;
-            $reasons[] = 'accept_html';
-        }
-    } else {
-        $score -= 6;
+    if ($accept === '') {
+        $score -= 15;
         $reasons[] = 'accept_missing';
     }
 
-    if ($acceptLanguage !== '') {
-        $score += 4;
-        $reasons[] = 'accept_language_present';
-    } else {
-        $score -= 6;
+    if ($acceptLanguage === '') {
+        $score -= 10;
         $reasons[] = 'accept_language_missing';
     }
 
-    if ($secFetchSite !== '' || $secFetchMode !== '' || $secFetchDest !== '') {
-        $score += 5;
-        $reasons[] = 'sec_headers_present';
-    } else {
-        $score -= 6;
-        $reasons[] = 'sec_headers_missing';
-    }
-
-    // UA
-    if (isLikelyBrowserUserAgent($ua)) {
-        $score += 15;
+    if (isLikelyBrowserUserAgent($ua) && !isKnownAutomationUserAgent($ua)) {
+        $score += 10;
         $reasons[] = 'browser_ua';
     }
 
-    if ($ua === '') {
+    if (isKnownAutomationUserAgent($ua)) {
         $score -= 20;
-        $reasons[] = 'no_ua';
+        $reasons[] = 'known_automation_ua';
     }
 
-    // Infra / behavior
     if (isRawIpHost($host)) {
         $score -= 15;
         $reasons[] = 'host_raw_ip';
     }
 
     if (hasExploitLikeQuery($query)) {
-        $score -= 50;
+        $score -= 40;
         $reasons[] = 'exploit_like_query';
     }
 
-    // Path probing
-    $suspiciousPathParts = [
-        '.env','.git/','wp-admin','wp-login','phpinfo',
-        'vendor/phpunit','_ignition','autodiscover','swagger','graphql'
-    ];
-
-    foreach ($suspiciousPathParts as $part) {
-        if ($path !== '' && str_contains($path, $part)) {
-            $score -= 30;
-            $reasons[] = "path:$part";
-        }
-    }
-
-    // Bot signal
     if (!empty($requestData['is_bot'])) {
-        $score -= 10; // reduced
+        $score -= 25;
         $reasons[] = 'bot_signal';
     }
 
-    // Clamp
+
+
+    /* ======================================================
+       === PATH RISK DETECTION === 
+       ====================================================== */
+
+    if ($path !== '') {
+         $highRiskPathParts = [
+            '.env',
+	    '.git',
+            '.aws/credentials',
+            'vendor/phpunit',
+            '_ignition',
+            'eval-stdin.php',
+        ];
+
+        foreach ($highRiskPathParts as $part) {
+             if (str_contains($path, $part)) {
+                 $score -= 40;
+                 $reasons[] = "path:$part";
+                 break;
+             }
+        }
+    }
+
+    if ($path !== '') {
+        $mediumRiskPathParts = [
+            'wp-admin',
+            'wp-login',
+            'phpinfo',
+            'autodiscover',
+            'swagger',
+            'graphql',
+        ];
+
+        foreach ($mediumRiskPathParts as $part) {
+            if (str_contains($path, $part)) {
+                $score -= 25;
+                $reasons[] = "path:$part";
+                break;
+            }
+        }
+    }
+   
+    /* ======================================================
+       PHASE 2: TIMING + SCAN DETECTION
+       ====================================================== */
+
+    if ($ip !== '') {
+
+        $lastSeen = getLastSeenForIp($pdo, $ip);
+        $now = (int) round(microtime(true) * 1000);
+
+        if ($lastSeen !== null) {
+            $deltaMs = $now - $lastSeen;
+
+            if ($deltaMs < 1000) {
+                $score -= 40;
+                $reasons[] = 'rapid_repeat';
+            }
+            elseif ($deltaMs < 3000) {
+                $score -= 20;
+                $reasons[] = 'fast_repeat';
+            }
+        }
+
+        $recentCount = getRecentEventCountForIp($pdo, $ip, 10);
+        if ($recentCount >= 5) {
+            $score -= 30;
+            $reasons[] = 'burst_activity';
+        }
+
+        $distinctTokens = getDistinctTokenCountForIp($pdo, $ip, 30);
+        if ($distinctTokens >= 3) {
+            $score -= 35;
+            $reasons[] = 'multi_token_scan';
+        }
+    }
+
+    /* ======================================================
+       === FINALIZE === 
+       ====================================================== */
+
     $score = max(0, min(100, $score));
 
     if ($score >= 75) {
@@ -272,6 +318,8 @@ function calculateConfidence(array $requestData): array
     ];
 }
 
+/* ====================================================== */
+
 function collectRequestData(string $path): array
 {
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
@@ -284,28 +332,83 @@ function collectRequestData(string $path): array
     $data = [
         'event_type' => 'click',
         'ip' => getClientIp(),
-        'x_forwarded_for' => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null,
         'user_agent' => $userAgent,
         'referer' => $_SERVER['HTTP_REFERER'] ?? null,
         'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null,
         'accept' => $_SERVER['HTTP_ACCEPT'] ?? null,
-        'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? null,
         'request_method' => $method,
         'host' => $_SERVER['HTTP_HOST'] ?? null,
         'scheme' => $scheme,
         'request_uri' => $_SERVER['REQUEST_URI'] ?? null,
         'query_string' => $_SERVER['QUERY_STRING'] ?? null,
-        'remote_port' => $_SERVER['REMOTE_PORT'] ?? null,
-        'sec_fetch_site' => $_SERVER['HTTP_SEC_FETCH_SITE'] ?? null,
-        'sec_fetch_mode' => $_SERVER['HTTP_SEC_FETCH_MODE'] ?? null,
-        'sec_fetch_dest' => $_SERVER['HTTP_SEC_FETCH_DEST'] ?? null,
-        'sec_ch_ua' => $_SERVER['HTTP_SEC_CH_UA'] ?? null,
-        'sec_ch_ua_platform' => $_SERVER['HTTP_SEC_CH_UA_PLATFORM'] ?? null,
         'is_bot' => $bot['is_bot'],
         'bot_reason' => $bot['reason'],
     ];
 
-    $data['visitor_hash'] = buildVisitorHash($data['ip'], $data['user_agent']);
+    $data['visitor_hash'] = buildVisitorHash(
+        $data['ip'],
+        $data['user_agent']
+    );
 
     return array_merge($data, calculateConfidence($data));
+}
+
+function normalizeTokenFromPath(string $path): string
+{
+    $token = trim($path, '/');
+    return $token === '' ? 'root' : $token;
+}
+
+function shouldSkipLogging(string $token, string $path, ?string $userAgent, array $skipMap): bool
+{
+    $token = strtolower(trim($token, '/'));
+    $path = strtolower(trim($path, '/'));
+    $ua = strtolower($userAgent ?? '');
+
+    foreach ($skipMap['exact'] ?? [] as $pattern) {
+        if ($token === $pattern) {
+            return true;
+        }
+    }
+
+    foreach ($skipMap['contains'] ?? [] as $pattern) {
+        if (str_contains($token, $pattern) || str_contains($path, $pattern)) {
+            return true;
+        }
+    }
+
+    foreach ($skipMap['prefix'] ?? [] as $pattern) {
+        if (str_starts_with($token, $pattern)) {
+            return true;
+        }
+    }
+
+    $uaSkips = [
+        'curl',
+        'wget',
+        'python-requests',
+        'go-http-client',
+    ];
+
+    foreach ($uaSkips as $sig) {
+        if ($ua !== '' && str_contains($ua, $sig) && !str_starts_with($token, 'pixel:')) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function redirectOr404(string $behavior, string $fallbackUrl): void
+{
+    if ($behavior === '404') {
+        http_response_code(404);
+        echo 'Not found';
+        exit;
+    }
+
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Location: ' . $fallbackUrl, true, 302);
+    exit;
 }

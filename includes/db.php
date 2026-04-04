@@ -161,7 +161,8 @@ function seedDefaultSettings(PDO $pdo): void
         'threat_feed_enabled' => '1',
         'threat_feed_window_hours' => '168',
         'threat_feed_min_confidence' => 'suspicious',
-        'data_retention_days' => '0',
+	'data_retention_days' => '0',
+	'display_min_score' => '20',
     ];
 
     $stmt = $pdo->prepare("
@@ -185,92 +186,12 @@ function seedDefaultSkipPatterns(PDO $pdo): void
     }
 
     $defaults = [
-        ['type' => 'exact', 'pattern' => 'root'],
         ['type' => 'exact', 'pattern' => 'favicon.ico'],
-        ['type' => 'exact', 'pattern' => 'favicon'],
         ['type' => 'exact', 'pattern' => 'robots.txt'],
         ['type' => 'exact', 'pattern' => 'apple-touch-icon.png'],
         ['type' => 'exact', 'pattern' => 'apple-touch-icon-precomposed.png'],
         ['type' => 'exact', 'pattern' => 'ads.txt'],
         ['type' => 'exact', 'pattern' => 'sitemap.xml'],
-        ['type' => 'exact', 'pattern' => 'security.txt'],
-        ['type' => 'exact', 'pattern' => '.well-known/security.txt'],
-
-        ['type' => 'contains', 'pattern' => '.env'],
-        ['type' => 'contains', 'pattern' => '.git/config'],
-        ['type' => 'contains', 'pattern' => 'phpinfo.php'],
-        ['type' => 'contains', 'pattern' => 'phpversion.php'],
-        ['type' => 'contains', 'pattern' => 'info.php'],
-        ['type' => 'contains', 'pattern' => 'php.php'],
-        ['type' => 'contains', 'pattern' => 'pinfo.php'],
-        ['type' => 'contains', 'pattern' => 'eval-stdin.php'],
-        ['type' => 'contains', 'pattern' => '_ignition/execute-solution'],
-        ['type' => 'contains', 'pattern' => 'swagger'],
-        ['type' => 'contains', 'pattern' => 'graphql'],
-        ['type' => 'contains', 'pattern' => 'api-docs'],
-        ['type' => 'contains', 'pattern' => 'actuator/'],
-        ['type' => 'contains', 'pattern' => 'autodiscover'],
-        ['type' => 'contains', 'pattern' => 'wp-login'],
-        ['type' => 'contains', 'pattern' => 'wordpress'],
-        ['type' => 'contains', 'pattern' => 'owa/'],
-        ['type' => 'contains', 'pattern' => 'hudson'],
-        ['type' => 'contains', 'pattern' => 'geoserver'],
-        ['type' => 'contains', 'pattern' => 'solr/'],
-        ['type' => 'contains', 'pattern' => 'web.config'],
-        ['type' => 'contains', 'pattern' => '.vscode/'],
-        ['type' => 'contains', 'pattern' => 'docker-compose'],
-        ['type' => 'contains', 'pattern' => '.aws/credentials'],
-        ['type' => 'contains', 'pattern' => 'config.json'],
-        ['type' => 'contains', 'pattern' => 'metadatauploader'],
-        ['type' => 'contains', 'pattern' => 'logon/logonpoint'],
-        ['type' => 'contains', 'pattern' => 'webroot/index.php/_environment'],
-        ['type' => 'contains', 'pattern' => '_profiler/phpinfo'],
-        ['type' => 'contains', 'pattern' => '.well-known/passkey-endpoints'],
-        ['type' => 'contains', 'pattern' => '.openclaw/'],
-        ['type' => 'contains', 'pattern' => 'vpn/index.html'],
-        ['type' => 'contains', 'pattern' => 'login/login'],
-        ['type' => 'contains', 'pattern' => 'debug/default/view'],
-        ['type' => 'contains', 'pattern' => '@vite/env'],
-        ['type' => 'contains', 'pattern' => 'trace.axd'],
-        ['type' => 'contains', 'pattern' => 'telescope/requests'],
-        ['type' => 'contains', 'pattern' => 'api/gql'],
-        ['type' => 'contains', 'pattern' => 'ediscovery.exporttool'],
-        ['type' => 'contains', 'pattern' => 'v2/_catalog'],
-        ['type' => 'contains', 'pattern' => 'login.action'],
-        ['type' => 'contains', 'pattern' => 'apple-touch-icon'],
-        ['type' => 'contains', 'pattern' => 'ext-js/app/common/zld_product_spec.js'],
-        ['type' => 'contains', 'pattern' => 'jira-webapp-dist/pom.properties'],
-        ['type' => 'contains', 'pattern' => '/meta-inf/maven/com.atlassian.jira/'],
-        ['type' => 'contains', 'pattern' => 'weblanguage'],
-
-        ['type' => 'prefix', 'pattern' => '.well-known/'],
-        ['type' => 'prefix', 'pattern' => '_next/'],
-        ['type' => 'prefix', 'pattern' => 'api/'],
-        ['type' => 'prefix', 'pattern' => 'vendor/'],
-        ['type' => 'prefix', 'pattern' => 'backup/'],
-        ['type' => 'prefix', 'pattern' => 'public/'],
-        ['type' => 'prefix', 'pattern' => 'dev/'],
-        ['type' => 'prefix', 'pattern' => 'test/'],
-        ['type' => 'prefix', 'pattern' => 'server/'],
-        ['type' => 'prefix', 'pattern' => 'core/'],
-        ['type' => 'prefix', 'pattern' => 'config/'],
-        ['type' => 'prefix', 'pattern' => 'storage/'],
-        ['type' => 'prefix', 'pattern' => 'uploads/'],
-        ['type' => 'prefix', 'pattern' => 'assets/'],
-        ['type' => 'prefix', 'pattern' => 'media/'],
-        ['type' => 'prefix', 'pattern' => 'src/'],
-        ['type' => 'prefix', 'pattern' => 'cms/'],
-        ['type' => 'prefix', 'pattern' => 'lab/'],
-        ['type' => 'prefix', 'pattern' => 'lib/'],
-        ['type' => 'prefix', 'pattern' => 'dist/'],
-        ['type' => 'prefix', 'pattern' => 'frontend/'],
-        ['type' => 'prefix', 'pattern' => 'backend/'],
-        ['type' => 'prefix', 'pattern' => 'project/'],
-        ['type' => 'prefix', 'pattern' => 'node/'],
-        ['type' => 'prefix', 'pattern' => 'includes/'],
-        ['type' => 'prefix', 'pattern' => 'sdk/'],
-        ['type' => 'prefix', 'pattern' => 'ext-js/'],
-        ['type' => 'prefix', 'pattern' => 's/'],
     ];
 
     $stmt = $pdo->prepare("
@@ -483,6 +404,77 @@ function currentUnixMs(): int
     return (int) round(microtime(true) * 1000);
 }
 
+/* =========================
+   Phase 2 helpers
+   ========================= */
+
+function getLastSeenForIp(PDO $pdo, string $ip): ?int
+{
+    if ($ip === '') {
+        return null;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT clicked_at_unix_ms
+        FROM clicks
+        WHERE ip = :ip
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':ip' => $ip]);
+
+    $value = $stmt->fetchColumn();
+    if ($value === false || $value === null || $value === '') {
+        return null;
+    }
+
+    return (int)$value;
+}
+
+function getRecentEventCountForIp(PDO $pdo, string $ip, int $windowSeconds = 10): int
+{
+    if ($ip === '') {
+        return 0;
+    }
+
+    $cutoffMs = currentUnixMs() - ($windowSeconds * 1000);
+
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM clicks
+        WHERE ip = :ip
+          AND clicked_at_unix_ms >= :cutoff_ms
+    ");
+    $stmt->execute([
+        ':ip' => $ip,
+        ':cutoff_ms' => $cutoffMs,
+    ]);
+
+    return (int)$stmt->fetchColumn();
+}
+
+function getDistinctTokenCountForIp(PDO $pdo, string $ip, int $windowSeconds = 30): int
+{
+    if ($ip === '') {
+        return 0;
+    }
+
+    $cutoffMs = currentUnixMs() - ($windowSeconds * 1000);
+
+    $stmt = $pdo->prepare("
+        SELECT COUNT(DISTINCT token)
+        FROM clicks
+        WHERE ip = :ip
+          AND clicked_at_unix_ms >= :cutoff_ms
+    ");
+    $stmt->execute([
+        ':ip' => $ip,
+        ':cutoff_ms' => $cutoffMs,
+    ]);
+
+    return (int)$stmt->fetchColumn();
+}
+
 function getLinkByToken(PDO $pdo, string $token): ?array
 {
     $stmt = $pdo->prepare("
@@ -510,6 +502,24 @@ function createLink(PDO $pdo, string $token, string $destination, string $descri
         ':destination' => $destination,
         ':description' => $description,
         ':created_at' => gmdate('c'),
+    ]);
+}
+
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = ''): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE links
+        SET token = :token,
+            destination = :destination,
+            description = :description
+        WHERE id = :id
+    ");
+
+    return $stmt->execute([
+        ':id' => $id,
+        ':token' => $token,
+        ':destination' => $destination,
+        ':description' => $description,
     ]);
 }
 
@@ -766,6 +776,13 @@ function getRecentClicksAdvancedFiltered(
 
     $params = [];
 
+    $showAll = isset($_GET['show_all']) && $_GET['show_all'] === '1';
+    $minScore = (int)getSetting($pdo, 'display_min_score', '20');
+    if (!$showAll && $minScore > 0) {
+    	$sql .= " AND (c.confidence_score IS NULL OR c.confidence_score >= :minScore) ";
+    	$params[':minScore'] = $minScore;
+    }
+
     if ($tokenFilter !== null && $tokenFilter !== '') {
         $sql .= " AND c.token LIKE :tokenFilter ";
         $params[':tokenFilter'] = '%' . $tokenFilter . '%';
@@ -786,12 +803,12 @@ function getRecentClicksAdvancedFiltered(
     }
 
     if ($dateFrom !== null && $dateFrom !== '') {
-        $sql .= " AND c.clicked_at >= :dateFrom ";
+        $sql .= " AND substr(c.clicked_at, 1, 10) >= :dateFrom ";
         $params[':dateFrom'] = $dateFrom;
     }
 
     if ($dateTo !== null && $dateTo !== '') {
-        $sql .= " AND c.clicked_at <= :dateTo ";
+	$sql .= " AND substr(c.clicked_at, 1, 10) <= :dateTo "; 
         $params[':dateTo'] = $dateTo;
     }
 
