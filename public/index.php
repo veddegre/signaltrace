@@ -31,6 +31,10 @@ if ($path === '/health') {
     exit;
 }
 
+if ($path === '/feed/ips.txt') {
+    handleThreatFeed($pdo);
+}
+
 if (handleAdminActions($pdo, $path)) {
     exit;
 }
@@ -46,15 +50,20 @@ if ($path === '/admin') {
 $reserved = [
     '/admin',
     '/admin/save-settings',
+    '/admin/save-threat-feed-settings',
     '/admin/create-link',
     '/admin/delete-link',
     '/admin/deactivate-link',
     '/admin/activate-link',
     '/admin/create-skip-pattern',
+    '/admin/add-token-to-skip',
     '/admin/deactivate-skip-pattern',
     '/admin/activate-skip-pattern',
     '/admin/delete-skip-pattern',
-    '/health'
+    '/admin/delete-click',
+    '/admin/delete-token-clicks',
+    '/feed/ips.txt',
+    '/health',
 ];
 
 if (!in_array($path, $reserved, true)) {

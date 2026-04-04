@@ -1,6 +1,19 @@
 <?php
 declare(strict_types=1);
 
+function handleThreatFeed(PDO $pdo): void
+{
+    $ips = getThreatFeedIps($pdo);
+
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    echo implode("\n", $ips);
+    exit;
+}
+
 function handlePixelRequest(PDO $pdo, string $path): void
 {
     if (!preg_match('#^/pixel/(.+)\.gif$#', $path, $matches)) {
@@ -34,7 +47,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
 {
     requireAdminAuth();
 
-    $appName = $settings['app_name'] ?? 'Link Tracker';
+    $appName = $settings['app_name'] ?? 'SignalTrace';
     $baseUrl = trim((string)($settings['base_url'] ?? ''));
     $defaultRedirectUrl = trim((string)($settings['default_redirect_url'] ?? 'https://example.com/'));
     $unknownPathBehavior = trim((string)($settings['unknown_path_behavior'] ?? 'redirect'));

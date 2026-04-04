@@ -13,6 +13,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleSaveSettings($pdo);
             return true;
 
+        case '/admin/save-threat-feed-settings':
+            requireAdminAuth();
+            handleSaveThreatFeedSettings($pdo);
+            return true;
+
         case '/admin/create-link':
             requireAdminAuth();
             handleCreateLink($pdo);
@@ -36,6 +41,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
         case '/admin/create-skip-pattern':
             requireAdminAuth();
             handleCreateSkipPattern($pdo);
+            return true;
+
+        case '/admin/add-token-to-skip':
+            requireAdminAuth();
+            handleAddTokenToSkip($pdo);
             return true;
 
         case '/admin/delete-skip-pattern':
@@ -70,7 +80,7 @@ function handleAdminActions(PDO $pdo, string $path): bool
 
 function handleSaveSettings(PDO $pdo): void
 {
-    $appNameInput = trim((string)($_POST['app_name'] ?? 'Link Tracker'));
+    $appNameInput = trim((string)($_POST['app_name'] ?? 'SignalTrace'));
     $baseUrlInput = trim((string)($_POST['base_url'] ?? ''));
     $defaultRedirectUrlInput = trim((string)($_POST['default_redirect_url'] ?? ''));
     $unknownPathBehaviorInput = trim((string)($_POST['unknown_path_behavior'] ?? 'redirect'));
@@ -107,6 +117,26 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'unknown_path_behavior', $unknownPathBehaviorInput);
     setSetting($pdo, 'pixel_enabled', $pixelEnabledInput);
     setSetting($pdo, 'noise_filter_enabled', $noiseFilterEnabledInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleSaveThreatFeedSettings(PDO $pdo): void
+{
+    $enabledInput = isset($_POST['threat_feed_enabled']) ? '1' : '0';
+    $windowHoursInput = max(1, (int)($_POST['threat_feed_window_hours'] ?? 168));
+    $minConfidenceInput = strtolower(trim((string)($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
+
+    if (!in_array($minConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
+        http_response_code(400);
+        echo 'Invalid minimum confidence value.';
+        exit;
+    }
+
+    setSetting($pdo, 'threat_feed_enabled', $enabledInput);
+    setSetting($pdo, 'threat_feed_window_hours', (string)$windowHoursInput);
+    setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
 
     header('Location: /admin', true, 302);
     exit;
@@ -212,6 +242,27 @@ function handleCreateSkipPattern(PDO $pdo): void
 
     createSkipPattern($pdo, $type, $pattern);
     header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleAddTokenToSkip(PDO $pdo): void
+{
+    $token = strtolower(trim((string)($_POST['token'] ?? '')));
+    $redirectToken = trim((string)($_POST['redirect_token'] ?? $token));
+
+    if ($token === '') {
+        http_response_code(400);
+        echo 'Token is required.';
+        exit;
+    }
+
+    createSkipPattern($pdo, 'exact', $token);
+
+    if ($redirectToken !== '') {
+        header('Location: /admin?token=' . urlencode($redirectToken), true, 302);
+    } else {
+        header('Location: /admin', true, 302);
+    }
     exit;
 }
 

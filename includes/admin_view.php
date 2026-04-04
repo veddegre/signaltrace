@@ -18,7 +18,13 @@ function renderAdminPage(
     array $skipPatterns,
     string $refreshUrl
 ): void {
+    $pdo = db();
+
     $hasActiveFilter = ($tokenFilter !== '' || $ipFilter !== '' || $visitorFilter !== '' || $knownOnly);
+
+    $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
+    $threatFeedWindowHours = (string)(getSetting($pdo, 'threat_feed_window_hours', '168') ?? '168');
+    $threatFeedMinConfidence = (string)(getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
 
     $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly): string {
         $params = [];
@@ -187,13 +193,6 @@ function renderAdminPage(
                 overflow: visible;
                 text-overflow: clip;
                 white-space: nowrap;
-            }
-
-            .compact-table th.bot-col,
-            .compact-table td.bot-col {
-                width: 70px;
-                min-width: 70px;
-                max-width: 70px;
             }
 
             .compact-table th.details-col,
@@ -472,8 +471,7 @@ function renderAdminPage(
                         <th class="token-col">Token / Path</th>
                         <th class="ip-col">IP</th>
                         <th>Org</th>
-                        <th>Confidence</th>
-                        <th class="bot-col">Bot</th>
+                        <th>Classification</th>
                         <th class="details-col">Details</th>
                     </tr>
                     <?php foreach ($clicks as $i => $c): ?>
@@ -491,8 +489,8 @@ function renderAdminPage(
                         $rowIp = (string)($c['ip'] ?? '');
                         $rowVisitor = (string)($c['visitor_hash'] ?? '');
                         ?>
-                        <tr class="<?= (int)$c['is_bot'] === 1 ? 'bot' : '' ?>">
-                            <td class="time-col"><?= h((string)$c['clicked_at']) ?></td>
+                        <tr class="<?= $confidenceLabel === 'bot' ? 'bot' : '' ?>">
+                            <td class="time-col"><?= h((string)($c['clicked_at'] ?? '')) ?></td>
                             <td class="type-col"><?= h((string)($c['event_type'] ?? 'click')) ?></td>
                             <td class="mono token-col">
                                 <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>">
@@ -511,13 +509,12 @@ function renderAdminPage(
                                     <?= ($c['confidence_score'] ?? null) !== null ? ' (' . h((string)$c['confidence_score']) . ')' : '' ?>
                                 </span>
                             </td>
-                            <td class="bot-col"><?= ((int)$c['is_bot'] === 1) ? 'Yes' : 'No' ?></td>
                             <td class="details-col">
                                 <button type="button" class="details-button" onclick="toggleDetails('<?= h($detailsId) ?>', this)">Details</button>
                             </td>
                         </tr>
                         <tr id="<?= h($detailsId) ?>" class="details-row">
-                            <td colspan="8" class="details-cell">
+                            <td colspan="7" class="details-cell">
                                 <div class="details-grid">
                                     <div class="detail-box">
                                         <strong>Identity</strong>
@@ -540,10 +537,13 @@ function renderAdminPage(
 
                                     <div class="detail-box">
                                         <strong>Scoring</strong>
-                                        <div><span class="mono">Confidence:</span> <?= h((string)($c['confidence_label'] ?? '')) ?> (<?= h((string)($c['confidence_score'] ?? '')) ?>)</div>
-                                        <div><span class="mono">Confidence reason:</span> <span class="wrap"><?= h((string)($c['confidence_reason'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Bot:</span> <?= ((int)$c['is_bot'] === 1) ? 'Yes' : 'No' ?></div>
-                                        <div><span class="mono">Bot reason:</span> <span class="wrap"><?= h((string)($c['bot_reason'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Classification:</span>
+                                            <?= h((string)($c['confidence_label'] ?? '')) ?>
+                                            (<?= h((string)($c['confidence_score'] ?? '')) ?>)
+                                        </div>
+                                        <div><span class="mono">Reason:</span>
+                                            <span class="wrap"><?= h((string)($c['confidence_reason'] ?? '')) ?></span>
+                                        </div>
                                         <div><span class="mono">First for token:</span> <?= !empty($c['first_for_token']) ? 'Yes' : 'No' ?></div>
                                         <div><span class="mono">Prior events for token:</span> <?= h((string)($c['prior_events_for_token'] ?? '0')) ?></div>
                                     </div>
@@ -567,11 +567,13 @@ function renderAdminPage(
                                         <strong>Headers</strong>
                                         <div><span class="mono">Referer:</span> <span class="wrap"><?= h((string)($c['referer'] ?? '')) ?></span></div>
                                         <div><span class="mono">Accept:</span> <span class="wrap"><?= h((string)($c['accept'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept-Language:</span> <?= h((string)($c['accept_language'] ?? '')) ?></div>
-                                        <div><span class="mono">Accept-Encoding:</span> <?= h((string)($c['accept_encoding'] ?? '')) ?></div>
-                                        <div><span class="mono">Sec-Fetch:</span> <span class="wrap"><?= h((string)($c['sec_fetch_site'] ?? '')) ?> / <?= h((string)($c['sec_fetch_mode'] ?? '')) ?> / <?= h((string)($c['sec_fetch_dest'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Accept-Language:</span> <span class="wrap"><?= h((string)($c['accept_language'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Accept-Encoding:</span> <span class="wrap"><?= h((string)($c['accept_encoding'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-Fetch-Site:</span> <span class="wrap"><?= h((string)($c['sec_fetch_site'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-Fetch-Mode:</span> <span class="wrap"><?= h((string)($c['sec_fetch_mode'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-Fetch-Dest:</span> <span class="wrap"><?= h((string)($c['sec_fetch_dest'] ?? '')) ?></span></div>
                                         <div><span class="mono">Sec-CH-UA:</span> <span class="wrap"><?= h((string)($c['sec_ch_ua'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-CH-UA-Platform:</span> <?= h((string)($c['sec_ch_ua_platform'] ?? '')) ?></div>
+                                        <div><span class="mono">Sec-CH-UA-Platform:</span> <span class="wrap"><?= h((string)($c['sec_ch_ua_platform'] ?? '')) ?></span></div>
                                     </div>
 
                                     <div class="detail-box" style="grid-column: 1 / -1;">
@@ -584,6 +586,12 @@ function renderAdminPage(
                                         <form method="post" action="/admin/delete-click" class="inline-action-form" onsubmit="return confirm('Delete this click?');">
                                             <input type="hidden" name="id" value="<?= h((string)($c['id'] ?? '')) ?>">
                                             <button type="submit" class="danger-button">Delete This Click</button>
+                                        </form>
+
+                                        <form method="post" action="/admin/add-token-to-skip" class="inline-action-form" onsubmit="return confirm('Add this token/path to skip patterns?');">
+                                            <input type="hidden" name="token" value="<?= h($rowToken) ?>">
+                                            <input type="hidden" name="redirect_token" value="<?= h($rowToken) ?>">
+                                            <button type="submit" class="warning-button">Skip Exact Token</button>
                                         </form>
 
                                         <?php if (empty($c['link_id'])): ?>
@@ -612,7 +620,7 @@ function renderAdminPage(
             <form method="post" action="/admin/create-link">
                 <h2>Create Token</h2>
                 <label for="token">Token / Path</label>
-                <input id="token" type="text" name="token" required placeholder="/payroll or abc123">
+                <input id="token" type="text" name="token" required placeholder="payroll or abc123">
 
                 <label for="destination">Destination URL</label>
                 <input id="destination" type="url" name="destination" required placeholder="https://www.example.com/">
@@ -713,6 +721,35 @@ function renderAdminPage(
                 </label>
 
                 <button type="submit">Save Settings</button>
+            </form>
+
+            <form method="post" action="/admin/save-threat-feed-settings">
+                <h2>Threat Feed</h2>
+
+                <label>
+                    <input type="checkbox" name="threat_feed_enabled" value="1" <?= $threatFeedEnabled ? 'checked' : '' ?>>
+                    Enable threat feed
+                </label>
+
+                <label for="threat_feed_window_hours">Keep IPs on feed for this many hours</label>
+                <input id="threat_feed_window_hours" type="text" name="threat_feed_window_hours" value="<?= h($threatFeedWindowHours) ?>">
+
+                <label for="threat_feed_min_confidence">Minimum confidence to include</label>
+                <select id="threat_feed_min_confidence" name="threat_feed_min_confidence">
+                    <option value="human" <?= $threatFeedMinConfidence === 'human' ? 'selected' : '' ?>>human</option>
+                    <option value="likely-human" <?= $threatFeedMinConfidence === 'likely-human' ? 'selected' : '' ?>>likely-human</option>
+                    <option value="suspicious" <?= $threatFeedMinConfidence === 'suspicious' ? 'selected' : '' ?>>suspicious</option>
+                    <option value="bot" <?= $threatFeedMinConfidence === 'bot' ? 'selected' : '' ?>>bot</option>
+                </select>
+
+                <p class="muted">
+                    Feed URL:
+                    <span class="mono">
+                        <?= h(rtrim($baseUrl !== '' ? $baseUrl : '', '/')) ?><?= $baseUrl !== '' ? '/feed/ips.txt' : '/feed/ips.txt' ?>
+                    </span>
+                </p>
+
+                <button type="submit">Save Threat Feed Settings</button>
             </form>
         </div>
 

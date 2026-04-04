@@ -9,11 +9,11 @@ function h(string $value): string
 function getClientIp(): string
 {
     if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        $parts = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-        return trim($parts[0]);
+        $parts = explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR']);
+        return trim((string)$parts[0]);
     }
 
-    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    return (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
 }
 
 function isRawIpHost(?string $host): bool
@@ -132,6 +132,151 @@ function isKnownAutomationUserAgent(?string $ua): bool
     return false;
 }
 
+function pathProbeSignals(?string $path): array
+{
+    if ($path === null || $path === '') {
+        return [];
+    }
+
+    $p = strtolower(trim($path, '/'));
+    $reasons = [];
+
+    $exactPaths = [
+        '.env',
+        '.git/config',
+        '.ds_store',
+        'info.php',
+        'phpinfo.php',
+        'phpversion.php',
+        'phpinfo',
+        'eval-stdin.php',
+        '_environment',
+        'cmd_sco',
+        '.streamlit/secrets.toml',
+        '.aws/credentials',
+        'server-status',
+        'manager/html',
+        'wp-admin',
+        'wp-login',
+    ];
+
+    foreach ($exactPaths as $exact) {
+        if ($p === strtolower($exact)) {
+            $reasons[] = "path:$exact";
+        }
+    }
+
+    $containsPaths = [
+        '.env',
+        '.git/',
+        '.svn/',
+        '.aws/',
+        '.streamlit/',
+        'secrets.toml',
+        'secrets',
+        'secret',
+        'passwd',
+        'shadow',
+        'config',
+        'backup',
+        'phpinfo',
+        'vendor/phpunit',
+        '_ignition',
+        'autodiscover',
+        'actuator',
+        'swagger',
+        'graphql',
+        'wp-admin',
+        'wp-login',
+        'cgi-bin',
+        'boaform',
+        'jenkins',
+        'debug',
+        'internal',
+        'private',
+        'cmd',
+        'luci',
+    ];
+
+    foreach ($containsPaths as $part) {
+        if ($p !== '' && str_contains($p, strtolower($part))) {
+            $reasons[] = "path_contains:$part";
+        }
+    }
+
+    if ($p !== '' && ($p[0] === '.' || str_starts_with($p, '.'))) {
+        $reasons[] = 'dot_path';
+    }
+
+    if (preg_match('~(^|/)(env|config|backup|secret|secrets|passwd|shadow)(/|$|\.|_)~i', $p)) {
+        $reasons[] = 'sensitive_keyword';
+    }
+
+    if (preg_match('~(^|/)(cmd|shell|exec|admin|debug|test|private|internal)(/|$|\.|_)~i', $p)) {
+        $reasons[] = 'probe_keyword';
+    }
+
+    return array_values(array_unique($reasons));
+}
+
+function isHostingProviderOrg(?string $org): bool
+{
+    if ($org === null || $org === '') {
+        return false;
+    }
+
+    $org = strtolower($org);
+
+    $signals = [
+        'amazon',
+        'aws',
+        'google cloud',
+        'microsoft',
+        'azure',
+        'digitalocean',
+        'linode',
+        'vultr',
+        'contabo',
+        'ovh',
+        'hetzner',
+        'hosting',
+        'cloud',
+        'pfcloud',
+        'hostroyale',
+        'cloudflare',
+        'blix',
+    ];
+
+    foreach ($signals as $signal) {
+        if (str_contains($org, $signal)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function hasSparseBrowserHeaders(array $requestData): bool
+{
+    $accept = strtolower(trim((string)($requestData['accept'] ?? '')));
+    $acceptLanguage = trim((string)($requestData['accept_language'] ?? ''));
+    $secFetchSite = trim((string)($requestData['sec_fetch_site'] ?? ''));
+    $secFetchMode = trim((string)($requestData['sec_fetch_mode'] ?? ''));
+    $secFetchDest = trim((string)($requestData['sec_fetch_dest'] ?? ''));
+    $secChUa = trim((string)($requestData['sec_ch_ua'] ?? ''));
+    $secChUaPlatform = trim((string)($requestData['sec_ch_ua_platform'] ?? ''));
+
+    $hasAnySec = (
+        $secFetchSite !== '' ||
+        $secFetchMode !== '' ||
+        $secFetchDest !== '' ||
+        $secChUa !== '' ||
+        $secChUaPlatform !== ''
+    );
+
+    return $accept === '*/*' && $acceptLanguage === '' && !$hasAnySec;
+}
+
 function detectBot(?string $ua, string $method, string $path): array
 {
     $ua = strtolower($ua ?? '');
@@ -159,51 +304,15 @@ function detectBot(?string $ua, string $method, string $path): array
         }
     }
 
-    $junkPaths = [
-        'favicon.ico',
-        'apple-touch-icon.png',
-        'apple-touch-icon-precomposed.png',
-        '.env',
-        '.git/config',
-        '.ds_store',
-        'info.php',
-        'phpinfo.php',
-        'robots.txt',
-    ];
-
-    foreach ($junkPaths as $junk) {
-        if ($p === strtolower($junk)) {
-            $reasons[] = "path:$junk";
-        }
+    foreach (pathProbeSignals($p) as $reason) {
+        $reasons[] = $reason;
     }
 
-    $suspiciousPathParts = [
-        '.env',
-        '.git/',
-        'wp-admin',
-        'wp-login',
-        'phpinfo',
-        'vendor/phpunit',
-        '_ignition',
-        'eval-stdin.php',
-        'autodiscover',
-        'actuator',
-        'swagger',
-        'graphql',
-        '.aws/credentials',
-    ];
-
-    foreach ($suspiciousPathParts as $part) {
-        if ($p !== '' && str_contains($p, strtolower($part))) {
-            $reasons[] = "path_contains:$part";
-        }
-    }
-
-    if ($method === 'HEAD') {
+    if (strtoupper($method) === 'HEAD') {
         $reasons[] = 'method:HEAD';
     }
 
-    if ($method === 'POST' && hasExploitLikeQuery($query)) {
+    if (strtoupper($method) === 'POST' && hasExploitLikeQuery($query)) {
         $reasons[] = 'method:POST_exploit_query';
     }
 
@@ -217,7 +326,7 @@ function detectBot(?string $ua, string $method, string $path): array
 
     return [
         'is_bot' => !empty($reasons),
-        'reason' => empty($reasons) ? null : implode(', ', array_unique($reasons)),
+        'reason' => empty($reasons) ? null : implode(', ', array_values(array_unique($reasons))),
     ];
 }
 
@@ -238,16 +347,29 @@ function calculateConfidence(array $requestData): array
     $reasons = [];
 
     $ua = strtolower((string)($requestData['user_agent'] ?? ''));
-    $method = strtoupper((string)($requestData['request_method'] ?? ''));
-    $referer = (string)($requestData['referer'] ?? '');
-    $accept = strtolower((string)($requestData['accept'] ?? ''));
-    $acceptLanguage = (string)($requestData['accept_language'] ?? '');
-    $secFetchSite = strtolower((string)($requestData['sec_fetch_site'] ?? ''));
-    $secFetchMode = strtolower((string)($requestData['sec_fetch_mode'] ?? ''));
-    $secFetchDest = strtolower((string)($requestData['sec_fetch_dest'] ?? ''));
+    $method = strtoupper((string)($requestData['request_method'] ?? 'GET'));
+    $referer = trim((string)($requestData['referer'] ?? ''));
+    $accept = strtolower(trim((string)($requestData['accept'] ?? '')));
+    $acceptLanguage = trim((string)($requestData['accept_language'] ?? ''));
+    $secFetchSite = strtolower(trim((string)($requestData['sec_fetch_site'] ?? '')));
+    $secFetchMode = strtolower(trim((string)($requestData['sec_fetch_mode'] ?? '')));
+    $secFetchDest = strtolower(trim((string)($requestData['sec_fetch_dest'] ?? '')));
+    $secChUa = trim((string)($requestData['sec_ch_ua'] ?? ''));
+    $secChUaPlatform = trim((string)($requestData['sec_ch_ua_platform'] ?? ''));
     $query = strtolower((string)($requestData['query_string'] ?? ''));
     $host = (string)($requestData['host'] ?? '');
     $path = strtolower((string)($requestData['request_uri'] ?? ''));
+    $ipOrg = strtolower(trim((string)($requestData['ip_org'] ?? '')));
+    $isBotSignal = !empty($requestData['is_bot']);
+
+    $probeReasons = pathProbeSignals($path);
+    $hasAnySecHeaders = (
+        $secFetchSite !== '' ||
+        $secFetchMode !== '' ||
+        $secFetchDest !== '' ||
+        $secChUa !== '' ||
+        $secChUaPlatform !== ''
+    );
 
     if ($method === 'GET') {
         $score += 10;
@@ -255,7 +377,7 @@ function calculateConfidence(array $requestData): array
     }
 
     if ($method === 'HEAD') {
-        $score -= 40;
+        $score -= 35;
         $reasons[] = 'head_request';
     }
 
@@ -265,32 +387,46 @@ function calculateConfidence(array $requestData): array
     }
 
     if ($referer !== '') {
-        $score += 8;
+        $score += 5;
         $reasons[] = 'has_referer';
     }
 
-    if (str_contains($accept, 'text/html')) {
-        $score += 12;
-        $reasons[] = 'accept_html';
+    if ($accept !== '') {
+        if (str_contains($accept, 'text/html')) {
+            $score += 12;
+            $reasons[] = 'accept_html';
+        } elseif ($accept === '*/*') {
+            $score -= 10;
+            $reasons[] = 'accept_any';
+        }
+    } else {
+        $score -= 8;
+        $reasons[] = 'accept_missing';
     }
 
     if ($acceptLanguage !== '') {
-        $score += 5;
+        $score += 8;
         $reasons[] = 'accept_language_present';
+    } else {
+        $score -= 8;
+        $reasons[] = 'accept_language_missing';
     }
 
-    if ($secFetchSite !== '') {
-        $score += 5;
-        $reasons[] = 'sec_fetch_site_present';
+    if ($hasAnySecHeaders) {
+        $score += 8;
+        $reasons[] = 'sec_headers_present';
+    } else {
+        $score -= 8;
+        $reasons[] = 'sec_headers_missing';
     }
 
     if ($secFetchMode === 'navigate') {
-        $score += 15;
+        $score += 12;
         $reasons[] = 'sec_fetch_navigate';
     }
 
     if ($secFetchDest === 'document') {
-        $score += 10;
+        $score += 8;
         $reasons[] = 'sec_fetch_document';
     }
 
@@ -313,7 +449,7 @@ function calculateConfidence(array $requestData): array
 
     foreach ($badUaPatterns as $pattern) {
         if ($ua !== '' && str_contains($ua, $pattern)) {
-            $score -= 50;
+            $score -= 40;
             $reasons[] = "ua:$pattern";
         }
     }
@@ -331,44 +467,40 @@ function calculateConfidence(array $requestData): array
     }
 
     if (isRawIpHost($host)) {
-        $score -= 25;
+        $score -= 20;
         $reasons[] = 'host_raw_ip';
     }
 
     if (hasExploitLikeQuery($query)) {
-        $score -= 60;
+        $score -= 45;
         $reasons[] = 'exploit_like_query';
     }
 
-    $suspiciousPathParts = [
-        '.env',
-        '.git/',
-        'wp-admin',
-        'wp-login',
-        'phpinfo',
-        'vendor/phpunit',
-        '_ignition',
-        'eval-stdin.php',
-        'autodiscover',
-        'actuator',
-        'swagger',
-        'graphql',
-        '.aws/credentials',
-    ];
-
-    foreach ($suspiciousPathParts as $part) {
-        if ($path !== '' && str_contains($path, strtolower($part))) {
-            $score -= 35;
-            $reasons[] = "path:$part";
-        }
+    foreach ($probeReasons as $reason) {
+        $score -= 25;
+        $reasons[] = $reason;
     }
 
-    if (!empty($requestData['is_bot'])) {
-        $score -= 30;
+    if (hasSparseBrowserHeaders($requestData) && isLikelyBrowserUserAgent($ua)) {
+        $score -= 20;
+        $reasons[] = 'browser_impersonation_sparse_headers';
+    }
+
+    if (isHostingProviderOrg($ipOrg)) {
+        $score -= 5;
+        $reasons[] = 'hosting_provider_source';
+    }
+
+    if ($isBotSignal) {
+        $score -= 15;
         $reasons[] = 'bot_signal';
     }
 
     $score = max(0, min(100, $score));
+
+    if (!empty($probeReasons)) {
+        $score = min($score, 45);
+    }
 
     if ($score >= 75) {
         $label = 'human';
@@ -380,17 +512,21 @@ function calculateConfidence(array $requestData): array
         $label = 'bot';
     }
 
+    if (!empty($probeReasons) && in_array($label, ['human', 'likely-human'], true)) {
+        $label = $score >= 20 ? 'suspicious' : 'bot';
+    }
+
     return [
         'confidence_score' => $score,
         'confidence_label' => $label,
-        'confidence_reason' => implode(', ', array_unique($reasons)),
+        'confidence_reason' => implode(', ', array_values(array_unique($reasons))),
     ];
 }
 
 function collectRequestData(string $path): array
 {
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $method = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
     $bot = detectBot($userAgent, $method, $path);
 
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');

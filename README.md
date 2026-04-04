@@ -5,21 +5,23 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 
-SignalTrace is a lightweight, self-hosted tracking and analysis platform for monitoring interactions with custom tokens or paths.
+SignalTrace is a lightweight, self-hosted tracking and analysis tool for observing interactions with custom paths.
 
-It is designed for security visibility, helping you understand who is interacting with your links, endpoints, or honeypot routes, and whether those interactions are human, automated, or malicious.
+Instead of just logging events after the fact, it lets you expose something intentionally and watch what actually touches it in real time.
 
 ---
 
 ## What SignalTrace Does
 
-SignalTrace allows you to create custom tokens (paths) that:
+SignalTrace lets you create custom tokens (paths) that:
 
 1. Capture detailed request data
-2. Score the interaction (human, suspicious, or bot)
+2. Classify the interaction (human, suspicious, or bot)
 3. Redirect to a destination
 
-It provides a simple telemetry layer for:
+It is useful anywhere you want visibility into who is actually interacting with something.
+
+Common use cases:
 
 - Phishing simulations
 - Honeypots
@@ -30,16 +32,18 @@ It provides a simple telemetry layer for:
 
 ## Features
 
-- Custom tokens or paths with redirect support
+- Custom tokens with redirect support
 - Detailed request logging (IP, headers, user agent, and more)
-- Bot detection and confidence scoring
+- Classification system (human, likely-human, suspicious, bot)
 - Visitor fingerprinting
 - Filtering by token, IP, and visitor
-- Skip patterns to remove scanner noise
+- Skip patterns to suppress noise
+- Add tokens to skip patterns directly from the UI
 - Tracking pixel support
+- Threat feed (`/feed/ips.txt`)
 - GeoIP enrichment with MaxMind
 - SQLite backend with no external database required
-- Minimal, fast, and framework-free
+- Minimal and fast, with no framework dependency
 
 ---
 
@@ -49,16 +53,31 @@ It provides a simple telemetry layer for:
 
 ---
 
+## Minimum Requirements
+
+SignalTrace is designed to run on very small systems.
+
+Recommended minimum:
+
+- 1 vCPU
+- 1 GB RAM
+- 1 GB swap
+- 5 to 10 GB disk
+
+Tested on a small VM with 1 GB RAM and 1 GB swap enabled.
+
+If you enable GeoIP or keep longer retention, additional memory may help.
+
+---
+
 ## Installation (Ubuntu + Apache)
 
-### 1. Install system dependencies
+### 1. Install dependencies
 
     sudo apt update
     sudo apt install -y apache2 php php-sqlite3 php-mbstring php-xml php-curl sqlite3 composer unzip
 
 ### 2. Install PHP dependencies
-
-From the project root:
 
     composer install
 
@@ -72,7 +91,7 @@ From the project root:
 
     sqlite3 /var/www/signaltrace/data/database.db
 
-Then run inside SQLite:
+Then run:
 
     .read db/schema.sql
 
@@ -80,56 +99,40 @@ Then run inside SQLite:
 
     sqlite3 /var/www/signaltrace/data/database.db
 
-Then run inside SQLite:
+Then run:
 
     .read db/seed.sql
 
-Seed data uses reserved documentation IP ranges and does not represent real traffic.
-
 ---
 
-## Application Configuration
+## Configuration
 
-SignalTrace uses a local configuration file that is not committed to Git.
-
-### 1. Create the local config file
+### Create local config
 
     cp includes/config.local.php.example includes/config.local.php
 
-### 2. Edit the configuration
+Edit:
 
     vi includes/config.local.php
 
 Example:
 
     <?php
-    declare(strict_types=1);
-
     define('ADMIN_USERNAME', 'admin');
-    define('ADMIN_PASSWORD_HASH', 'replace-with-password-hash');
-    define('VISITOR_HASH_SALT', 'replace-with-random-secret');
+    define('ADMIN_PASSWORD_HASH', 'replace-me');
+    define('VISITOR_HASH_SALT', 'replace-me');
 
-### 3. Generate the password hash
+### Generate password hash
 
-Run:
+    php -r "echo password_hash('your-password', PASSWORD_DEFAULT) . PHP_EOL;"
 
-    php -r "echo password_hash('your-strong-password', PASSWORD_DEFAULT) . PHP_EOL;"
-
-Paste the output into `ADMIN_PASSWORD_HASH`.
-
-### 4. Generate the visitor hash salt
-
-Run:
+### Generate visitor hash salt
 
     openssl rand -hex 64
-
-Paste the output into `VISITOR_HASH_SALT`.
 
 ---
 
 ## Apache Configuration
-
-Create:
 
     sudo vi /etc/apache2/sites-available/signaltrace.conf
 
@@ -148,7 +151,7 @@ Contents:
         CustomLog ${APACHE_LOG_DIR}/signaltrace_access.log combined
     </VirtualHost>
 
-Enable the site:
+Enable:
 
     sudo a2enmod rewrite
     sudo a2ensite signaltrace.conf
@@ -157,32 +160,26 @@ Enable the site:
 
 ---
 
-## Optional .htaccess
+## .htaccess
 
 Place this in `public/.htaccess`:
 
     RewriteEngine On
 
+    RewriteRule ^\.well-known/acme-challenge/ - [L]
+
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    RewriteRule ^ index.php [L,QSA]
+    RewriteRule ^ index.php [QSA,L]
 
 ---
 
-## HTTPS Setup (Let's Encrypt)
-
-Install Certbot:
+## HTTPS (Let's Encrypt)
 
     sudo apt install -y certbot python3-certbot-apache
-
-Run setup:
-
     sudo certbot --apache
-
-Test renewal:
-
     sudo certbot renew --dry-run
 
 ---
@@ -193,34 +190,61 @@ Open:
 
     https://yourdomain.example/admin
 
-Log in using the credentials defined in `includes/config.local.php`.
+---
+
+## Threat Feed
+
+SignalTrace can generate a simple IP feed for use in other tools.
+
+Endpoint:
+
+    /feed/ips.txt
+
+Behavior:
+
+- One IP per line
+- Based on classified events
+- Excludes older, unclassified data
+- Filters based on classification threshold
+
+This is intended as a lightweight enrichment source, not a full threat intelligence platform.
 
 ---
 
 ## Project Structure
 
     signaltrace/
-    ├── public/
-    │   ├── index.php
-    │   └── .htaccess
-    ├── includes/
-    │   ├── config.php
-    │   ├── config.local.php.example
-    │   ├── auth.php
-    │   ├── db.php
-    │   ├── helpers.php
-    │   ├── router.php
-    │   ├── admin_view.php
-    │   └── admin_actions.php
+    ├── LICENSE
+    ├── README.md
+    ├── composer.json
+    ├── composer.lock
+    ├── data/
+    │   └── database.db
     ├── db/
     │   ├── schema.sql
     │   └── seed.sql
-    ├── data/
-    ├── composer.json
-    ├── composer.lock
-    ├── README.md
-    ├── LICENSE
-    └── .gitignore
+    ├── docs/
+    │   └── images/
+    │       └── dashboard.png
+    ├── includes/
+    │   ├── admin_actions.php
+    │   ├── admin_view.php
+    │   ├── auth.php
+    │   ├── config.local.php.example
+    │   ├── config.php
+    │   ├── db.php
+    │   ├── helpers.php
+    │   └── router.php
+    ├── public/
+    │   └── index.php
+    └── vendor/
+
+Notes:
+
+- `public/` is the only directory that should be exposed by the web server
+- `data/` contains the runtime SQLite database
+- `config.local.php` should remain out of version control
+- `vendor/` is created by Composer and should not normally be committed
 
 ---
 
@@ -228,56 +252,57 @@ Log in using the credentials defined in `includes/config.local.php`.
 
 ### Dashboard
 
-- Activity table with expandable request details
-- Top tokens view with hit counts
+- Live activity view
+- Expandable request details
 - Filtering by token, IP, and visitor
-- Cleanup tools for removing unwanted data
+- Classification badges
+- Cleanup tools
 
 ### Tokens
 
 - Create and manage tokens
 - Configure redirect destinations
 - Enable or disable tokens
-- Delete tokens and associated clicks
-- Automatic pixel URL generation
+- Pixel tracking URLs
 
 ### Settings
 
-- Application name
+- App name
 - Base URL
-- Default redirect URL
-- Unknown path behavior (redirect or 404)
-- Toggle pixel tracking and noise filtering
+- Default redirect
+- Unknown path behavior
+- Pixel toggle
+- Noise filter toggle
+- Threat feed configuration
 
 ### Skip Patterns
 
-- Ignore scanner traffic and noise
+- Ignore scanner noise
 - Pattern types:
   - Exact
   - Contains
   - Prefix
-- Activate, deactivate, and delete patterns
 
 ---
 
 ## Security Notes
 
-- `includes/config.local.php` is not committed to Git
-- Secrets are stored outside version control
-- Passwords are stored as hashes, not plaintext
+- `config.local.php` is not committed
+- Passwords are stored as hashes
 - Only `/public` should be web accessible
-- `includes/`, `db/`, and `data/` should remain outside the document root
+- Internal directories should not be web accessible
+- The admin interface uses HTTP Basic Auth
 
 ---
 
 ## Production Checklist
 
 - Enable HTTPS
-- Set a strong admin password
+- Set strong admin credentials
 - Generate a unique visitor hash salt
-- Ensure `/public` is the only web root
-- Verify `/includes`, `/db`, and `/data` are not web accessible
+- Verify directory exposure
 - Configure skip patterns
+- Configure threat feed settings
 - Run `composer install`
 
 ---
@@ -301,9 +326,19 @@ Log in using the credentials defined in `includes/config.local.php`.
 
 ---
 
+## Disclaimer
+
+SignalTrace is intended for security testing and visibility.
+
+It works by exposing endpoints and recording interactions. That means it will attract automated traffic, scanners, and other systems. This is expected.
+
+Use it with an understanding of what you are exposing and where you are deploying it. If you plan to run this in production, make sure it aligns with your environment, policies, and risk tolerance.
+
+---
+
 ## License
 
-MIT License recommended.
+MIT License
 
 ---
 
@@ -315,4 +350,6 @@ Pull requests are welcome.
 
 ## Final Note
 
-SignalTrace is designed to be simple, fast, and transparent, providing immediate visibility into interactions with your tokens.
+Most tools try to hide noise.
+
+SignalTrace makes it visible.

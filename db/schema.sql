@@ -118,3 +118,11 @@ INSERT OR IGNORE INTO skip_patterns (type, pattern, active) VALUES
 ('prefix', 'wp-', 1),
 ('contains', 'phpinfo', 1),
 ('contains', 'admin', 0);
+
+--------------------------------------------------
+-- Threat feed defaults
+--------------------------------------------------
+INSERT OR IGNORE INTO settings (key, value) VALUES
+('threat_feed_enabled', '1'),
+('threat_feed_window_hours', '168'),
+('threat_feed_min_confidence', 'suspicious');

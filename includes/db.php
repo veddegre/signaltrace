@@ -125,6 +125,9 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_link_id ON clicks(link_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_event_type ON clicks(event_type)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_visitor_hash ON clicks(visitor_hash)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_ip ON clicks(ip)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_confidence_label ON clicks(confidence_label)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_is_bot ON clicks(is_bot)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_skip_patterns_type ON skip_patterns(type)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_skip_patterns_active ON skip_patterns(active)");
 
@@ -149,12 +152,15 @@ function ensureColumn(PDO $pdo, string $table, string $column, string $definitio
 function seedDefaultSettings(PDO $pdo): void
 {
     $defaults = [
-        'app_name' => 'Link Tracker',
+        'app_name' => 'SignalTrace',
         'base_url' => '',
         'default_redirect_url' => 'https://example.com/',
         'unknown_path_behavior' => 'redirect',
         'pixel_enabled' => '1',
         'noise_filter_enabled' => '1',
+        'threat_feed_enabled' => '1',
+        'threat_feed_window_hours' => '168',
+        'threat_feed_min_confidence' => 'suspicious',
     ];
 
     $stmt = $pdo->prepare("
@@ -770,4 +776,57 @@ function getRecentClicksAdvancedFiltered(
     $stmt->execute();
 
     return $stmt->fetchAll();
+}
+
+function getThreatFeedIps(PDO $pdo): array
+{
+    $enabled = getSetting($pdo, 'threat_feed_enabled', '1');
+    if ($enabled !== '1') {
+        return [];
+    }
+
+    $windowHours = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
+    $minConfidence = strtolower((string) getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
+
+    $allowedLabels = match ($minConfidence) {
+        'bot' => ['bot'],
+        'likely-human' => ['likely-human', 'suspicious', 'bot'],
+        'human' => ['human', 'likely-human', 'suspicious', 'bot'],
+        default => ['suspicious', 'bot'],
+    };
+
+    $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
+
+    $sql = "
+        SELECT DISTINCT ip
+        FROM clicks
+        WHERE ip IS NOT NULL
+          AND ip <> ''
+          AND event_type = 'click'
+          AND clicked_at >= datetime('now', ?)
+          AND confidence_label IS NOT NULL
+          AND confidence_label <> ''
+          AND confidence_score IS NOT NULL
+          AND confidence_label IN ($placeholders)
+        ORDER BY ip ASC
+    ";
+
+    $params = array_merge(
+        ['-' . $windowHours . ' hours'],
+        $allowedLabels
+    );
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    $ips = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $ip = trim((string) ($row['ip'] ?? ''));
+        if ($ip === '') {
+            continue;
+        }
+        $ips[] = $ip;
+    }
+
+    return array_values(array_unique($ips));
 }
