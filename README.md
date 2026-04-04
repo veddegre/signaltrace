@@ -5,9 +5,9 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 
-SignalTrace is a lightweight, self-hosted tracking and analysis tool for observing interactions with custom paths.
+SignalTrace is a lightweight, self-hosted tracking and analysis tool for observing interactions with custom paths and generating actionable telemetry.
 
-Instead of just logging events after the fact, it lets you expose something intentionally and watch what actually touches it in real time.
+It captures interactions in real time and can optionally expose that data as a simple threat feed for use in other security tools.
 
 ---
 
@@ -15,35 +15,35 @@ Instead of just logging events after the fact, it lets you expose something inte
 
 SignalTrace lets you create custom tokens (paths) that:
 
-1. Capture detailed request data
-2. Classify the interaction (human, suspicious, or bot)
-3. Redirect to a destination
+1. Capture detailed request data  
+2. Classify the interaction (human, suspicious, or bot)  
+3. Redirect to a destination  
 
 It is useful anywhere you want visibility into who is actually interacting with something.
 
 Common use cases:
 
-- Phishing simulations
-- Honeypots
-- Reconnaissance detection
-- Link tracking
+- Phishing simulations  
+- Honeypots  
+- Reconnaissance detection  
+- Link tracking  
 
 ---
 
 ## Features
 
-- Custom tokens with redirect support
-- Detailed request logging (IP, headers, user agent, and more)
-- Classification system (human, likely-human, suspicious, bot)
-- Visitor fingerprinting
-- Filtering by token, IP, and visitor
-- Skip patterns to suppress noise
-- Add tokens to skip patterns directly from the UI
-- Tracking pixel support
-- Threat feed (`/feed/ips.txt`)
-- GeoIP enrichment with MaxMind
-- SQLite backend with no external database required
-- Minimal and fast, with no framework dependency
+- Custom tokens with redirect support  
+- Detailed request logging (IP, headers, user agent, and more)  
+- Classification system (human, likely-human, suspicious, bot)  
+- Visitor fingerprinting  
+- Filtering by token, IP, and visitor  
+- Skip patterns to suppress noise  
+- Add tokens to skip patterns directly from the UI  
+- Tracking pixel support  
+- Threat feed generation (`/feed/ips.txt`) for integration with other tools  
+- GeoIP enrichment with MaxMind  
+- SQLite backend with no external database required  
+- Minimal and fast, with no framework dependency  
 
 ---
 
@@ -59,10 +59,10 @@ SignalTrace is designed to run on very small systems.
 
 Recommended minimum:
 
-- 1 vCPU
-- 1 GB RAM
-- 1 GB swap
-- 5 to 10 GB disk
+- 1 vCPU  
+- 1 GB RAM  
+- 1 GB swap  
+- 5 to 10 GB disk  
 
 Tested on a small VM with 1 GB RAM and 1 GB swap enabled.
 
@@ -73,6 +73,8 @@ If you enable GeoIP or keep longer retention, additional memory may help.
 ## Installation (Ubuntu + Apache)
 
 ### 1. Install dependencies
+
+Installs Apache, PHP, SQLite, Composer, and required packages.
 
     sudo apt update
     sudo apt install -y apache2 php php-sqlite3 php-mbstring php-xml php-curl sqlite3 composer unzip
@@ -107,11 +109,13 @@ Then run:
 
 ## Configuration
 
+SignalTrace uses a local configuration file for secrets and credentials.
+
 ### Create local config
 
     cp includes/config.local.php.example includes/config.local.php
 
-Edit:
+### Edit the config
 
     vi includes/config.local.php
 
@@ -135,8 +139,6 @@ Example:
 ## Apache Configuration
 
     sudo vi /etc/apache2/sites-available/signaltrace.conf
-
-Contents:
 
     <VirtualHost *:80>
         ServerName yourdomain.example
@@ -162,16 +164,16 @@ Enable:
 
 ## .htaccess
 
-Place this in `public/.htaccess`:
+Place this in `public/.htaccess`.
+
+This configuration allows Let's Encrypt validation and routes application traffic correctly.
 
     RewriteEngine On
 
     RewriteRule ^\.well-known/acme-challenge/ - [L]
 
-    RewriteCond %{REQUEST_FILENAME} -f [OR]
-    RewriteCond %{REQUEST_FILENAME} -d
-    RewriteRule ^ - [L]
-
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [QSA,L]
 
 ---
@@ -186,28 +188,46 @@ Place this in `public/.htaccess`:
 
 ## Admin Access
 
-Open:
-
     https://yourdomain.example/admin
 
 ---
 
 ## Threat Feed
 
-SignalTrace can generate a simple IP feed for use in other tools.
+SignalTrace can generate a lightweight IP-based threat feed derived from observed interactions.
 
 Endpoint:
 
     /feed/ips.txt
 
-Behavior:
+### What it includes
 
-- One IP per line
-- Based on classified events
-- Excludes older, unclassified data
-- Filters based on classification threshold
+- IPs classified as suspicious or bot activity  
+- Only events with scoring data (older unclassified data is excluded)  
+- Deduplicated output (one IP per line)  
 
-This is intended as a lightweight enrichment source, not a full threat intelligence platform.
+### What it is for
+
+This feed is designed to be consumed by other tools, such as:
+
+- Firewalls (block lists)  
+- SIEM enrichment  
+- Detection pipelines  
+- Temporary deny lists  
+
+### Configuration
+
+Feed behavior can be tuned in the UI:
+
+- How long an IP remains in the feed  
+- Minimum classification threshold  
+- Inclusion and filtering behavior  
+
+### Notes
+
+This is intentionally simple. It is not a full threat intelligence platform.
+
+The goal is to take what SignalTrace observes and make it immediately usable elsewhere.
 
 ---
 
@@ -239,12 +259,14 @@ This is intended as a lightweight enrichment source, not a full threat intellige
     │   └── index.php
     └── vendor/
 
-Notes:
+### What these directories are for
 
-- `public/` is the only directory that should be exposed by the web server
-- `data/` contains the runtime SQLite database
-- `config.local.php` should remain out of version control
-- `vendor/` is created by Composer and should not normally be committed
+- `public/` — Web root (only exposed directory)  
+- `includes/` — Application logic and routing  
+- `db/` — Schema and seed files  
+- `data/` — Runtime database storage  
+- `docs/images/` — Documentation assets  
+- `vendor/` — Composer dependencies  
 
 ---
 
@@ -252,77 +274,77 @@ Notes:
 
 ### Dashboard
 
-- Live activity view
-- Expandable request details
-- Filtering by token, IP, and visitor
-- Classification badges
-- Cleanup tools
+- Live activity view  
+- Expandable request details  
+- Filtering by token, IP, and visitor  
+- Classification badges  
+- Cleanup tools  
 
 ### Tokens
 
-- Create and manage tokens
-- Configure redirect destinations
-- Enable or disable tokens
-- Pixel tracking URLs
+- Create and manage tokens  
+- Configure redirect destinations  
+- Enable or disable tokens  
+- Pixel tracking URLs  
 
 ### Settings
 
-- App name
-- Base URL
-- Default redirect
-- Unknown path behavior
-- Pixel toggle
-- Noise filter toggle
-- Threat feed configuration
+- App name  
+- Base URL  
+- Default redirect  
+- Unknown path behavior  
+- Pixel toggle  
+- Noise filter toggle  
+- Threat feed configuration  
 
 ### Skip Patterns
 
-- Ignore scanner noise
+- Ignore scanner noise  
 - Pattern types:
-  - Exact
-  - Contains
-  - Prefix
+  - Exact  
+  - Contains  
+  - Prefix  
 
 ---
 
 ## Security Notes
 
-- `config.local.php` is not committed
-- Passwords are stored as hashes
-- Only `/public` should be web accessible
-- Internal directories should not be web accessible
-- The admin interface uses HTTP Basic Auth
+- `config.local.php` is not committed  
+- Passwords are stored as hashes  
+- Only `/public` should be web accessible  
+- Internal directories should not be web accessible  
+- Admin uses HTTP Basic Auth  
 
 ---
 
 ## Production Checklist
 
-- Enable HTTPS
-- Set strong admin credentials
-- Generate a unique visitor hash salt
-- Verify directory exposure
-- Configure skip patterns
-- Configure threat feed settings
-- Run `composer install`
+- Enable HTTPS  
+- Set strong admin credentials  
+- Generate a unique visitor hash salt  
+- Verify directory exposure  
+- Configure skip patterns  
+- Configure threat feed settings  
 
 ---
 
 ## Use Cases
 
-- Phishing simulation tracking
-- Honeypot telemetry
-- Reconnaissance detection
-- Link tracking
-- Security research
+- Phishing simulation tracking  
+- Honeypot telemetry  
+- Reconnaissance detection  
+- Link tracking  
+- Security research  
+- Generating lightweight threat feeds from observed activity  
 
 ---
 
 ## Tech Stack
 
-- PHP
-- SQLite
-- Apache
-- MaxMind GeoIP2
+- PHP  
+- SQLite  
+- Apache  
+- MaxMind GeoIP2  
 
 ---
 
