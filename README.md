@@ -43,14 +43,6 @@ It provides a simple telemetry layer for:
 
 ---
 
-## Quick Start
-
-    git clone https://github.com/veddegre/signaltrace.git
-    cd signaltrace
-    composer install
-
----
-
 ## Installation (Ubuntu + Apache)
 
 ### 1. Install system dependencies
