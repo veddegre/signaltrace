@@ -9,10 +9,6 @@ SignalTrace is a lightweight, self-hosted tracking and analysis platform for mon
 
 It is designed for security visibility, helping you understand who is interacting with your links, endpoints, or honeypot routes, and whether those interactions are human, automated, or malicious.
 
-## Screenshot
-
-[![SignalTrace Dashboard](docs/images/dashboard.png)](docs/images/dashboard.png)
-
 ---
 
 ## What SignalTrace Does
@@ -44,6 +40,12 @@ It provides a simple telemetry layer for:
 - GeoIP enrichment with MaxMind
 - SQLite backend with no external database required
 - Minimal, fast, and framework-free
+
+---
+
+## Screenshot
+
+[![SignalTrace Dashboard](docs/images/dashboard.png)](docs/images/dashboard.png)
 
 ---
 
