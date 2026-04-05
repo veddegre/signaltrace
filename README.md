@@ -37,20 +37,29 @@ Software requirements: PHP 8.1+, SQLite3, Apache with mod_rewrite, Composer.
 
 ## Installation (Ubuntu + Apache)
 
-### 1. Install dependencies
+### 1. Clone the repository
+
+```bash
+cd /var/www
+sudo git clone https://github.com/yourusername/signaltrace.git
+sudo chown -R www-data:www-data signaltrace
+```
+
+### 2. Install dependencies
 
 ```bash
 sudo apt update
 sudo apt install -y apache2 php php-sqlite3 php-mbstring php-xml php-curl sqlite3 composer unzip geoipupdate
 ```
 
-### 2. Install PHP dependencies
+### 3. Install PHP dependencies
 
 ```bash
-composer install
+cd /var/www/signaltrace
+sudo -u www-data composer install --no-dev
 ```
 
-### 3. Create the data directory
+### 4. Create the data directory
 
 ```bash
 sudo mkdir -p /var/www/signaltrace/data
@@ -58,7 +67,7 @@ sudo chown -R www-data:www-data /var/www/signaltrace/data
 sudo chmod -R 775 /var/www/signaltrace/data
 ```
 
-### 4. Set up GeoIP
+### 5. Set up GeoIP
 
 Create a free account at [maxmind.com](https://www.maxmind.com) to get a license key, then configure `/etc/GeoIP.conf`:
 
@@ -74,7 +83,7 @@ sudo geoipupdate
 
 The databases land at `/var/lib/GeoIP/` which is where SignalTrace looks by default. You can override the paths with the `MAXMIND_ASN_DB` and `MAXMIND_COUNTRY_DB` environment variables if needed.
 
-### 5. Initialize the database
+### 6. Initialize the database
 
 ```bash
 sqlite3 /var/www/signaltrace/data/database.db < db/schema.sql
