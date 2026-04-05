@@ -409,7 +409,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 
 ## Tech Stack
 
-PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2.
+PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments.
 
 ---
 
