@@ -5,8 +5,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use GeoIp2\Database\Reader;
-
 function db(): PDO
 {
     static $pdo = null;
@@ -36,6 +34,7 @@ function initializeDatabase(PDO $pdo): void
             destination TEXT NOT NULL,
             description TEXT,
             active INTEGER NOT NULL DEFAULT 1,
+            exclude_from_feed INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         )
     ");
@@ -96,41 +95,66 @@ function initializeDatabase(PDO $pdo): void
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         )
-	");
-
+    ");
 
     $pdo->exec("
-	CREATE TABLE IF NOT EXISTS asn_rules (
-	    id INTEGER PRIMARY KEY AUTOINCREMENT,
+        CREATE TABLE IF NOT EXISTS asn_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             asn TEXT NOT NULL UNIQUE,
             label TEXT,
             penalty INTEGER NOT NULL DEFAULT 10,
             active INTEGER NOT NULL DEFAULT 1,
+            exclude_from_feed INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         )
-        ");
+    ");
 
-    ensureColumn($pdo, 'clicks', 'event_type', "TEXT NOT NULL DEFAULT 'click'");
-    ensureColumn($pdo, 'clicks', 'clicked_at_unix_ms', "INTEGER");
-    ensureColumn($pdo, 'clicks', 'ip_asn', "TEXT");
-    ensureColumn($pdo, 'clicks', 'ip_org', "TEXT");
-    ensureColumn($pdo, 'clicks', 'ip_country', "TEXT");
-    ensureColumn($pdo, 'clicks', 'visitor_hash', "TEXT");
-    ensureColumn($pdo, 'clicks', 'confidence_score', "INTEGER");
-    ensureColumn($pdo, 'clicks', 'confidence_label', "TEXT");
-    ensureColumn($pdo, 'clicks', 'confidence_reason', "TEXT");
-    ensureColumn($pdo, 'clicks', 'first_for_token', "INTEGER DEFAULT 0");
-    ensureColumn($pdo, 'clicks', 'prior_events_for_token', "INTEGER DEFAULT 0");
-    ensureColumn($pdo, 'clicks', 'x_forwarded_for', "TEXT");
-    ensureColumn($pdo, 'clicks', 'accept', "TEXT");
-    ensureColumn($pdo, 'clicks', 'accept_encoding', "TEXT");
-    ensureColumn($pdo, 'clicks', 'scheme', "TEXT");
-    ensureColumn($pdo, 'clicks', 'remote_port', "TEXT");
-    ensureColumn($pdo, 'clicks', 'sec_fetch_site', "TEXT");
-    ensureColumn($pdo, 'clicks', 'sec_fetch_mode', "TEXT");
-    ensureColumn($pdo, 'clicks', 'sec_fetch_dest', "TEXT");
-    ensureColumn($pdo, 'clicks', 'sec_ch_ua', "TEXT");
-    ensureColumn($pdo, 'clicks', 'sec_ch_ua_platform', "TEXT");
+    // SECURITY: ensureColumn now validates table and column names against a strict
+    // whitelist before interpolating them into SQL. The $definition argument uses
+    // a predefined map instead of being passed as a free string.
+    $asnColumnDefinitions = [
+        'exclude_from_feed' => 'INTEGER NOT NULL DEFAULT 0',
+    ];
+
+    foreach ($asnColumnDefinitions as $column => $definition) {
+        ensureColumn($pdo, 'asn_rules', $column, $definition);
+    }
+
+    $linksColumnDefinitions = [
+        'exclude_from_feed' => 'INTEGER NOT NULL DEFAULT 0',
+    ];
+
+    foreach ($linksColumnDefinitions as $column => $definition) {
+        ensureColumn($pdo, 'links', $column, $definition);
+    }
+
+    $clickColumnDefinitions = [
+        'event_type'             => "TEXT NOT NULL DEFAULT 'click'",
+        'clicked_at_unix_ms'     => 'INTEGER',
+        'ip_asn'                 => 'TEXT',
+        'ip_org'                 => 'TEXT',
+        'ip_country'             => 'TEXT',
+        'visitor_hash'           => 'TEXT',
+        'confidence_score'       => 'INTEGER',
+        'confidence_label'       => 'TEXT',
+        'confidence_reason'      => 'TEXT',
+        'first_for_token'        => 'INTEGER DEFAULT 0',
+        'prior_events_for_token' => 'INTEGER DEFAULT 0',
+        'x_forwarded_for'        => 'TEXT',
+        'accept'                 => 'TEXT',
+        'accept_encoding'        => 'TEXT',
+        'scheme'                 => 'TEXT',
+        'remote_port'            => 'TEXT',
+        'sec_fetch_site'         => 'TEXT',
+        'sec_fetch_mode'         => 'TEXT',
+        'sec_fetch_dest'         => 'TEXT',
+        'sec_ch_ua'              => 'TEXT',
+        'sec_ch_ua_platform'     => 'TEXT',
+    ];
+
+    foreach ($clickColumnDefinitions as $column => $definition) {
+        ensureColumn($pdo, 'clicks', $column, $definition);
+    }
 
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_token ON clicks(token)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_clicked_at ON clicks(clicked_at)");
@@ -149,8 +173,25 @@ function initializeDatabase(PDO $pdo): void
     seedDefaultSkipPatterns($pdo);
 }
 
+/**
+ * SECURITY: Table names and column names are validated against hardcoded
+ * whitelists before being interpolated into SQL. The column definition is
+ * sourced from an internal map — it is never derived from user input.
+ */
 function ensureColumn(PDO $pdo, string $table, string $column, string $definition): void
 {
+    // Whitelist of tables this function is permitted to alter.
+    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules'];
+
+    // Whitelist of column name characters: alphanumeric and underscore only.
+    if (!in_array($table, $allowedTables, true)) {
+        throw new \InvalidArgumentException("ensureColumn: disallowed table '$table'");
+    }
+
+    if (!preg_match('/^[a-z_][a-z0-9_]*$/i', $column)) {
+        throw new \InvalidArgumentException("ensureColumn: disallowed column name '$column'");
+    }
+
     $stmt = $pdo->query("PRAGMA table_info($table)");
     $cols = $stmt->fetchAll();
 
@@ -160,23 +201,31 @@ function ensureColumn(PDO $pdo, string $table, string $column, string $definitio
         }
     }
 
+    // Table and column have been validated against whitelists above.
+    // $definition comes from the hardcoded $clickColumnDefinitions map, never from user input.
     $pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");
 }
 
 function seedDefaultSettings(PDO $pdo): void
 {
     $defaults = [
-        'app_name' => 'SignalTrace',
-        'base_url' => '',
-        'default_redirect_url' => 'https://example.com/',
-        'unknown_path_behavior' => 'redirect',
-        'pixel_enabled' => '1',
-        'noise_filter_enabled' => '1',
-        'threat_feed_enabled' => '1',
-        'threat_feed_window_hours' => '168',
+        'app_name'                   => 'SignalTrace',
+        'base_url'                   => '',
+        'default_redirect_url'       => 'https://example.com/',
+        'unknown_path_behavior'      => 'redirect',
+        'pixel_enabled'              => '1',
+        'noise_filter_enabled'       => '1',
+        'threat_feed_enabled'        => '1',
+        'threat_feed_window_hours'   => '168',
         'threat_feed_min_confidence' => 'suspicious',
-        'data_retention_days' => '0',
-        'display_min_score' => '20',
+        'data_retention_days'        => '0',
+        'display_min_score'          => '20',
+        'page_size'                  => '50',
+        'webhook_url'                => '',
+        'auto_refresh_secs'          => '0',
+        'export_min_confidence'      => 'suspicious',
+        'export_window_hours'        => '168',
+        'export_min_score'           => '0',
     ];
 
     $stmt = $pdo->prepare("
@@ -217,7 +266,7 @@ function seedDefaultSkipPatterns(PDO $pdo): void
         $stmt->execute([
             ':type' => $row['type'],
             ':pattern' => $row['pattern'],
-            ':created_at' => gmdate('c'),
+            ':created_at' => date('c'),
         ]);
     }
 }
@@ -301,7 +350,7 @@ function createSkipPattern(PDO $pdo, string $type, string $pattern): bool
     return $stmt->execute([
         ':type' => $type,
         ':pattern' => $pattern,
-        ':created_at' => gmdate('c'),
+        ':created_at' => date('c'),
     ]);
 }
 
@@ -323,94 +372,6 @@ function deleteSkipPattern(PDO $pdo, int $id): bool
 {
     $stmt = $pdo->prepare("DELETE FROM skip_patterns WHERE id = :id");
     return $stmt->execute([':id' => $id]);
-}
-
-function getMaxMindDbPaths(): array
-{
-    $asnPath = getenv('MAXMIND_ASN_DB') ?: '/var/lib/GeoIP/GeoLite2-ASN.mmdb';
-    $countryPath = getenv('MAXMIND_COUNTRY_DB') ?: '/var/lib/GeoIP/GeoLite2-Country.mmdb';
-
-    return [
-        'asn' => $asnPath,
-        'country' => $countryPath,
-    ];
-}
-
-function getMaxMindReaders(): array
-{
-    static $readers = null;
-
-    if ($readers !== null) {
-        return $readers;
-    }
-
-    $paths = getMaxMindDbPaths();
-
-    $asnReader = null;
-    $countryReader = null;
-
-    try {
-        if (is_file($paths['asn'])) {
-            $asnReader = new Reader($paths['asn']);
-        }
-    } catch (Throwable $e) {
-        $asnReader = null;
-    }
-
-    try {
-        if (is_file($paths['country'])) {
-            $countryReader = new Reader($paths['country']);
-        }
-    } catch (Throwable $e) {
-        $countryReader = null;
-    }
-
-    $readers = [
-        'asn' => $asnReader,
-        'country' => $countryReader,
-    ];
-
-    return $readers;
-}
-
-function lookupIpEnrichment(string $ip): array
-{
-    $result = [
-        'ip_asn' => null,
-        'ip_org' => null,
-        'ip_country' => null,
-    ];
-
-    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-        return $result;
-    }
-
-    $readers = getMaxMindReaders();
-
-    if ($readers['asn'] instanceof Reader) {
-        try {
-            $asn = $readers['asn']->asn($ip);
-            $result['ip_asn'] = isset($asn->autonomousSystemNumber)
-                ? (string) $asn->autonomousSystemNumber
-                : null;
-            $result['ip_org'] = isset($asn->autonomousSystemOrganization)
-                ? (string) $asn->autonomousSystemOrganization
-                : null;
-        } catch (Throwable $e) {
-        }
-    }
-
-    if ($readers['country'] instanceof Reader) {
-        try {
-            $country = $readers['country']->country($ip);
-            $result['ip_country'] = isset($country->country->isoCode)
-                ? (string) $country->country->isoCode
-                : null;
-        } catch (Throwable $e) {
-        }
-    }
-
-    return $result;
 }
 
 function currentUnixMs(): int
@@ -504,36 +465,39 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function createLink(PDO $pdo, string $token, string $destination, string $description = ''): bool
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO links (token, destination, description, active, created_at)
-        VALUES (:token, :destination, :description, 1, :created_at)
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :created_at)
     ");
 
     return $stmt->execute([
         ':token' => $token,
         ':destination' => $destination,
         ':description' => $description,
-        ':created_at' => gmdate('c'),
+        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
+        ':created_at' => date('c'),
     ]);
 }
 
-function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = ''): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
-        SET token = :token,
-            destination = :destination,
-            description = :description
+        SET token             = :token,
+            destination       = :destination,
+            description       = :description,
+            exclude_from_feed = :exclude_from_feed
         WHERE id = :id
     ");
 
     return $stmt->execute([
-        ':id' => $id,
-        ':token' => $token,
-        ':destination' => $destination,
-        ':description' => $description,
+        ':id'               => $id,
+        ':token'            => $token,
+        ':destination'      => $destination,
+        ':description'      => $description,
+        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
     ]);
 }
 
@@ -588,7 +552,7 @@ function logClick(PDO $pdo, array $link, array $requestData): void
     $priorEventsForToken = getPriorEventsForToken($pdo, $token, is_string($visitorHash) ? $visitorHash : null);
     $firstForToken = $priorEventsForToken === 0 ? 1 : 0;
 
-    $enrichment = $ip !== '' ? lookupIpEnrichment($ip) : [
+    $enrichment = $ip !== '' ? lookupGeoIp($ip) : [
         'ip_asn' => null,
         'ip_org' => null,
         'ip_country' => null,
@@ -622,7 +586,7 @@ function logClick(PDO $pdo, array $link, array $requestData): void
         ':link_id' => $link['id'] ?? null,
         ':token' => $token,
         ':event_type' => $requestData['event_type'] ?? 'click',
-        ':clicked_at' => gmdate('c'),
+        ':clicked_at' => date('c'),
         ':clicked_at_unix_ms' => currentUnixMs(),
         ':ip' => $requestData['ip'] ?? null,
         ':ip_asn' => $requestData['ip_asn'] ?? $enrichment['ip_asn'],
@@ -778,6 +742,29 @@ function getRecentClicksAdvancedFiltered(
     ?string $dateFrom = null,
     ?string $dateTo = null,
 ): array {
+    [$rows] = getRecentClicksAdvancedFilteredPaged(
+        $pdo, $limit, 0,
+        $tokenFilter, $ipFilter, $visitorFilter,
+        $knownOnly, $dateFrom, $dateTo,
+    );
+    return $rows;
+}
+
+/**
+ * Paginated version — returns [rows, totalCount].
+ * Used by the dashboard; the unpaged wrapper above is kept for export/feed use.
+ */
+function getRecentClicksAdvancedFilteredPaged(
+    PDO $pdo,
+    int $limit = 50,
+    int $offset = 0,
+    ?string $tokenFilter = null,
+    ?string $ipFilter = null,
+    ?string $visitorFilter = null,
+    bool $knownOnly = false,
+    ?string $dateFrom = null,
+    ?string $dateTo = null,
+): array {
     $sql = "
         SELECT
             c.*,
@@ -826,7 +813,23 @@ function getRecentClicksAdvancedFiltered(
         $params[':dateTo'] = $dateTo;
     }
 
-    $sql .= " ORDER BY c.id DESC LIMIT :limit ";
+    // COUNT query for pagination total
+    $countSql  = "SELECT COUNT(*) FROM clicks c LEFT JOIN links l ON c.link_id = l.id WHERE 1 = 1";
+    // Re-use the same WHERE fragments already appended to $sql — extract them
+    $whereOnly = substr($sql, strpos($sql, 'WHERE 1 = 1') + strlen('WHERE 1 = 1'));
+    $countSql .= $whereOnly;
+
+    $countStmt = $pdo->prepare($countSql);
+    foreach ($params as $key => $value) {
+        $countStmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    if (isset($params[':minScore'])) {
+        $countStmt->bindValue(':minScore', $params[':minScore'], PDO::PARAM_INT);
+    }
+    $countStmt->execute();
+    $totalCount = (int) $countStmt->fetchColumn();
+
+    $sql .= " ORDER BY c.id DESC LIMIT :limit OFFSET :offset ";
 
     $stmt = $pdo->prepare($sql);
 
@@ -834,10 +837,11 @@ function getRecentClicksAdvancedFiltered(
         $stmt->bindValue($key, $value, PDO::PARAM_STR);
     }
 
-    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $stmt->execute();
 
-    return $stmt->fetchAll();
+    return [$stmt->fetchAll(), $totalCount];
 }
 
 function getThreatFeedIps(PDO $pdo): array
@@ -859,18 +863,35 @@ function getThreatFeedIps(PDO $pdo): array
 
     $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
 
+    // An IP is excluded from the feed if:
+    //   (a) its ASN has exclude_from_feed = 1  (existing ASN-level rule), OR
+    //   (b) every click it made within the window was on a token with
+    //       exclude_from_feed = 1  (token-level rule).
+    //
+    // We implement (b) by requiring that at least one qualifying click joined
+    // to a link with exclude_from_feed = 0 (or no link at all — unknown tokens
+    // are not excluded at the token level).  A LEFT JOIN on links gives NULL
+    // for unknown tokens, which we treat as "not excluded".
     $sql = "
-        SELECT DISTINCT ip
-        FROM clicks
-        WHERE ip IS NOT NULL
-          AND ip <> ''
-          AND event_type = 'click'
-          AND clicked_at >= datetime('now', ?)
-          AND confidence_label IS NOT NULL
-          AND confidence_label <> ''
-          AND confidence_score IS NOT NULL
-          AND confidence_label IN ($placeholders)
-        ORDER BY ip ASC
+        SELECT DISTINCT c.ip
+        FROM clicks c
+        LEFT JOIN asn_rules ar
+            ON ar.asn = c.ip_asn
+           AND ar.active = 1
+           AND ar.exclude_from_feed = 1
+        LEFT JOIN links lk
+            ON lk.id = c.link_id
+        WHERE c.ip IS NOT NULL
+          AND c.ip <> ''
+          AND c.event_type = 'click'
+          AND c.clicked_at >= datetime('now', ?)
+          AND c.confidence_label IS NOT NULL
+          AND c.confidence_label <> ''
+          AND c.confidence_score IS NOT NULL
+          AND c.confidence_label IN ($placeholders)
+          AND ar.id IS NULL
+          AND (lk.id IS NULL OR lk.exclude_from_feed = 0)
+        ORDER BY c.ip ASC
     ";
 
     $params = array_merge(
@@ -893,26 +914,122 @@ function getThreatFeedIps(PDO $pdo): array
     return array_values(array_unique($ips));
 }
 
-function exportClicksAsJson(
+/**
+ * Export clicks applying the configured export settings (label threshold +
+ * time window) unless manual dashboard filters are present, in which case
+ * those take full precedence.
+ *
+ * The $manualFilters flag tells us whether the caller is passing explicit
+ * filter values from the dashboard. When true, the export settings are
+ * bypassed so the admin gets exactly what they filtered.
+ */
+function exportClicks(
     PDO $pdo,
+    bool $manualFilters = false,
     ?string $tokenFilter = null,
     ?string $ipFilter = null,
     ?string $visitorFilter = null,
     bool $knownOnly = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
-    int $limit = 1000,
+    int $limit = 5000,
 ): array {
-    return getRecentClicksAdvancedFiltered(
-        $pdo,
-        $limit,
-        $tokenFilter,
-        $ipFilter,
-        $visitorFilter,
-        $knownOnly,
-        $dateFrom,
-        $dateTo,
+    if ($manualFilters) {
+        // Dashboard filters active — return exactly what they asked for.
+        return getRecentClicksAdvancedFiltered(
+            $pdo, $limit,
+            $tokenFilter, $ipFilter, $visitorFilter,
+            $knownOnly, $dateFrom, $dateTo,
+        );
+    }
+
+    // No manual filters — apply the configured export threshold and window.
+    $minConfidence = strtolower((string) getSetting($pdo, 'export_min_confidence', 'suspicious'));
+    $windowHours   = max(1, (int) getSetting($pdo, 'export_window_hours', '168'));
+    $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
+
+    $allowedLabels = match ($minConfidence) {
+        'bot'          => ['bot'],
+        'likely-human' => ['likely-human', 'suspicious', 'bot'],
+        'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
+        default        => ['suspicious', 'bot'],
+    };
+
+    $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
+
+    $sql = "
+        SELECT c.*, l.description, l.destination
+        FROM clicks c
+        LEFT JOIN links l ON c.link_id = l.id
+        WHERE c.clicked_at >= datetime('now', ?)
+          AND c.confidence_label IN ($placeholders)
+          AND (c.confidence_score IS NULL OR c.confidence_score >= ?)
+        ORDER BY c.id DESC
+        LIMIT ?
+    ";
+
+    $params = array_merge(
+        ['-' . $windowHours . ' hours'],
+        $allowedLabels,
+        [$minScore, $limit],
     );
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Per-IP summary: first seen, last seen, total hits, distinct tokens,
+ * highest confidence label observed, and whether any active ASN rule applies.
+ */
+function getIpSummary(PDO $pdo, string $ip): array
+{
+    $stmt = $pdo->prepare("
+        SELECT
+            COUNT(*)                        AS total_hits,
+            MIN(clicked_at)                 AS first_seen,
+            MAX(clicked_at)                 AS last_seen,
+            COUNT(DISTINCT token)           AS distinct_tokens,
+            MIN(confidence_score)           AS lowest_score,
+            SUM(CASE WHEN confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
+            SUM(CASE WHEN confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
+            SUM(CASE WHEN confidence_label = 'likely-human' THEN 1 ELSE 0 END) AS likely_human_count,
+            SUM(CASE WHEN confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
+            MAX(ip_org)                     AS ip_org,
+            MAX(ip_asn)                     AS ip_asn,
+            MAX(ip_country)                 AS ip_country
+        FROM clicks
+        WHERE ip = :ip
+    ");
+    $stmt->execute([':ip' => $ip]);
+    $row = $stmt->fetch();
+
+    // Check for an active ASN rule.
+    $asnRule = null;
+    if (!empty($row['ip_asn'])) {
+        $asnRule = getAsnRuleByAsn($pdo, (string) $row['ip_asn']);
+    }
+
+    return array_merge($row ?: [], ['asn_rule' => $asnRule]);
+}
+
+/**
+ * Probabilistic auto-cleanup: called on every tracked request with a 1-in-100
+ * chance of running. This means retention enforces itself without a cron job,
+ * adding only ~1% overhead and only when retention is actually configured.
+ */
+function maybeRunAutoCleanup(PDO $pdo): void
+{
+    $days = (int) getSetting($pdo, 'data_retention_days', '0');
+    if ($days <= 0) {
+        return;
+    }
+    // ~1% of requests trigger cleanup.
+    if (random_int(1, 100) !== 1) {
+        return;
+    }
+    cleanupOldClicks($pdo, $days);
 }
 
 function cleanupOldClicks(PDO $pdo, int $days): int
@@ -935,7 +1052,7 @@ function cleanupOldClicks(PDO $pdo, int $days): int
 function getAsnRules(PDO $pdo): array
 {
     return $pdo->query("
-        SELECT id, asn, label, penalty, active, created_at
+        SELECT id, asn, label, penalty, active, exclude_from_feed, created_at
         FROM asn_rules
         ORDER BY asn ASC
     ")->fetchAll();
@@ -971,18 +1088,39 @@ function getAsnRuleByAsn(PDO $pdo, string $asn): ?array
     return $row ?: null;
 }
 
-function createAsnRule(PDO $pdo, string $asn, string $label = '', int $penalty = 10): bool
+function createAsnRule(PDO $pdo, string $asn, string $label = '', int $penalty = 10, bool $excludeFromFeed = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO asn_rules (asn, label, penalty, active, created_at)
-        VALUES (:asn, :label, :penalty, 1, :created_at)
+        INSERT INTO asn_rules (asn, label, penalty, active, exclude_from_feed, created_at)
+        VALUES (:asn, :label, :penalty, 1, :exclude_from_feed, :created_at)
     ");
 
     return $stmt->execute([
         ':asn' => $asn,
         ':label' => $label,
         ':penalty' => $penalty,
-        ':created_at' => gmdate('c'),
+        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
+        ':created_at' => date('c'),
+    ]);
+}
+
+function updateAsnRule(PDO $pdo, int $id, string $asn, string $label, int $penalty, bool $excludeFromFeed): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE asn_rules
+        SET asn               = :asn,
+            label             = :label,
+            penalty           = :penalty,
+            exclude_from_feed = :exclude_from_feed
+        WHERE id = :id
+    ");
+
+    return $stmt->execute([
+        ':id'               => $id,
+        ':asn'              => $asn,
+        ':label'            => $label,
+        ':penalty'          => $penalty,
+        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
     ]);
 }
 

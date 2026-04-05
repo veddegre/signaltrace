@@ -5,52 +5,59 @@ declare(strict_types=1);
 |--------------------------------------------------------------------------
 | SignalTrace Local Configuration
 |--------------------------------------------------------------------------
-|
-| Copy this file to:
-|   includes/config.local.php
-|
-| Then update the values below.
-|
-| IMPORTANT:
-| - This file should NOT be committed to Git
-| - Add it to your .gitignore
-|
+| Copy this file to includes/config.local.php and update the values below.
+| This file must NOT be committed to Git — add it to .gitignore.
 */
 
-/*
-|--------------------------------------------------------------------------
-| Admin Credentials
-|--------------------------------------------------------------------------
-|
-| Username for accessing /admin
-|
-*/
-define('ADMIN_USERNAME', 'admin');
+/* Admin credentials ---------------------------------------------------- */
 
-/*
-|--------------------------------------------------------------------------
-| Admin Password Hash
-|--------------------------------------------------------------------------
-|
-| Generate with:
-|   php -r "echo password_hash('your-strong-password', PASSWORD_DEFAULT) . PHP_EOL;"
-|
-| Paste the full output below.
-|
-*/
+define('ADMIN_USERNAME',      'admin');
+
+// Generate with:  php -r "echo password_hash('your-password', PASSWORD_DEFAULT) . PHP_EOL;"
 define('ADMIN_PASSWORD_HASH', 'replace-with-password-hash');
 
-/*
-|--------------------------------------------------------------------------
-| Visitor Hash Salt
-|--------------------------------------------------------------------------
-|
-| Used to generate consistent visitor fingerprints.
-|
-| Generate with:
-|   openssl rand -hex 64
-|
-| Do NOT change this after deployment unless necessary.
-|
-*/
+/* Visitor fingerprint salt --------------------------------------------- */
+
+// Generate with:  openssl rand -hex 64
+// Do NOT change after deployment — it will invalidate all existing visitor hashes.
 define('VISITOR_HASH_SALT', 'replace-with-random-secret');
+
+/* Admin login rate limiting -------------------------------------------- */
+
+// Lock out an IP after this many consecutive failures within the window.
+define('AUTH_MAX_FAILURES', 5);
+
+// Lockout duration in seconds (default 900 = 15 minutes).
+define('AUTH_LOCKOUT_SECS', 900);
+
+/* Reverse proxy trust -------------------------------------------------- */
+
+// Set to the IP of your reverse proxy (nginx, load balancer, etc.) if one
+// sits in front of SignalTrace.  When set, the rightmost X-Forwarded-For
+// entry is used as the client IP instead of REMOTE_ADDR.
+// Leave blank if there is no proxy.
+// Example:  define('TRUSTED_PROXY_IP', '10.0.0.1');
+define('TRUSTED_PROXY_IP', '');
+
+/* Export API token (for Splunk / automation) ------------------- */
+
+// When set, this token can be used to authenticate export requests
+// without HTTP Basic credentials — useful for Splunk scripted inputs,
+// cron jobs, or any tool that can't do interactive auth.
+//
+// Use in one of two ways:
+//   HTTP header (preferred — not logged by Apache):
+//     Authorization: Bearer YOUR_TOKEN
+//   Query param (fallback — appears in access logs, use with care):
+//     /export/json?api_key=YOUR_TOKEN
+//
+// Generate with:  openssl rand -hex 32
+//
+// Leave blank to require admin Basic Auth for all export access.
+define('EXPORT_API_TOKEN', '');
+
+
+// If set, requests arriving with this domain as the Referer on the root path
+// receive a small score penalty.  Use your own domain.
+// Example:  define('SELF_REFERER_DOMAIN', 'yourdomain.example');
+define('SELF_REFERER_DOMAIN', '');

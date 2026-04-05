@@ -13,19 +13,32 @@ function renderAdminPage(
     string $visitorFilter,
     bool $knownOnly,
     array $clicks,
+    int $totalCount,
+    int $totalPages,
+    int $currentPage,
+    int $pageSize,
     array $links,
     array $tokenCounts,
     array $skipPatterns,
     array $asnRules,
     string $refreshUrl,
+    ?array $ipSummary = null,
 ): void {
-    $pdo = db();
+    $pdo       = db();
+    $csrfToken = generateCsrfToken();
+
+    $autoRefreshSecs  = max(0, (int) getSetting($pdo, 'auto_refresh_secs', '0'));
+    $webhookUrl       = (string) getSetting($pdo, 'webhook_url', '');
+    $pageSizeSetting  = (string) getSetting($pdo, 'page_size', '50');
+    $exportMinConf    = (string) getSetting($pdo, 'export_min_confidence', 'suspicious');
+    $exportWinHours   = (string) getSetting($pdo, 'export_window_hours', '168');
+    $exportMinScore   = (string) getSetting($pdo, 'export_min_score', '0');
 
     $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
-    $dateTo = trim((string) ($_GET['date_to'] ?? ''));
-    $showAll = isset($_GET['show_all']) && $_GET['show_all'] === '1';
+    $dateTo   = trim((string) ($_GET['date_to']   ?? ''));
+    $showAll  = isset($_GET['show_all']) && $_GET['show_all'] === '1';
 
-    $activeTab = trim((string) ($_GET['tab'] ?? ''));
+    $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
 
     $editLink = null;
@@ -33,6 +46,17 @@ function renderAdminPage(
         foreach ($links as $candidateLink) {
             if ((int) $candidateLink['id'] === $editLinkId) {
                 $editLink = $candidateLink;
+                break;
+            }
+        }
+    }
+
+    $editAsnRuleId = (int) ($_GET['edit_asn_rule_id'] ?? 0);
+    $editAsnRule = null;
+    if ($editAsnRuleId > 0) {
+        foreach ($asnRules as $candidateRule) {
+            if ((int) $candidateRule['id'] === $editAsnRuleId) {
+                $editAsnRule = $candidateRule;
                 break;
             }
         }
@@ -125,471 +149,22 @@ function renderAdminPage(
     <html lang="en">
     <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title><?= h($appName) ?></title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 2rem; background: #f7f7f7; color: #222; }
-            h1, h2 { margin-top: 0; }
-            table { border-collapse: collapse; width: 100%; background: #fff; margin-bottom: 2rem; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
-            th { background: #f0f0f0; }
-            .bot { background: #fff2f2; }
-            .mono { font-family: Consolas, Monaco, monospace; font-size: 0.92rem; }
-            .small { font-size: 0.9rem; color: #555; }
-            .wrap { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-
-            form { background: #fff; padding: 1rem; border: 1px solid #ddd; margin-bottom: 2rem; }
-            input[type="text"], input[type="url"], input[type="date"], input[type="number"], select {
-                width: 100%;
-                padding: 8px;
-                margin-bottom: 10px;
-                box-sizing: border-box;
-            }
-
-            .inline-form input[type="text"],
-            .inline-form input[type="date"] {
-                width: auto;
-                min-width: 180px;
-                margin-right: 8px;
-                margin-bottom: 0;
-            }
-
-            .inline-form label { margin-right: 10px; }
-            .muted { color: #666; }
-
-            .inline-action-form {
-                display: inline-block;
-                background: transparent;
-                padding: 0;
-                border: 0;
-                margin: 0 4px 4px 0;
-            }
-
-            .filter-container {
-		display: flex;
-                flex-direction: column;
-                gap: 10px;
-            }
-
-            .filter-inputs {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 10px;
-            }
-
-	    .filter-inputs input[type="text"],
-	    .filter-inputs input[type="date"] {
-                width: auto;
-                min-width: 220px;
-                margin-bottom: 0;
-            }
-
-            .filter-toggles {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 16px;
-                align-items: center;
-            }
-
-	    .filter-toggles label {
-	        display: inline-flex;
-	        align-items: center;
-	        gap: 6px;
-	        margin-right: 0;
-	        white-space: nowrap;
-            }
-
-	    .filter-actions {
-	        display: flex;
-	        gap: 8px;
- 	        align-items: center;
-	        flex-wrap: wrap;
-	        margin-left: 0;
-            }
-
-            .tabs {
-                display: flex;
-                border-bottom: 2px solid #ddd;
-                margin-bottom: 1rem;
-                gap: 6px;
-                flex-wrap: wrap;
-            }
-
-            .tab {
-                padding: 10px 15px;
-                cursor: pointer;
-                border: 1px solid #ddd;
-                border-bottom: none;
-                background: #f0f0f0;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-            }
-
-            .tab.active {
-                background: #fff;
-                font-weight: bold;
-            }
-
-            .tab-content {
-                display: none;
-            }
-
-            .tab-content.active {
-                display: block;
-            }
-
-            .badge {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 999px;
-                font-size: 0.85rem;
-                font-weight: bold;
-            }
-
-            .badge-human { background: #dff5e1; color: #1e6b2c; }
-            .badge-likely-human { background: #e8f1ff; color: #1b4d9b; }
-            .badge-suspicious { background: #fff3cd; color: #8a6d1f; }
-            .badge-bot { background: #f8d7da; color: #8a1f2d; }
-
-            .table-wrap {
-                overflow-x: auto;
-            }
-
-            .compact-table {
-                table-layout: fixed;
-            }
-
-            .compact-table th,
-            .compact-table td {
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                max-width: 180px;
-            }
-
-            .compact-table th.time-col,
-            .compact-table td.time-col {
-                max-width: none;
-                width: 210px;
-                min-width: 210px;
-                overflow: visible;
-                text-overflow: clip;
-                white-space: nowrap;
-            }
-
-            .compact-table th.type-col,
-            .compact-table td.type-col {
-                width: 90px;
-                min-width: 90px;
-                max-width: 90px;
-            }
-
-            .compact-table th.token-col,
-            .compact-table td.token-col {
-                width: 230px;
-                min-width: 230px;
-                max-width: 230px;
-            }
-
-            .compact-table th.ip-col,
-            .compact-table td.ip-col {
-                max-width: none;
-                width: 155px;
-                min-width: 155px;
-                overflow: visible;
-                text-overflow: clip;
-                white-space: nowrap;
-            }
-
-            .compact-table th.details-col,
-            .compact-table td.details-col {
-                width: 110px;
-                min-width: 110px;
-                max-width: 110px;
-	    }
-
-            .compact-table th.actions-col,
-            .compact-table td.actions-col {
-		width: 230px;
-                min-width: 230px;
-                max-width: 230px;
-                white-space: normal;
-                overflow: visible;
-                text-overflow: unset;
-            }
-
-            .compact-table th.skip-actions-col,
-            .compact-table td.skip-actions-col {
-	        width: 170px;
-	        min-width: 170px;
-                max-width: 170px;
-                white-space: normal;
-                overflow: visible;
-                text-overflow: unset;
-            }
-
-
-	    .compact-table th.classification-col,
-	    .compact-table td.classification-col {
-	        width: 220px;
-		min-width: 220px;
-	        max-width: 220px;
-		white-space: nowrap;
-		overflow: visible;
-		text-overflow: unset;
-	    }
-
-	    .score-pill {
-		display: inline-block;
-		margin-left: 6px;
-		padding: 1px 5px;
-		font-size: 0.7em;
-		line-height: 1;
-		border-radius: 999px;
-		background: #f0f0f0;
-		color: #666;
-		white-space: nowrap;
-		vertical-align: middle;
-	    }
-
-	    .actions-col form,
-	    .skip-actions-col form {
-	        display: inline-block;
-	        margin: 2px 4px 2px 0;
-            }
-
-	    .url-cell {
-	        display: flex;
-	        align-items: center;
-                gap: 6px;
-                flex-wrap: wrap;
-            }
-
-            .url-cell .copy-button {
-                margin-left: 0;
-	    }
-
-
-	    .actions-col .button-link,
-   	    form .button-link {
-   	        display: inline-block;
-		padding: 6px 10px;
-	        background: #f3f4f6;
- 	        color: #111827;
-	        border: 1px solid #d1d5db;
-	        border-radius: 4px;
-	        text-decoration: none;
-	        line-height: 1.2;
-	        font-size: 14px;
- 	        cursor: pointer;
-            }
-
-	    .actions-col .button-link:hover,
-	    form .button-link:hover {
-	        background: #e5e7eb;
-	        color: #111827;
-	        text-decoration: none;
-	    }
-
-            .table-link {
-                color: #1d4ed8;
-                text-decoration: none;
-                font-weight: 500;
-            }
-
-            .table-link:hover {
-                text-decoration: underline;
-                color: #1e40af;
-            }
-
-            .mono-link {
-                font-family: Consolas, Monaco, monospace;
-                font-size: 0.92rem;
-            }
-
-            .details-row {
-                display: none;
-                background: #fafafa;
-            }
-
-            .details-row.open {
-                display: table-row;
-            }
-
-            .details-cell {
-                padding: 14px;
-                background: #fafafa;
-            }
-
-            .details-grid {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 12px;
-                align-items: start;
-            }
-
-            .detail-box {
-                background: #fff;
-                border: 1px solid #ddd;
-                padding: 10px;
-                min-width: 0;
-                overflow: hidden;
-            }
-
-            .detail-box strong {
-                display: block;
-                margin-bottom: 6px;
-            }
-
-            .detail-box,
-            .detail-box div,
-            .detail-box span,
-            .wrap {
-                white-space: normal;
-                overflow-wrap: anywhere;
-                word-break: break-word;
-            }
-
-            .details-button,
-            .copy-button {
-                padding: 6px 10px;
-                font-size: 0.9rem;
-            }
-	    .copy-button {
-		display: inline-block;
-		padding: 3px 6px;
-		margin-left: 6px;
-		background: #f3f4f6;
-		color: #111827;
-		border: 1px solid #d1d5db;
-		border-radius: 4px;
-		text-decoration: none; /* remove underline */
-		font-family: Consolas, Monaco, monospace;
-		font-size: 11px;
-		line-height: 1.2;
-		cursor: pointer;
-	    }
-
-	    .copy-button:hover {
-		background: #e5e7eb;
-		color: #111827;        /* prevent link blue */
-		text-decoration: none; /* prevent underline on hover */
-	    }
-
-	    .copy-button:active {
-		background: #d1d5db;
-	   }
-
-            .filter-actions {
-                display: inline-flex;
-                gap: 8px;
-                align-items: center;
-                flex-wrap: wrap;
-                margin-left: 8px;
-            }
-
-            .filter-actions button,
-            .button-link {
-                display: inline-block;
-                padding: 10px 14px;
-                background: #f3f4f6;
-                color: #111827;
-                border: 1px solid #d1d5db;
-                border-radius: 4px;
-                text-decoration: none;
-                line-height: 1.2;
-                font-size: 14px;
-                cursor: pointer;
-            }
-
-            .filter-actions button:hover,
-            .button-link:hover {
-                background: #e5e7eb;
-            }
-
-            .danger-button {
-                background: #b91c1c;
-                color: #fff;
-                border: 0;
-                border-radius: 4px;
-            }
-
-            .danger-button:hover {
-                background: #991b1b;
-            }
-
-            .warning-button {
-                background: #d97706;
-                color: #fff;
-                border: 0;
-                border-radius: 4px;
-            }
-
-            .warning-button:hover {
-                background: #b45309;
-            }
-
-            .pill-link {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 999px;
-                border: 1px solid #d1d5db;
-                background: #f9fafb;
-                color: #111827;
-                text-decoration: none;
-            }
-
-            .pill-link:hover {
-                background: #eef2f7;
-            }
-
-            .active-filters {
-                margin: 0 0 1rem 0;
-                display: flex;
-                gap: 8px;
-                flex-wrap: wrap;
-                align-items: center;
-            }
-
-            .filter-pill {
-                display: inline-flex;
-                gap: 6px;
-                align-items: center;
-                padding: 6px 10px;
-                border-radius: 999px;
-                background: #e5e7eb;
-                color: #111827;
-                font-size: 0.9rem;
-            }
-
-            .filter-pill a {
-                color: #111827;
-                text-decoration: none;
-                font-weight: bold;
-            }
-
-            .utility-links {
-                display: flex;
-                gap: 8px;
-                flex-wrap: wrap;
-                margin: 0 0 1rem 0;
-            }
-
-            .two-column-settings {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 16px;
-            }
-
-            @media (max-width: 1100px) {
-                .details-grid,
-                .two-column-settings {
-                    grid-template-columns: 1fr;
-                }
-            }
-        </style>
+        <link rel="stylesheet" href="/admin.css">
     </head>
     <body>
-        <h1><?= h($appName) ?></h1>
+        <header class="page-header">
+            <div class="page-header-left">
+                <h1><?= h($appName) ?></h1>
+                <span class="header-tag">Admin</span>
+            </div>
+            <button type="button" class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+                <span class="theme-icon" id="theme-icon">☀️</span>
+                <span id="theme-label">Light</span>
+            </button>
+        </header>
+        <div class="page-body">
 
         <div class="tabs">
             <div class="tab" id="tab-dashboard" onclick="showTab('dashboard')">Dashboard</div>
@@ -607,8 +182,14 @@ function renderAdminPage(
 	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Filter by token or path">
 	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="Filter by IP">
 	                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Filter by visitor hash">
-	                <input type="date" name="date_from" value="<?= h($dateFrom) ?>" placeholder="From date">
-			<input type="date" name="date_to" value="<?= h($dateTo) ?>" placeholder="To date">
+	                <label class="date-filter-label">
+	                    <span class="date-filter-hint">📅 From</span>
+	                    <input type="date" name="date_from" value="<?= h($dateFrom) ?>">
+	                </label>
+	                <label class="date-filter-label">
+	                    <span class="date-filter-hint">📅 To</span>
+	                    <input type="date" name="date_to" value="<?= h($dateTo) ?>">
+	                </label>
 		    </div>
                     <div class="filter-toggles">
 	                <label>
@@ -629,6 +210,18 @@ function renderAdminPage(
                     <button type="submit">Apply Filter</button>
                     <a class="button-link" href="/admin">Clear Filter</a>
                     <a class="button-link" href="<?= h($refreshUrl) ?>">Refresh</a>
+                    <?php
+                    $exportParams = [];
+                    if ($tokenFilter   !== '') $exportParams['token']    = $tokenFilter;
+                    if ($ipFilter      !== '') $exportParams['ip']       = $ipFilter;
+                    if ($visitorFilter !== '') $exportParams['visitor']  = $visitorFilter;
+                    if ($knownOnly)            $exportParams['known']    = '1';
+                    if ($dateFrom      !== '') $exportParams['date_from'] = $dateFrom;
+                    if ($dateTo        !== '') $exportParams['date_to']   = $dateTo;
+                    $exportHref = '/export/json' . (!empty($exportParams) ? '?' . http_build_query($exportParams) : '');
+                    ?>
+                    <a class="button-link" href="<?= h($exportHref) ?>" target="_blank" rel="noopener">Export JSON</a>
+                    <a class="button-link" href="<?= h(str_replace('/export/json', '/export/csv', $exportHref)) ?>" target="_blank" rel="noopener">Export CSV</a>
 		</div>
                </div>
             </form>
@@ -767,9 +360,40 @@ function renderAdminPage(
 	    </div>
             <?php endif; ?>
 
+            <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
+            <div class="ip-summary">
+                <strong>IP Summary: <?= h($ipFilter) ?></strong>
+                <div class="details-grid" style="margin-top: 8px;">
+                    <div>
+                        <div><span class="mono">First seen:</span> <?= h((string) ($ipSummary['first_seen'] ?? '—')) ?></div>
+                        <div><span class="mono">Last seen:</span>  <?= h((string) ($ipSummary['last_seen']  ?? '—')) ?></div>
+                        <div><span class="mono">Total hits:</span> <?= (int) ($ipSummary['total_hits'] ?? 0) ?></div>
+                        <div><span class="mono">Distinct tokens:</span> <?= (int) ($ipSummary['distinct_tokens'] ?? 0) ?></div>
+                    </div>
+                    <div>
+                        <div><span class="mono">Bot hits:</span>          <?= (int) ($ipSummary['bot_count']          ?? 0) ?></div>
+                        <div><span class="mono">Suspicious hits:</span>   <?= (int) ($ipSummary['suspicious_count']   ?? 0) ?></div>
+                        <div><span class="mono">Likely-human hits:</span> <?= (int) ($ipSummary['likely_human_count'] ?? 0) ?></div>
+                        <div><span class="mono">Human hits:</span>        <?= (int) ($ipSummary['human_count']        ?? 0) ?></div>
+                    </div>
+                    <div>
+                        <div><span class="mono">Org:</span>     <?= h((string) ($ipSummary['ip_org']     ?? '—')) ?></div>
+                        <div><span class="mono">ASN:</span>     <?= h((string) ($ipSummary['ip_asn']     ?? '—')) ?></div>
+                        <div><span class="mono">Country:</span> <?= h((string) ($ipSummary['ip_country'] ?? '—')) ?></div>
+                        <?php if (!empty($ipSummary['asn_rule'])): ?>
+                            <div><span class="badge badge-suspicious">ASN rule active — penalty <?= (int) $ipSummary['asn_rule']['penalty'] ?></span></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <h2>Activity</h2>
             <p class="muted">
                 <?= $knownOnly ? 'Showing only known tokens.' : 'Showing all clicks that were not suppressed as noise.' ?>
+                <?php if ($totalCount > 0): ?>
+                    <span style="margin-left: 8px;"><?= number_format($totalCount) ?> total &mdash; page <?= $currentPage ?> of <?= $totalPages ?></span>
+                <?php endif; ?>
             </p>
 
             <div class="table-wrap">
@@ -787,21 +411,27 @@ function renderAdminPage(
                         <?php
                         $confidenceLabel = (string) ($c['confidence_label'] ?? '');
                         $badgeClass = match ($confidenceLabel) {
-                            'human' => 'badge badge-human',
+                            'human'        => 'badge badge-human',
                             'likely-human' => 'badge badge-likely-human',
-                            'suspicious' => 'badge badge-suspicious',
-                            'bot' => 'badge badge-bot',
-                            default => 'badge',
+                            'suspicious'   => 'badge badge-suspicious',
+                            'bot'          => 'badge badge-bot',
+                            default        => 'badge',
                         };
-                        $detailsId = 'details-' . $i;
-                        $rowToken = (string) ($c['token'] ?? '');
+                        $detailsId    = 'details-' . $i;
+                        $rowToken     = (string) ($c['token'] ?? '');
                         $displayToken = ($rowToken === 'root') ? '/' : $rowToken;
-                        $rowIp = (string) ($c['ip'] ?? '');
-                        $rowVisitor = (string) ($c['visitor_hash'] ?? '');
-                        $rowUa = (string) ($c['user_agent'] ?? '');
+                        $rowIp        = (string) ($c['ip'] ?? '');
+                        $rowVisitor   = (string) ($c['visitor_hash'] ?? '');
+                        $rowUa        = (string) ($c['user_agent'] ?? '');
+
+                        // Display timestamp from unix_ms if available, fall back to clicked_at string.
+                        $tsMs      = $c['clicked_at_unix_ms'] ?? null;
+                        $tsDisplay = $tsMs !== null
+                            ? date('Y-m-d H:i:s', (int) ($tsMs / 1000))
+                            : (string) ($c['clicked_at'] ?? '');
                         ?>
                         <tr class="<?= $confidenceLabel === 'bot' ? 'bot' : '' ?>">
-                            <td class="time-col"><?= h((string) ($c['clicked_at'] ?? '')) ?></td>
+                            <td class="time-col" title="<?= h((string) ($c['clicked_at'] ?? '')) ?>"><?= h($tsDisplay) ?></td>
                             <td class="type-col"><?= h((string) ($c['event_type'] ?? 'click')) ?></td>
                             <td class="mono token-col">
                                 <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>">
@@ -958,6 +588,35 @@ function renderAdminPage(
                     <?php endforeach; ?>
                 </table>
             </div>
+
+            <?php if ($totalPages > 1): ?>
+            <div class="pagination">
+                <?php if ($currentPage > 1): ?>
+                    <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) ($currentPage - 1)])) ?>">&larr; Prev</a>
+                <?php endif; ?>
+
+                <?php
+                $start = max(1, $currentPage - 2);
+                $end   = min($totalPages, $currentPage + 2);
+                for ($p = $start; $p <= $end; $p++):
+                ?>
+                    <?php if ($p === $currentPage): ?>
+                        <span class="page-current"><?= $p ?></span>
+                    <?php else: ?>
+                        <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) $p])) ?>"><?= $p ?></a>
+                    <?php endif; ?>
+                <?php endfor; ?>
+
+                <?php if ($currentPage < $totalPages): ?>
+                    <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) ($currentPage + 1)])) ?>">Next &rarr;</a>
+                <?php endif; ?>
+
+                <span class="muted">
+                    <?= number_format($totalCount) ?> total &mdash; page <?= $currentPage ?> of <?= $totalPages ?>
+                </span>
+            </div>
+            <?php endif; ?>
+
         </div>
 
 	<div class="tab-content" id="content-links">
@@ -975,14 +634,22 @@ function renderAdminPage(
 
 	        <label for="edit_description">Description</label>
 	        <input id="edit_description" type="text" name="description" value="<?= h((string) ($editLink['description'] ?? '')) ?>">
-            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 
-	        <button type="submit">Save Changes</button>
-	    <form method="get" action="/admin" class="inline-action-form">
-	        <input type="hidden" name="tab" value="links">
-	        <button type="submit">Cancel</button>
-	    </form>
-            </div>
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="exclude_from_feed" value="1" <?= ((int) ($editLink['exclude_from_feed'] ?? 0) === 1) ? 'checked' : '' ?>>
+	                <span>Exclude from threat feed</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
+	        </div>
+
+	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+	            <button type="submit">Save Changes</button>
+	            <form method="get" action="/admin" class="inline-action-form">
+	                <input type="hidden" name="tab" value="links">
+	                <button type="submit">Cancel</button>
+	            </form>
+	        </div>
 	    </form>
 	<?php endif; ?>
             <form method="post" action="/admin/create-link">
@@ -995,6 +662,14 @@ function renderAdminPage(
 
                 <label for="description">Description</label>
                 <input id="description" type="text" name="description" placeholder="Optional description">
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="exclude_from_feed" value="1">
+                        <span>Exclude from threat feed</span>
+                    </label>
+                    <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
+                </div>
 
                 <button type="submit">Create Token</button>
             </form>
@@ -1009,6 +684,7 @@ function renderAdminPage(
                         <th>Destination</th>
                         <th>Active</th>
 			<th>Clicks</th>
+                        <th>Excl. Feed</th>
                         <th>Path URL</th>
                         <th>Pixel URL</th>
                         <th class="actions-col">Actions</th>
@@ -1034,6 +710,13 @@ function renderAdminPage(
 		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
 		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
 		    <td><?= (int) $link['click_count'] ?></td>
+		    <td>
+		        <?php if ((int) ($link['exclude_from_feed'] ?? 0) === 1): ?>
+		            <span class="badge badge-suspicious" title="IPs hitting this token are excluded from the threat feed">Yes</span>
+		        <?php else: ?>
+		            No
+		        <?php endif; ?>
+		    </td>
 
 		    <td class="mono wrap">
 		        <?php if ($tokenUrl !== ''): ?>
@@ -1091,6 +774,39 @@ function renderAdminPage(
         </div>
 
 	<div class="tab-content" id="content-asn">
+
+	    <?php if ($editAsnRule !== null): ?>
+	    <form method="post" action="/admin/update-asn-rule">
+	        <h2>Edit ASN Rule</h2>
+	        <input type="hidden" name="id" value="<?= (int) $editAsnRule['id'] ?>">
+
+	        <label for="edit_asn_asn">ASN</label>
+	        <input id="edit_asn_asn" type="text" name="asn" required value="<?= h((string) $editAsnRule['asn']) ?>">
+
+	        <label for="edit_asn_label">Label</label>
+	        <input id="edit_asn_label" type="text" name="label" value="<?= h((string) ($editAsnRule['label'] ?? '')) ?>">
+
+	        <label for="edit_asn_penalty">Penalty</label>
+	        <input id="edit_asn_penalty" type="number" name="penalty" min="1" max="100" value="<?= (int) $editAsnRule['penalty'] ?>">
+
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="exclude_from_feed" value="1" <?= ((int) ($editAsnRule['exclude_from_feed'] ?? 0) === 1) ? 'checked' : '' ?>>
+	                <span>Never add to threat feed</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">Score penalty still applies. Use this for your own infrastructure, CDNs, or monitoring services.</p>
+	        </div>
+
+	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+	            <button type="submit">Save Changes</button>
+	            <form method="get" action="/admin" class="inline-action-form">
+	                <input type="hidden" name="tab" value="asn">
+	                <button type="submit">Cancel</button>
+	            </form>
+	        </div>
+	    </form>
+	    <?php endif; ?>
+
 	    <form method="post" action="/admin/create-asn-rule">
 	        <h2>Create ASN Rule</h2>
 	        <label for="asn">ASN</label>
@@ -1099,6 +815,13 @@ function renderAdminPage(
 	        <input id="asn_label" type="text" name="label" placeholder="Microsoft">
 	        <label for="asn_penalty">Penalty</label>
 	        <input id="asn_penalty" type="number" name="penalty" min="1" max="100" value="10">
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="exclude_from_feed" value="1">
+	                <span>Never add to threat feed</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">Score penalty still applies. Use this for your own infrastructure, CDNs, or monitoring services.</p>
+	        </div>
 	        <button type="submit">Add ASN Rule</button>
 	    </form>
 
@@ -1111,7 +834,8 @@ function renderAdminPage(
 	                <th>Label</th>
 	                <th>Penalty</th>
 	                <th>Active</th>
-	                <th class="skip-actions-col">Actions</th>
+	                <th>Excl. Feed</th>
+	                <th class="actions-col">Actions</th>
 	            </tr>
 	            <?php foreach ($asnRules as $rule): ?>
 	                <tr>
@@ -1120,7 +844,19 @@ function renderAdminPage(
 	                    <td><?= h((string) ($rule['label'] ?? '')) ?></td>
 	                    <td><?= (int) $rule['penalty'] ?></td>
 	                    <td><?= ((int) $rule['active'] === 1) ? 'Yes' : 'No' ?></td>
-	                    <td class="skip-actions-col">
+	                    <td>
+	                        <?php if ((int) ($rule['exclude_from_feed'] ?? 0) === 1): ?>
+	                            <span class="badge badge-suspicious" title="This ASN will never appear in the threat feed">Yes</span>
+	                        <?php else: ?>
+	                            No
+	                        <?php endif; ?>
+	                    </td>
+	                    <td class="actions-col">
+	                        <form method="get" action="/admin" class="inline-action-form">
+	                            <input type="hidden" name="tab" value="asn">
+	                            <input type="hidden" name="edit_asn_rule_id" value="<?= (int) $rule['id'] ?>">
+	                            <button type="submit">Edit</button>
+	                        </form>
 	                        <?php if ((int) $rule['active'] === 1): ?>
 	                            <form method="post" action="/admin/deactivate-asn-rule" class="inline-action-form">
 	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
@@ -1179,6 +915,51 @@ function renderAdminPage(
 
 		   <p class="muted">Hide lower-scored events from the dashboard unless “Show all” is checked.</p>
 
+
+		   <label for="page_size">Rows Per Page</label>
+		   <input id="page_size" type="number" min="10" max="500" name="page_size" value="<?= h($pageSizeSetting) ?>">
+		   <p class="muted">Number of activity rows shown per page (10-500).</p>
+
+		   <label for="auto_refresh_secs">Auto-Refresh Interval (seconds)</label>
+		   <input id="auto_refresh_secs" type="number" min="0" name="auto_refresh_secs" value="<?= h((string) $autoRefreshSecs) ?>">
+		   <p class="muted">Reload the dashboard after this many seconds. Set to 0 to disable.</p>
+
+		   <label for="webhook_url">Webhook URL</label>
+		   <input id="webhook_url" type="url" name="webhook_url" value="<?= h($webhookUrl) ?>" placeholder="https://hooks.slack.com/...">
+		   <p class="muted">Fires when a new IP is classified as bot. Slack/Discord URLs auto-detected; others receive generic JSON.</p>
+
+		   <label for="export_min_confidence">Export Minimum Confidence</label>
+		   <select id="export_min_confidence" name="export_min_confidence">
+		       <option value="human"        <?= $exportMinConf === 'human'        ? 'selected' : '' ?>>human</option>
+		       <option value="likely-human" <?= $exportMinConf === 'likely-human' ? 'selected' : '' ?>>likely-human</option>
+		       <option value="suspicious"   <?= $exportMinConf === 'suspicious'   ? 'selected' : '' ?>>suspicious</option>
+		       <option value="bot"          <?= $exportMinConf === 'bot'          ? 'selected' : '' ?>>bot</option>
+		   </select>
+		   <p class="muted">Minimum classification label for exports when no dashboard filters are active.</p>
+
+		   <label for="export_min_score">Export Minimum Score (0–100)</label>
+		   <input id="export_min_score" type="number" min="0" max="100" name="export_min_score" value="<?= h($exportMinScore) ?>">
+		   <p class="muted">Minimum numeric confidence score for exports. Acts as a second filter alongside the label — both conditions must be met. Set to 0 to disable score filtering.</p>
+
+		   <label for="export_window_hours">Export Time Window (hours)</label>
+		   <input id="export_window_hours" type="number" min="1" name="export_window_hours" value="<?= h($exportWinHours) ?>">
+		   <p class="muted">How far back to look when no date filters are active (168 = 7 days). Use 87600 to export everything.</p>
+
+		   <?php if ($baseUrl !== ''): ?>
+		   <div style="margin-top: 1rem; padding: 0.875rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius);">
+		       <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.6rem;">Export Endpoints</strong>
+		       <p class="muted" style="margin-bottom: 0.5rem;">Authenticate with admin Basic Auth, or set <code>EXPORT_API_TOKEN</code> in <code>config.local.php</code> and use <code>Authorization: Bearer YOUR_TOKEN</code> (recommended — not logged) or <code>?api_key=YOUR_TOKEN</code> (appears in access logs).</p>
+		       <div style="margin-bottom: 0.4rem;">
+		           <span class="mono"><?= h(rtrim($baseUrl, '/') . '/export/json') ?></span>
+		           <button type="button" class="copy-button" onclick="copyText('<?= h(rtrim($baseUrl, '/') . '/export/json') ?>')">Copy</button>
+		       </div>
+		       <div>
+		           <span class="mono"><?= h(rtrim($baseUrl, '/') . '/export/csv') ?></span>
+		           <button type="button" class="copy-button" onclick="copyText('<?= h(rtrim($baseUrl, '/') . '/export/csv') ?>')">Copy</button>
+		       </div>
+		   </div>
+		   <?php endif; ?>
+
                     <button type="submit">Save Settings</button>
                 </form>
 
@@ -1207,11 +988,6 @@ function renderAdminPage(
                             <span class="mono"><?= h($threatFeedUrl) ?></span>
 			</p>
 
-			<p class="muted">
-			    Export URL:
-			    <span class="mono"><?= h($exportUrl) ?></span>
-			</p>
-
 			<div class="utility-links">
 			    <button type="button" class="button-link" onclick="copyText('<?= h($threatFeedUrl) ?>')">
 			        Copy Feed URL
@@ -1222,14 +998,6 @@ function renderAdminPage(
 			            Open Feed
 			        </a>
 			    <?php endif; ?>
-
-			    <button type="button" class="button-link" onclick="copyText('<?= h($exportUrl) ?>')">
-			        Copy Export URL
-			    </button>
-
-			    <a class="button-link" href="<?= h($exportUrl) ?>" target="_blank" rel="noopener">
-			        Open Export
-			    </a>
 			</div>
 
                         <button type="submit">Save Threat Feed Settings</button>
@@ -1315,13 +1083,68 @@ function renderAdminPage(
         </div>
 
         <script>
+        /* --------------------------------------------------------
+           THEME TOGGLE
+           Persists choice in localStorage; applies to <html>
+           so the CSS [data-theme] selectors pick it up.
+           -------------------------------------------------------- */
+        (function () {
+            var saved = localStorage.getItem('st-theme');
+            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var theme = saved || (prefersDark ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+
+        function toggleTheme() {
+            var current = document.documentElement.getAttribute('data-theme') || 'light';
+            var next    = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('st-theme', next);
+            updateThemeButton(next);
+        }
+
+        function updateThemeButton(theme) {
+            var icon  = document.getElementById('theme-icon');
+            var label = document.getElementById('theme-label');
+            if (!icon || !label) return;
+            if (theme === 'dark') {
+                icon.textContent  = '🌙';
+                label.textContent = 'Dark';
+            } else {
+                icon.textContent  = '☀️';
+                label.textContent = 'Light';
+            }
+        }
+
+        /* --------------------------------------------------------
+           CSRF TOKEN INJECTION
+           Injects the CSRF hidden field into every POST form.
+           -------------------------------------------------------- */
+        const CSRF_TOKEN = <?= json_encode($csrfToken) ?>;
+
+        function injectCsrf() {
+            document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function (form) {
+                if (!form.querySelector('input[name="csrf_token"]')) {
+                    var input   = document.createElement('input');
+                    input.type  = 'hidden';
+                    input.name  = 'csrf_token';
+                    input.value = CSRF_TOKEN;
+                    form.appendChild(input);
+                }
+            });
+        }
+
+        /* Run immediately for forms already in the DOM */
+        injectCsrf();
+
+        /* --------------------------------------------------------
+           TAB MANAGEMENT
+           -------------------------------------------------------- */
         function showTab(name) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-            const tab = document.getElementById('tab-' + name);
-            const content = document.getElementById('content-' + name);
-
+            document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+            document.querySelectorAll('.tab-content').forEach(function (c) { c.classList.remove('active'); });
+            var tab     = document.getElementById('tab-' + name);
+            var content = document.getElementById('content-' + name);
             if (tab && content) {
                 tab.classList.add('active');
                 content.classList.add('active');
@@ -1330,20 +1153,20 @@ function renderAdminPage(
         }
 
         function toggleDetails(id, button) {
-            const row = document.getElementById(id);
+            var row  = document.getElementById(id);
             if (!row) return;
-
-            const open = row.classList.toggle('open');
-            if (button) {
-                button.textContent = open ? 'Hide' : 'Details';
-            }
+            var open = row.classList.toggle('open');
+            if (button) { button.textContent = open ? 'Hide' : 'Details'; }
         }
 
+        /* --------------------------------------------------------
+           COPY TO CLIPBOARD
+           -------------------------------------------------------- */
         async function copyText(value) {
             try {
                 await navigator.clipboard.writeText(value);
             } catch (e) {
-                const temp = document.createElement('textarea');
+                var temp = document.createElement('textarea');
                 temp.value = value;
                 document.body.appendChild(temp);
                 temp.select();
@@ -1352,11 +1175,38 @@ function renderAdminPage(
             }
         }
 
+        /* --------------------------------------------------------
+           DOMContentLoaded — tab restore, CSRF re-injection,
+           auto-refresh, theme button sync
+           -------------------------------------------------------- */
         document.addEventListener('DOMContentLoaded', function () {
-            const saved = localStorage.getItem('activeTab') || 'dashboard';
+
+            /* Sync button label with current theme */
+            var currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            updateThemeButton(currentTheme);
+
+            /* Inject CSRF into any forms rendered after the initial parse */
+            injectCsrf();
+
+            /* Tab restore — URL param beats localStorage */
+            var urlParams  = new URLSearchParams(window.location.search);
+            var tabFromUrl = urlParams.get('tab');
+            var saved      = tabFromUrl || localStorage.getItem('activeTab') || 'dashboard';
             showTab(saved);
+
+            /* Auto-refresh — only fires when the dashboard tab is active */
+            var refreshSecs = <?= (int) $autoRefreshSecs ?>;
+            if (refreshSecs > 0) {
+                setTimeout(function () {
+                    var active = document.querySelector('.tab.active');
+                    if (active && active.id === 'tab-dashboard') {
+                        window.location.reload();
+                    }
+                }, refreshSecs * 1000);
+            }
         });
         </script>
+    </div><!-- /.page-body -->
     </body>
     </html>
     <?php

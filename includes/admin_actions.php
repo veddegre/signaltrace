@@ -8,6 +8,9 @@ function handleAdminActions(PDO $pdo, string $path): bool
         return false;
     }
 
+    // CSRF verification on every POST before dispatching.
+    verifyCsrfToken();
+
     switch ($path) {
         case '/admin/save-settings':
             requireAdminAuth();
@@ -94,6 +97,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleCreateAsnRule($pdo);
             return true;
 
+        case '/admin/update-asn-rule':
+            requireAdminAuth();
+            handleUpdateAsnRule($pdo);
+            return true;
+
         case '/admin/activate-asn-rule':
             requireAdminAuth();
             handleToggleAsnRule($pdo, true);
@@ -125,6 +133,7 @@ function handleUpdateLink(PDO $pdo): void
     $token = trim((string) ($_POST['token'] ?? ''), '/');
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
 
     if ($id <= 0) {
         http_response_code(400);
@@ -138,9 +147,11 @@ function handleUpdateLink(PDO $pdo): void
         exit;
     }
 
-    if (!filter_var($destination, FILTER_VALIDATE_URL)) {
+    // SECURITY: isSafeRedirectUrl enforces an http/https allowlist in addition
+    // to basic URL validation. FILTER_VALIDATE_URL alone accepts javascript: URIs.
+    if (!isSafeRedirectUrl($destination)) {
         http_response_code(400);
-        echo 'Invalid destination URL.';
+        echo 'Invalid destination URL. Only http and https are allowed.';
         exit;
     }
 
@@ -151,7 +162,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -163,14 +174,19 @@ function handleUpdateLink(PDO $pdo): void
 
 function handleSaveSettings(PDO $pdo): void
 {
-    $appNameInput = trim((string) ($_POST['app_name'] ?? 'SignalTrace'));
-    $baseUrlInput = trim((string) ($_POST['base_url'] ?? ''));
+    $appNameInput            = trim((string) ($_POST['app_name']            ?? 'SignalTrace'));
+    $baseUrlInput            = trim((string) ($_POST['base_url']            ?? ''));
     $defaultRedirectUrlInput = trim((string) ($_POST['default_redirect_url'] ?? ''));
     $unknownPathBehaviorInput = trim((string) ($_POST['unknown_path_behavior'] ?? 'redirect'));
-    $pixelEnabledInput = isset($_POST['pixel_enabled']) ? '1' : '0';
+    $pixelEnabledInput       = isset($_POST['pixel_enabled'])       ? '1' : '0';
     $noiseFilterEnabledInput = isset($_POST['noise_filter_enabled']) ? '1' : '0';
-
-    $displayMinScoreInput = trim((string) ($_POST['display_min_score'] ?? '20'));
+    $displayMinScoreInput    = trim((string) ($_POST['display_min_score']   ?? '20'));
+    $pageSizeInput           = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
+    $autoRefreshInput        = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
+    $webhookUrlInput         = trim((string) ($_POST['webhook_url']         ?? ''));
+    $exportMinConfidenceInput = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
+    $exportWindowHoursInput  = max(1, (int) ($_POST['export_window_hours'] ?? 168));
+    $exportMinScoreInput     = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
 
     if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
         http_response_code(400);
@@ -186,15 +202,15 @@ function handleSaveSettings(PDO $pdo): void
         exit;
     }
 
-    if ($defaultRedirectUrlInput === '' || !filter_var($defaultRedirectUrlInput, FILTER_VALIDATE_URL)) {
+    if ($defaultRedirectUrlInput === '' || !isSafeRedirectUrl($defaultRedirectUrlInput)) {
         http_response_code(400);
-        echo 'A valid default redirect URL is required.';
+        echo 'A valid default redirect URL (http or https) is required.';
         exit;
     }
 
-    if ($baseUrlInput !== '' && !filter_var($baseUrlInput, FILTER_VALIDATE_URL)) {
+    if ($baseUrlInput !== '' && !isSafeRedirectUrl($baseUrlInput)) {
         http_response_code(400);
-        echo 'Base URL must be blank or a valid URL.';
+        echo 'Base URL must be blank or a valid http/https URL.';
         exit;
     }
 
@@ -204,13 +220,31 @@ function handleSaveSettings(PDO $pdo): void
         exit;
     }
 
-    setSetting($pdo, 'app_name', $appNameInput);
-    setSetting($pdo, 'base_url', $baseUrlInput);
+    if ($webhookUrlInput !== '' && !isSafeRedirectUrl($webhookUrlInput)) {
+        http_response_code(400);
+        echo 'Webhook URL must be blank or a valid http/https URL.';
+        exit;
+    }
+
+    if (!in_array($exportMinConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
+        http_response_code(400);
+        echo 'Invalid export minimum confidence value.';
+        exit;
+    }
+
+    setSetting($pdo, 'app_name',             $appNameInput);
+    setSetting($pdo, 'base_url',             $baseUrlInput);
     setSetting($pdo, 'default_redirect_url', $defaultRedirectUrlInput);
     setSetting($pdo, 'unknown_path_behavior', $unknownPathBehaviorInput);
-    setSetting($pdo, 'pixel_enabled', $pixelEnabledInput);
+    setSetting($pdo, 'pixel_enabled',        $pixelEnabledInput);
     setSetting($pdo, 'noise_filter_enabled', $noiseFilterEnabledInput);
-    setSetting($pdo, 'display_min_score', $displayMinScoreInput);
+    setSetting($pdo, 'display_min_score',    $displayMinScoreInput);
+    setSetting($pdo, 'page_size',            (string) $pageSizeInput);
+    setSetting($pdo, 'auto_refresh_secs',    (string) $autoRefreshInput);
+    setSetting($pdo, 'webhook_url',          $webhookUrlInput);
+    setSetting($pdo, 'export_min_confidence', $exportMinConfidenceInput);
+    setSetting($pdo, 'export_window_hours',  (string) $exportWindowHoursInput);
+    setSetting($pdo, 'export_min_score',     (string) $exportMinScoreInput);
 
     header('Location: /admin', true, 302);
     exit;
@@ -266,6 +300,7 @@ function handleCreateLink(PDO $pdo): void
     $token = trim((string) ($_POST['token'] ?? ''), '/');
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -273,9 +308,10 @@ function handleCreateLink(PDO $pdo): void
         exit;
     }
 
-    if (!filter_var($destination, FILTER_VALIDATE_URL)) {
+    // SECURITY: Enforce http/https allowlist.
+    if (!isSafeRedirectUrl($destination)) {
         http_response_code(400);
-        echo 'Invalid destination URL.';
+        echo 'Invalid destination URL. Only http and https are allowed.';
         exit;
     }
 
@@ -286,7 +322,7 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed);
         header('Location: /admin', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -473,6 +509,7 @@ function handleCreateAsnRule(PDO $pdo): void
     $asn = trim((string) ($_POST['asn'] ?? ''));
     $label = trim((string) ($_POST['label'] ?? ''));
     $penalty = (int) ($_POST['penalty'] ?? 10);
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
 
     if ($asn === '' || !ctype_digit($asn)) {
         http_response_code(400);
@@ -483,12 +520,45 @@ function handleCreateAsnRule(PDO $pdo): void
     $penalty = max(1, min(100, $penalty));
 
     try {
-        createAsnRule($pdo, $asn, $label, $penalty);
+        createAsnRule($pdo, $asn, $label, $penalty, $excludeFromFeed);
         header('Location: /admin?tab=asn', true, 302);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);
         echo 'Unable to create ASN rule. It may already exist.';
+        exit;
+    }
+}
+
+function handleUpdateAsnRule(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    $asn = trim((string) ($_POST['asn'] ?? ''));
+    $label = trim((string) ($_POST['label'] ?? ''));
+    $penalty = (int) ($_POST['penalty'] ?? 10);
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid ASN rule id.';
+        exit;
+    }
+
+    if ($asn === '' || !ctype_digit($asn)) {
+        http_response_code(400);
+        echo 'ASN must be numeric.';
+        exit;
+    }
+
+    $penalty = max(1, min(100, $penalty));
+
+    try {
+        updateAsnRule($pdo, $id, $asn, $label, $penalty, $excludeFromFeed);
+        header('Location: /admin?tab=asn', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to update ASN rule. The ASN may already exist on another rule.';
         exit;
     }
 }

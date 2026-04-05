@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+ini_set('log_errors', '1');
 error_reporting(E_ALL);
 
 require_once __DIR__ . '/../includes/db.php';
@@ -14,65 +15,153 @@ require_once __DIR__ . '/../includes/admin_view.php';
 require_once __DIR__ . '/../includes/admin_actions.php';
 require_once __DIR__ . '/../includes/router.php';
 
-$pdo = db();
+/* ============================================================
+   PATH — must be parsed first; everything else branches on it
+   ============================================================ */
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+
+/* ============================================================
+   SESSION — only for admin UI routes
+   Export, feed, and health endpoints must not start a session;
+   the Set-Cookie header would be sent before their own
+   Content-Type and trigger output-already-sent errors.
+   ============================================================ */
+if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+/* ============================================================
+   SECURITY HEADERS
+   X-Content-Type-Options is sent on every response.
+   HTML-only headers (CSP, X-Frame-Options) are skipped for
+   data endpoints that set their own Content-Type.
+   ============================================================ */
+$dataRoutes = ['/export/json', '/export/csv', '/feed/ips.txt', '/health'];
+
+header('X-Content-Type-Options: nosniff');
+
+if (!in_array($path, $dataRoutes, true)) {
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: no-referrer');
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'");
+}
+
+/* ============================================================
+   BOOTSTRAP
+   ============================================================ */
+$pdo = db();
 
 if (str_starts_with($path, '/.well-known/acme-challenge/')) {
     http_response_code(404);
     exit;
 }
 
-$settings = getAllSettings($pdo);
-$pixelEnabled = ($settings['pixel_enabled'] ?? '1') === '1';
+$settings       = getAllSettings($pdo);
+$pixelEnabled   = ($settings['pixel_enabled'] ?? '1') === '1';
 $skipPatternMap = getActiveSkipPatternMap($pdo);
 
-/* ======================================================
+/* ============================================================
+   EXPORT API TOKEN AUTH
+   Accepts a static token (for Splunk / automation) via:
+     • Authorization: Bearer <token>  header, OR
+     • ?token=<token>  query parameter
+   Falls back to admin Basic Auth if no token is configured
+   or the provided token does not match.
+   Define EXPORT_API_TOKEN in config.local.php to enable.
+   ============================================================ */
+function requireExportAuth(): void
+{
+    // Preferred: Authorization: Bearer header — not logged by Apache by default.
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if (str_starts_with($authHeader, 'Bearer ')) {
+        $provided = substr($authHeader, 7);
+        if (defined('EXPORT_API_TOKEN') && EXPORT_API_TOKEN !== '' && hash_equals(EXPORT_API_TOKEN, $provided)) {
+            return;
+        }
+    }
+
+    // Fallback: ?api_key= query parameter.
+    // NOTE: Query parameters appear in server access logs. Prefer the Bearer
+    // header for production use. Use ?api_key= only when headers are not
+    // configurable (e.g. some basic scripted inputs).
+    $queryToken = trim((string) ($_GET['api_key'] ?? ''));
+    if ($queryToken !== '' && defined('EXPORT_API_TOKEN') && EXPORT_API_TOKEN !== '' && hash_equals(EXPORT_API_TOKEN, $queryToken)) {
+        return;
+    }
+
+    requireAdminAuth();
+}
+
+/* ============================================================
+   STATIC ASSETS
+   ============================================================ */
+if ($path === '/admin.css') {
+    requireAdminAuth();
+    $cssPath = __DIR__ . '/admin.css';
+    if (is_file($cssPath)) {
+        header('Content-Type: text/css');
+        header('Cache-Control: private, max-age=3600');
+        readfile($cssPath);
+    } else {
+        http_response_code(404);
+    }
+    exit;
+}
+
+/* ============================================================
    HEALTH CHECK
-   ====================================================== */
+   ============================================================ */
 if ($path === '/health') {
     header('Content-Type: application/json');
     echo json_encode(['status' => 'ok']);
     exit;
 }
 
-/* ======================================================
-   🧠 THREAT FEED
-   ====================================================== */
+/* ============================================================
+   THREAT FEED
+   ============================================================ */
 if ($path === '/feed/ips.txt') {
+    requireAdminAuth();
     handleThreatFeed($pdo, $settings);
 }
 
-/* ======================================================
-   📦 JSON EXPORT
-   ====================================================== */
+/* ============================================================
+   EXPORTS
+   ============================================================ */
 if ($path === '/export/json') {
-    handleJsonExport($pdo);
+    requireExportAuth();
+    handleExport($pdo, 'json');
 }
 
-/* ======================================================
+if ($path === '/export/csv') {
+    requireExportAuth();
+    handleExport($pdo, 'csv');
+}
+
+/* ============================================================
    ADMIN ACTIONS (POST)
-   ====================================================== */
+   ============================================================ */
 if (handleAdminActions($pdo, $path)) {
     exit;
 }
 
-/* ======================================================
+/* ============================================================
    PIXEL TRACKING
-   ====================================================== */
+   ============================================================ */
 if ($pixelEnabled && preg_match('#^/pixel/(.+)\.gif$#', $path)) {
     handlePixelRequest($pdo, $path);
 }
 
-/* ======================================================
+/* ============================================================
    ADMIN UI
-   ====================================================== */
+   ============================================================ */
 if ($path === '/admin') {
     handleAdminPage($pdo, $settings);
 }
 
-/* ======================================================
-   RESERVED ROUTES
-   ====================================================== */
+/* ============================================================
+   RESERVED ROUTES — excluded from honeypot tracking
+   ============================================================ */
 $reserved = [
     '/admin',
     '/admin/save-settings',
@@ -82,26 +171,37 @@ $reserved = [
     '/admin/deactivate-link',
     '/admin/activate-link',
     '/admin/create-skip-pattern',
+    '/admin/add-token-to-skip',
     '/admin/deactivate-skip-pattern',
     '/admin/activate-skip-pattern',
     '/admin/delete-skip-pattern',
     '/admin/delete-click',
     '/admin/delete-token-clicks',
     '/admin/delete-ip-clicks',
+    '/admin/create-asn-rule',
+    '/admin/update-asn-rule',
+    '/admin/activate-asn-rule',
+    '/admin/deactivate-asn-rule',
+    '/admin/delete-asn-rule',
+    '/admin/save-threat-feed-settings',
+    '/admin/save-retention-settings',
+    '/admin/run-cleanup',
     '/health',
+    '/admin.css',
     '/feed/ips.txt',
     '/export/json',
+    '/export/csv',
 ];
 
-/* ======================================================
+/* ============================================================
    TRACKED REQUESTS
-   ====================================================== */
+   ============================================================ */
 if (!in_array($path, $reserved, true)) {
     handleTrackedRequest($pdo, $path, $settings, $skipPatternMap);
 }
 
-/* ======================================================
+/* ============================================================
    FALLBACK
-   ====================================================== */
+   ============================================================ */
 http_response_code(404);
 echo 'Not found';
