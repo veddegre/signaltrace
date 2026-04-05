@@ -116,7 +116,7 @@ function renderAdminPage(
             $params['date_to'] = $dateTo;
         }
 
-        return '/expor//json' . (!empty($params) ? '?' . http_build_query($params) : '');
+        return '/expor/json' . (!empty($params) ? '?' . http_build_query($params) : '');
     };
 
     $threatFeedUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/feed/ips.txt';
@@ -603,7 +603,7 @@ function renderAdminPage(
             <form method="get" action="/admin" class="inline-form">
 		<h2>Filter Activity</h2>
 		<div class="filter-container">
-                    <div class="filter-input">
+                    <div class="filter-inputs">
 	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Filter by token or path">
 	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="Filter by IP">
 	                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Filter by visitor hash">
