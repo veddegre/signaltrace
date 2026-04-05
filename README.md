@@ -170,7 +170,7 @@ Common use cases:
 
 ## Screenshot
 
-[![SignalTrace Dashboard](docs/images/dashboard.png)](docs/images/dashboard.png)
+[![SignalTrace Dashboard](docs/images/dashboard.png?raw=1&v=2)](docs/images/dashboard.png?raw-1&v=2)
 
 ---
 
