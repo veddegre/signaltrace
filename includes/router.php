@@ -110,6 +110,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $knownOnly = isset($_GET['known']) && $_GET['known'] === '1';
     $dateFrom = trim((string)($_GET['date_from'] ?? ''));
     $dateTo = trim((string)($_GET['date_to'] ?? ''));
+    $asnRules = getAsnRules($pdo);
 
     $clicks = getRecentClicksAdvancedFiltered(
         $pdo,
@@ -132,12 +133,16 @@ function handleAdminPage(PDO $pdo, array $settings): void
     );
 
     $skipPatterns = getSkipPatterns($pdo);
+    $showTopTokens = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1';
+    $showAll = isset($_GET['show_all']) && $_GET['show_all'] === '1';
 
     $refreshParams = [];
     if ($tokenFilter !== '') $refreshParams['token'] = $tokenFilter;
     if ($ipFilter !== '') $refreshParams['ip'] = $ipFilter;
     if ($visitorFilter !== '') $refreshParams['visitor'] = $visitorFilter;
     if ($knownOnly) $refreshParams['known'] = '1';
+    if ($showTopTokens) $refreshParams['show_top_tokens'] = '1';
+    if ($showAll) $refreshParams['show_all'] = '1';
     if ($dateFrom !== '') $refreshParams['date_from'] = $dateFrom;
     if ($dateTo !== '') $refreshParams['date_to'] = $dateTo;
 
@@ -157,8 +162,9 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $clicks,
         $links,
         $tokenCounts,
-        $skipPatterns,
-        $refreshUrl
+	$skipPatterns,
+	$asnRules,
+	$refreshUrl
     );
 
     exit;

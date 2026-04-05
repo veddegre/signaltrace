@@ -86,6 +86,7 @@ $reserved = [
     '/admin/delete-skip-pattern',
     '/admin/delete-click',
     '/admin/delete-token-clicks',
+    '/admin/delete-ip-clicks',
     '/health',
     '/feed/ips.txt',
     '/export/json'

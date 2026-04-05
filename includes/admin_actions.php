@@ -86,7 +86,32 @@ function handleAdminActions(PDO $pdo, string $path): bool
         case '/admin/delete-token-clicks':
             requireAdminAuth();
             handleDeleteTokenClicks($pdo);
+	    return true;
+
+	case '/admin/create-asn-rule':
+	    requireAdminAuth();
+            handleCreateAsnRule($pdo);
             return true;
+
+       case '/admin/activate-asn-rule':
+           requireAdminAuth();
+	   handleToggleAsnRule($pdo, true);
+           return true;
+
+      case '/admin/deactivate-asn-rule':
+          requireAdminAuth();
+          handleToggleAsnRule($pdo, false);
+          return true;
+
+      case '/admin/delete-asn-rule':
+          requireAdminAuth();
+          handleDeleteAsnRule($pdo);
+          return true;
+      
+      case '/admin/delete-ip-clicks':
+	  requireAdminAuth();
+	  handleDeleteIpClicks($pdo);
+	  return true;
 
         default:
             return false;
@@ -439,5 +464,102 @@ function handleDeleteTokenClicks(PDO $pdo): void
     }
 
     header('Location: /admin?token=' . urlencode($token), true, 302);
+    exit;
+}
+
+function handleCreateAsnRule(PDO $pdo): void
+{
+    $asn = trim((string)($_POST['asn'] ?? ''));
+    $label = trim((string)($_POST['label'] ?? ''));
+    $penalty = (int)($_POST['penalty'] ?? 10);
+
+    if ($asn === '' || !ctype_digit($asn)) {
+        http_response_code(400);
+        echo 'ASN must be numeric.';
+        exit;
+    }
+
+    $penalty = max(1, min(100, $penalty));
+
+    try {
+        createAsnRule($pdo, $asn, $label, $penalty);
+        header('Location: /admin?tab=asn', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to create ASN rule. It may already exist.';
+        exit;
+    }
+}
+
+function handleToggleAsnRule(PDO $pdo, bool $active): void
+{
+    $id = (int)($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid ASN rule id.';
+        exit;
+    }
+
+    setAsnRuleActive($pdo, $id, $active);
+    header('Location: /admin?tab=asn', true, 302);
+    exit;
+}
+
+function handleDeleteAsnRule(PDO $pdo): void
+{
+    $id = (int)($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid ASN rule id.';
+        exit;
+    }
+
+    deleteAsnRule($pdo, $id);
+    header('Location: /admin?tab=asn', true, 302);
+    exit;
+}
+
+function handleDeleteIpClicks(PDO $pdo): void
+{
+    $ip = trim((string)($_POST['ip'] ?? ''));
+    $mode = trim((string)($_POST['mode'] ?? 'unknown_only'));
+
+    if ($ip === '') {
+        http_response_code(400);
+        echo 'IP is required.';
+        exit;
+    }
+
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo 'Invalid IP address.';
+        exit;
+    }
+
+    if (!in_array($mode, ['unknown_only', 'all'], true)) {
+        http_response_code(400);
+        echo 'Invalid delete mode.';
+        exit;
+    }
+
+    if ($mode === 'unknown_only') {
+        $stmt = $pdo->prepare("
+            DELETE FROM clicks
+            WHERE ip = :ip
+              AND link_id IS NULL
+        ");
+        $stmt->execute([':ip' => $ip]);
+    } else {
+        $stmt = $pdo->prepare("
+            DELETE FROM clicks
+            WHERE ip = :ip
+        ");
+        $stmt->execute([':ip' => $ip]);
+    }
+
+    header('Location: /admin?ip=' . urlencode($ip), true, 302);
     exit;
 }

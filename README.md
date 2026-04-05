@@ -15,19 +15,19 @@ It captures interactions in real time and can expose that data as a simple, prac
 
 SignalTrace lets you create custom tokens (paths) that:
 
-1. Capture detailed request data
-2. Score and classify the interaction
-3. Redirect to a destination
+1. Capture detailed request data  
+2. Score and classify the interaction  
+3. Redirect to a destination  
 
 It provides visibility into who is actually interacting with endpoints, not just whether they were accessed.
 
 Common use cases:
 
-- Phishing simulations
-- Honeypots
-- Reconnaissance detection
-- Link tracking
-- Threat feed generation
+- Phishing simulations  
+- Honeypots  
+- Reconnaissance detection  
+- Link tracking  
+- Threat feed generation  
 
 ---
 
@@ -35,66 +35,136 @@ Common use cases:
 
 ### Core Tracking
 
-- Custom tokens with redirect support
-- Full request logging (IP, headers, user agent, and more)
-- Visitor fingerprinting
-- Tracking pixel support
+- Custom tokens with redirect support  
+- Full request logging (IP, headers, user agent, and more)  
+- Visitor fingerprinting  
+- Tracking pixel support (records `pixel` event type)  
+- Event types:
+  - `click`
+  - `pixel`
 
 ### Scoring and Detection
 
 - Confidence scoring system:
-  - human
-  - likely-human
-  - suspicious
-  - bot
-- Path-based detection for suspicious requests such as `.env`, `.git`, and similar probes
-- Timing-based detection:
-  - rapid repeat requests
-  - burst activity
-- Multi-token scan detection
-- Bot signal detection based on user agent and behavior
+  - human  
+  - likely-human  
+  - suspicious  
+  - bot  
+
+- Human-likelihood scoring (0–100 scale)
+
+- Detection signals:
+  - Missing headers (Accept, Language, Encoding)  
+  - Browser vs automation user agent analysis  
+  - Bot signature detection  
+  - Raw IP host detection  
+
+- Path-based detection:
+  - `.env`  
+  - `.git`  
+  - `phpinfo`  
+  - `wp-admin`  
+  - and similar probes  
+
+- Behavioral detection:
+  - Rapid repeat requests  
+  - Burst activity  
+  - Multi-token scanning  
+
+- Query inspection:
+  - Exploit-like patterns such as `cmd=` and traversal attempts  
+
+- ASN-based scoring (configurable from the UI)
 
 ### Filtering and Analysis
 
 - Filter by:
-  - token
-  - IP
-  - visitor
-  - date range
-- Display filtering to hide low-confidence noise without deleting data
-- Show all override for full visibility when needed
+  - token / path  
+  - IP  
+  - visitor hash  
+  - date range  
+
+- Display controls:
+  - Known tokens only  
+  - Show Top Tokens toggle  
+  - Show All override  
+
+- Active filter pills with one-click removal  
+
+- Classification display with score (for example, `suspicious [44]`)  
 
 ### Token Management
 
-- Create tokens
-- Edit existing tokens
-- Activate or deactivate tokens
-- Delete tokens, with optional related click cleanup
-- Copy token URLs directly from the UI
-- Copy pixel URLs directly from the UI
+- Create tokens  
+- Edit existing tokens  
+- Activate / deactivate tokens  
+- Delete tokens, with optional click cleanup  
+- Copy token URLs from the UI  
+- Copy pixel URLs from the UI  
+
+### Cleanup Tools
+
+#### Token Cleanup
+
+- Delete unknown token hits  
+- Delete all clicks for a token  
+
+#### IP Cleanup
+
+- Delete unknown-only clicks for an IP  
+- Delete all clicks for an IP  
+- Available:
+  - per-event in the Actions panel  
+  - when filtering by IP  
 
 ### Noise Handling
 
 - Skip patterns:
-  - Exact
-  - Contains
-  - Prefix
-- Add skip patterns directly from activity
+  - Exact  
+  - Contains  
+  - Prefix  
+
+- Add skip patterns directly from activity  
+
+- Noise filtering toggle in the UI  
+
+### ASN Rules
+
+- Add ASN-based scoring rules directly from the UI  
+- ASN visibility in the activity feed  
+- Indicator when an ASN rule is active  
+- Useful for:
+  - cloud providers  
+  - scanners  
+  - known infrastructure  
+
+### Exporting Data
+
+- Export activity data from the system  
+- Exports currently include the full dataset and are not yet filter-aware  
+- Useful for:
+  - offline analysis  
+  - SIEM ingestion  
+  - incident review  
 
 ### Threat Feed
 
-- Built-in IP threat feed at `/feed/ips.txt`
+- Built-in IP threat feed: `/feed/ips.txt`
+
+- Includes:
+  - IPs classified as suspicious or bot  
+  - Only events with scoring data  
+  - Deduplicated output  
+
 - Configurable:
-  - time window
-  - confidence threshold
-- Only includes scored events
-- Deduplicated output
+  - time window  
+  - minimum classification threshold  
 
 ### Platform
 
-- SQLite backend with no external database required
-- GeoIP enrichment with MaxMind
-- Minimal, fast, framework-free design
+- SQLite backend with no external database required  
+- GeoIP enrichment with MaxMind  
+- Minimal, fast, framework-free design  
 
 ---
 
@@ -110,14 +180,12 @@ SignalTrace is designed to run on very small systems.
 
 Recommended minimum:
 
-- 1 vCPU
-- 1 GB RAM
-- 1 GB swap
-- 5 to 10 GB disk
+- 1 vCPU  
+- 1 GB RAM  
+- 1 GB swap  
+- 5–10 GB disk  
 
 Tested on a small VM with 1 GB RAM and swap enabled.
-
-If you enable GeoIP or retain larger datasets, additional memory may help.
 
 ---
 
@@ -283,25 +351,40 @@ SignalTrace includes a built-in threat feed:
 
 ### What it includes
 
-- IPs classified as suspicious or bot
-- Only events with scoring data
-- Deduplicated output
+- IPs classified as suspicious or bot  
+- Only events with scoring data  
+- Deduplicated output  
 
 ### What it is for
 
 This feed is designed to be consumed by other tools, such as:
 
-- Firewalls and block lists
-- SIEM enrichment
-- Detection pipelines
-- Temporary deny lists
+- Firewalls and block lists  
+- SIEM enrichment  
+- Detection pipelines  
+- Temporary deny lists  
 
 ### Configuration
 
 Threat feed behavior is controlled in the Settings tab:
 
-- time window
-- confidence threshold
+- time window  
+- confidence threshold  
+
+---
+
+## Exporting Data
+
+SignalTrace also provides export functionality for activity data.
+
+### Current behavior
+
+- Export includes the full dataset  
+- Export is not yet filter-aware  
+- Useful for:
+  - offline analysis  
+  - SIEM ingestion  
+  - incident review  
 
 ---
 
@@ -309,36 +392,36 @@ Threat feed behavior is controlled in the Settings tab:
 
 ### Dashboard
 
-- Live activity feed
-- Expandable request details
-- Confidence scoring with reasons
-- Filtering by token, IP, visitor, and date
-- Display filtering to reduce noise without deleting data
+- Live activity feed  
+- Expandable request details  
+- Classification with score  
+- Filtering and cleanup tools  
+- Export functionality  
 
 ### Tokens
 
-- Create tokens
-- Edit tokens
-- Copy token URLs
-- Copy pixel URLs
-- Enable or disable tokens
-- Delete tokens, with optional related click cleanup
+- Manage tokens  
+- Copy URLs and pixel links  
+- Enable / disable tokens  
+- Cleanup options  
 
 ### Settings
 
-- App configuration
-- Display filtering threshold
-- Pixel toggle
-- Noise filtering
-- Threat feed settings
+- App configuration  
+- Pixel toggle  
+- Noise filtering  
+- Threat feed settings  
 
 ### Skip Patterns
 
-- Suppress known noise
-- Pattern types:
-  - Exact
-  - Contains
-  - Prefix
+- Suppress noise  
+- Manage patterns  
+
+### ASN Rules
+
+- Add / remove ASN rules  
+- Adjust scoring behavior  
+- Visual indicators in the dashboard  
 
 ---
 
@@ -374,54 +457,55 @@ signaltrace/
 
 ### What these directories are for
 
-- `public/` — Web root and only exposed directory
-- `includes/` — Application logic and routing
-- `db/` — Schema and seed files
-- `data/` — Runtime SQLite database storage
-- `docs/images/` — Documentation assets
-- `vendor/` — Composer dependencies
+- `public/` — Web root and only exposed directory  
+- `includes/` — Application logic and routing  
+- `db/` — Schema and seed files  
+- `data/` — Runtime SQLite database storage  
+- `docs/images/` — Documentation assets  
+- `vendor/` — Composer dependencies  
 
 ---
 
 ## Security Notes
 
-- `config.local.php` is not committed
-- Passwords are stored as hashes
-- Only `/public` should be web accessible
-- Internal directories should not be web accessible
-- Admin uses HTTP Basic Auth
+- `config.local.php` is not committed  
+- Passwords are stored as hashes  
+- Only `/public` should be web accessible  
+- Internal directories should not be web accessible  
+- Admin uses HTTP Basic Auth  
 
 ---
 
 ## Production Checklist
 
-- Enable HTTPS
-- Set strong admin credentials
-- Generate a unique visitor hash salt
-- Verify only `/public` is exposed
-- Configure threat feed settings
-- Configure display filtering
-- Review skip patterns for your environment
+- Enable HTTPS  
+- Set strong admin credentials  
+- Generate a unique visitor hash salt  
+- Verify only `/public` is exposed  
+- Configure skip patterns  
+- Configure ASN rules  
+- Tune threat feed settings  
+- Review noise filtering for your environment  
 
 ---
 
 ## Use Cases
 
-- Phishing simulation tracking
-- Honeypot telemetry
-- Reconnaissance detection
-- Link tracking
-- Security research
-- Threat feed generation from observed activity
+- Phishing simulation tracking  
+- Honeypot telemetry  
+- Recon detection  
+- Link tracking  
+- Threat feed generation  
+- Security research  
 
 ---
 
 ## Tech Stack
 
-- PHP
-- SQLite
-- Apache
-- MaxMind GeoIP2
+- PHP  
+- SQLite  
+- Apache  
+- MaxMind GeoIP2  
 
 ---
 
@@ -429,9 +513,9 @@ signaltrace/
 
 SignalTrace is designed for security visibility and testing.
 
-It intentionally exposes endpoints and records interactions. As a result, it will attract automated traffic, scanners, and potentially malicious activity.
+It will attract scanners, bots, and automated systems by design.
 
-Use it with an understanding of your environment and risk tolerance. Ensure it aligns with your policies before deploying in production.
+Use it with awareness of your environment and risk tolerance.
 
 ---
 
@@ -451,4 +535,4 @@ Pull requests are welcome.
 
 Most tools try to hide noise.
 
-SignalTrace makes it visible and lets you decide what matters.
+SignalTrace makes it visible — and gives you control over what matters.

@@ -95,7 +95,19 @@ function initializeDatabase(PDO $pdo): void
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         )
-    ");
+	");
+
+
+    $pdo->exec("
+	CREATE TABLE IF NOT EXISTS asn_rules (
+	    id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asn TEXT NOT NULL UNIQUE,
+            label TEXT,
+            penalty INTEGER NOT NULL DEFAULT 10,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+        ");
 
     ensureColumn($pdo, 'clicks', 'event_type', "TEXT NOT NULL DEFAULT 'click'");
     ensureColumn($pdo, 'clicks', 'clicked_at_unix_ms', "INTEGER");
@@ -130,6 +142,7 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_is_bot ON clicks(is_bot)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_skip_patterns_type ON skip_patterns(type)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_skip_patterns_active ON skip_patterns(active)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_asn_rules_active ON asn_rules(active)");
 
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
@@ -916,4 +929,78 @@ function cleanupOldClicks(PDO $pdo, int $days): int
     ]);
 
     return $stmt->rowCount();
+}
+
+function getAsnRules(PDO $pdo): array
+{
+    return $pdo->query("
+        SELECT id, asn, label, penalty, active, created_at
+        FROM asn_rules
+        ORDER BY asn ASC
+    ")->fetchAll();
+}
+
+function getActiveAsnPenaltyMap(PDO $pdo): array
+{
+    $rows = $pdo->query("
+        SELECT asn, penalty
+        FROM asn_rules
+        WHERE active = 1
+    ")->fetchAll();
+
+    $map = [];
+    foreach ($rows as $row) {
+        $map[(string)$row['asn']] = (int)$row['penalty'];
+    }
+
+    return $map;
+}
+
+function getAsnRuleByAsn(PDO $pdo, string $asn): ?array
+{
+    $stmt = $pdo->prepare("
+        SELECT id, asn, label, penalty, active, created_at
+        FROM asn_rules
+        WHERE asn = :asn
+        LIMIT 1
+    ");
+    $stmt->execute([':asn' => $asn]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+function createAsnRule(PDO $pdo, string $asn, string $label = '', int $penalty = 10): bool
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO asn_rules (asn, label, penalty, active, created_at)
+        VALUES (:asn, :label, :penalty, 1, :created_at)
+    ");
+
+    return $stmt->execute([
+        ':asn' => $asn,
+        ':label' => $label,
+        ':penalty' => $penalty,
+        ':created_at' => gmdate('c'),
+    ]);
+}
+
+function setAsnRuleActive(PDO $pdo, int $id, bool $active): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE asn_rules
+        SET active = :active
+        WHERE id = :id
+    ");
+
+    return $stmt->execute([
+        ':active' => $active ? 1 : 0,
+        ':id' => $id,
+    ]);
+}
+
+function deleteAsnRule(PDO $pdo, int $id): bool
+{
+    $stmt = $pdo->prepare("DELETE FROM asn_rules WHERE id = :id");
+    return $stmt->execute([':id' => $id]);
 }

@@ -165,11 +165,22 @@ function calculateConfidence(array $requestData): array
     $method = strtoupper((string)($requestData['request_method'] ?? ''));
     $accept = strtolower((string)($requestData['accept'] ?? ''));
     $acceptLanguage = (string)($requestData['accept_language'] ?? '');
+    $acceptEncoding = strtolower((string)($requestData['accept_encoding'] ?? ''));
     $host = (string)($requestData['host'] ?? '');
     $query = strtolower((string)($requestData['query_string'] ?? ''));
     $path = strtolower((string)($requestData['request_uri'] ?? ''));
+    $referer = (string)($requestData['referer'] ?? '');
+    $secFetchSite = strtolower((string)($requestData['sec_fetch_site'] ?? ''));
+    $secFetchMode = strtolower((string)($requestData['sec_fetch_mode'] ?? ''));
+    $secFetchDest = strtolower((string)($requestData['sec_fetch_dest'] ?? ''));
+    $secChUa = (string)($requestData['sec_ch_ua'] ?? '');
+    $secChUaPlatform = (string)($requestData['sec_ch_ua_platform'] ?? '');
+    $org = strtolower((string)($requestData['ip_org'] ?? ''));
+    $asn = (string)($requestData['ip_asn'] ?? '');
 
-    /* === BASE SIGNALS === */
+    /* ======================================================
+       === BASE SIGNALS === 
+       ====================================================== */
 
     if ($method === 'GET') {
         $score += 10;
@@ -216,7 +227,59 @@ function calculateConfidence(array $requestData): array
         $reasons[] = 'bot_signal';
     }
 
+    if ($referer === '') {
+	$score -= 5;
+	$reasons[] = 'no_referer';
+    }
 
+    if ($secFetchSite === '' && $secFetchMode === '' && $secFetchDest === '') {
+	$score -= 10;
+	$reasons[] = 'sec_fetch_missing';
+    }
+
+    if ($secChUa === '' && $secChUaPlatform === '') {
+	$score -= 8;
+	$reasons[] = 'sec_ch_ua_missing';
+    }
+
+    if ($acceptEncoding === '') {
+	$score -= 5;
+	$reasons[] = 'accept_encoding_missing';
+    }
+
+    if ($referer !== '' && str_contains(strtolower($referer), 'gvsu.site') && $path === '/') {
+	$score -= 8;
+	$reasons[] = 'self_referer_root';
+    }
+
+    $hostingSignals = [
+	'amazon',
+	'microsoft',
+	'digitalocean',
+	'linode',
+	'ovh',
+	'vultr',
+	'oracle',
+	'google',
+	'cloudflare',
+	'hostpapa',
+	'tencent',
+    ];
+
+    foreach ($hostingSignals as $signal) {
+	if ($org !== '' && str_contains($org, $signal)) {
+		$score -= 8;
+		$reasons[] = 'hosting_provider_ip';
+		break;
+	}
+    }
+
+    $asnPenaltyMap = getActiveAsnPenaltyMap($pdo);
+
+    if ($asn !== '' && isset($asnPenaltyMap[$asn])) {
+	$score -= (int)$asnPenaltyMap[$asn];
+	$reasons[] = 'asn_rule:' . $asn;
+    }
 
     /* ======================================================
        === PATH RISK DETECTION === 
@@ -261,7 +324,7 @@ function calculateConfidence(array $requestData): array
     }
    
     /* ======================================================
-       PHASE 2: TIMING + SCAN DETECTION
+       === TIMING + SCAN DETECTION ===
        ====================================================== */
 
     if ($ip !== '') {
@@ -318,8 +381,6 @@ function calculateConfidence(array $requestData): array
     ];
 }
 
-/* ====================================================== */
-
 function collectRequestData(string $path): array
 {
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
@@ -329,26 +390,55 @@ function collectRequestData(string $path): array
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
     $scheme = $https ? 'https' : 'http';
 
+    $eventType = 'click';
+    $normalizedPath = strtolower(trim($path, '/'));
+
+    if (str_starts_with($normalizedPath, 'pixel/')) {
+        $eventType = 'pixel';
+    }
+
     $data = [
-        'event_type' => 'click',
-        'ip' => getClientIp(),
-        'user_agent' => $userAgent,
-        'referer' => $_SERVER['HTTP_REFERER'] ?? null,
-        'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null,
-        'accept' => $_SERVER['HTTP_ACCEPT'] ?? null,
-        'request_method' => $method,
-        'host' => $_SERVER['HTTP_HOST'] ?? null,
-        'scheme' => $scheme,
-        'request_uri' => $_SERVER['REQUEST_URI'] ?? null,
-        'query_string' => $_SERVER['QUERY_STRING'] ?? null,
-        'is_bot' => $bot['is_bot'],
-        'bot_reason' => $bot['reason'],
+	'event_type' => $eventType,
+	'ip' => getClientIp(),
+	'user_agent' => $userAgent,
+	'referer' => $_SERVER['HTTP_REFERER'] ?? null,
+	'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null,
+	'accept' => $_SERVER['HTTP_ACCEPT'] ?? null,
+	'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? null,
+	'request_method' => $method,
+	'host' => $_SERVER['HTTP_HOST'] ?? null,
+	'scheme' => $scheme,
+	'request_uri' => $_SERVER['REQUEST_URI'] ?? null,
+	'query_string' => $_SERVER['QUERY_STRING'] ?? null,
+	'remote_port' => $_SERVER['REMOTE_PORT'] ?? null,
+	'sec_fetch_site' => $_SERVER['HTTP_SEC_FETCH_SITE'] ?? null,
+	'sec_fetch_mode' => $_SERVER['HTTP_SEC_FETCH_MODE'] ?? null,
+	'sec_fetch_dest' => $_SERVER['HTTP_SEC_FETCH_DEST'] ?? null,
+	'sec_ch_ua' => $_SERVER['HTTP_SEC_CH_UA'] ?? null,
+	'sec_ch_ua_platform' => $_SERVER['HTTP_SEC_CH_UA_PLATFORM'] ?? null,
+	'is_bot' => $bot['is_bot'],
+	'bot_reason' => $bot['reason'],
     ];
 
     $data['visitor_hash'] = buildVisitorHash(
         $data['ip'],
         $data['user_agent']
     );
+
+    try {
+	if (!empty($data['ip'])) {
+  	    $reader = getGeoIpReader(); // assumes you already have this helper
+            if ($reader !== null) {
+                $record = $reader->city($data['ip']);
+
+                $data['ip_org'] = $record->traits->organization ?? null;
+                $data['ip_asn'] = $record->traits->autonomousSystemNumber ?? null;
+                $data['ip_country'] = $record->country->isoCode ?? null;
+            }
+        }
+    } catch (Throwable $e) {
+    // silently ignore GeoIP failures
+    }
 
     return array_merge($data, calculateConfidence($data));
 }
@@ -383,12 +473,7 @@ function shouldSkipLogging(string $token, string $path, ?string $userAgent, arra
         }
     }
 
-    $uaSkips = [
-        'curl',
-        'wget',
-        'python-requests',
-        'go-http-client',
-    ];
+    $uaSkips = [];
 
     foreach ($uaSkips as $sig) {
         if ($ua !== '' && str_contains($ua, $sig) && !str_starts_with($token, 'pixel:')) {
@@ -411,4 +496,26 @@ function redirectOr404(string $behavior, string $fallbackUrl): void
     header('Pragma: no-cache');
     header('Location: ' . $fallbackUrl, true, 302);
     exit;
+}
+
+function getGeoIpReader(): ?\GeoIp2\Database\Reader
+{
+    static $reader = null;
+
+    if ($reader !== null) {
+        return $reader;
+    }
+
+    $dbPath = __DIR__ . '/../data/GeoLite2-City.mmdb';
+
+    if (!file_exists($dbPath)) {
+        return null;
+    }
+
+    try {
+        $reader = new \GeoIp2\Database\Reader($dbPath);
+        return $reader;
+    } catch (Throwable $e) {
+        return null;
+    }
 }
