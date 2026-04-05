@@ -1,0 +1,25 @@
+# docker-compose.override.yml
+#
+# Example configuration for running SignalTrace behind a reverse proxy
+# (nginx, Caddy, Traefik) that handles HTTPS termination.
+#
+# When using this, remove the "ports" mapping from docker-compose.yml
+# and let the proxy handle external traffic. SignalTrace only needs to
+# be reachable by the proxy, not the public internet directly.
+#
+# Copy this file to docker-compose.override.yml and adjust as needed.
+
+services:
+  signaltrace:
+    ports: !reset []        # Remove direct port exposure
+    expose:
+      - "80"                # Only reachable within Docker network
+    networks:
+      - proxy
+    environment:
+      # Tell SignalTrace to trust X-Forwarded-For from the proxy container
+      SIGNALTRACE_TRUSTED_PROXY_IP: 172.16.0.0/12
+
+networks:
+  proxy:
+    external: true          # Shared network your proxy container is also on

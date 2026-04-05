@@ -1,0 +1,32 @@
+services:
+  signaltrace:
+    build: .
+    container_name: signaltrace
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      # Persist the SQLite database across container restarts and rebuilds
+      - signaltrace_data:/var/www/signaltrace/data
+      # Persist GeoIP databases — populated on first start if credentials are set
+      - signaltrace_geoip:/var/lib/GeoIP
+    environment:
+      # Required — copy from config.local.php.example and set these
+      SIGNALTRACE_ADMIN_USERNAME: ${SIGNALTRACE_ADMIN_USERNAME}
+      SIGNALTRACE_ADMIN_PASSWORD_HASH: ${SIGNALTRACE_ADMIN_PASSWORD_HASH}
+      SIGNALTRACE_VISITOR_HASH_SALT: ${SIGNALTRACE_VISITOR_HASH_SALT}
+
+      # Optional — MaxMind credentials for GeoIP enrichment
+      # Sign up free at https://www.maxmind.com to get these
+      MAXMIND_ACCOUNT_ID: ${MAXMIND_ACCOUNT_ID:-}
+      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
+
+      # Optional — export API token for Splunk and automation
+      SIGNALTRACE_EXPORT_API_TOKEN: ${SIGNALTRACE_EXPORT_API_TOKEN:-}
+
+      # Optional — set to your proxy IP if running behind a reverse proxy
+      SIGNALTRACE_TRUSTED_PROXY_IP: ${SIGNALTRACE_TRUSTED_PROXY_IP:-}
+
+volumes:
+  signaltrace_data:
+  signaltrace_geoip:

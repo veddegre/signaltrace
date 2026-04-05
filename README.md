@@ -35,7 +35,55 @@ Software requirements: PHP 8.1+, SQLite3, Apache with mod_rewrite, Composer.
 
 ---
 
-## Installation (Ubuntu + Apache)
+## Quick Start with Docker
+
+The fastest way to get SignalTrace running is with Docker Compose.
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/yourusername/signaltrace.git
+cd signaltrace
+cp .env.example .env
+```
+
+Edit `.env` and fill in the three required values. Generate them with:
+
+```bash
+# Password hash
+php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;"
+
+# Visitor salt
+openssl rand -hex 64
+```
+
+If PHP isn't installed locally, Docker can generate them for you:
+
+```bash
+docker run --rm php:8.2-cli php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;"
+```
+
+### 2. Start the container
+
+```bash
+docker compose up -d
+```
+
+SignalTrace will be available at `http://localhost/admin`. On first start the database is initialised automatically. If MaxMind credentials are set in `.env`, GeoIP databases are downloaded as well.
+
+### 3. Updating
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+The SQLite database and GeoIP databases are stored in named Docker volumes and persist across rebuilds.
+
+---
+
+## Manual Installation (Ubuntu + Apache)
 
 ### 1. Clone the repository
 
@@ -299,6 +347,10 @@ ASN rules let you add manual score penalties for specific networks via the UI.
 signaltrace/
 ├── LICENSE
 ├── README.md
+├── Dockerfile
+├── docker-compose.yml
+├── docker-compose.override.yml.example
+├── .env.example
 ├── composer.json
 ├── composer.lock
 ├── data/
@@ -306,6 +358,8 @@ signaltrace/
 ├── db/
 │   ├── schema.sql
 │   └── seed.sql
+├── docker/
+│   └── entrypoint.sh
 ├── docs/
 │   └── images/
 │       └── dashboard.png
