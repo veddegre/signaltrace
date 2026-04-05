@@ -95,7 +95,7 @@ function isKnownAutomationUserAgent(?string $ua): bool
         'proofpoint','mimecast','barracuda','symantec','trend micro',
         'zgrab','masscan','nmap','sqlmap','nikto','gobuster',
         'dirbuster','feroxbuster','httpclient','java/','libwww-perl',
-        'aiohttp','httpx','restsharp','okhttp','apache-httpclient',
+        'aiohttp','httpx','restsharp','okhttp','apache-httpclient','headlesschrome',
     ];
 
     foreach ($signals as $signal) {
@@ -236,6 +236,16 @@ function calculateConfidence(array $requestData): array
     if ($secFetchSite === '' && $secFetchMode === '' && $secFetchDest === '') {
         $score -= 10;
         $reasons[] = 'sec_fetch_missing';
+    } elseif ($secFetchSite === '' || $secFetchMode === '' || $secFetchDest === '') {
+        $score -= 8;
+        $reasons[] = 'sec_fetch_incomplete';
+    } elseif (
+        $secFetchMode === 'navigate'
+        && $secFetchDest === 'document'
+        && !in_array($secFetchSite, ['none', 'same-origin', 'cross-site'], true)
+    ) {
+        $score -= 10;
+        $reasons[] = 'sec_fetch_inconsistent';
     }
 
     if ($secChUa === '' && $secChUaPlatform === '') {
