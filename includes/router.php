@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 /* ======================================================
@@ -20,7 +21,7 @@ function handlePixelRequest(PDO $pdo, string $path): void
         logClick($pdo, [
             'id' => $link['id'] ?? null,
             'token' => 'pixel:' . $token,
-            'destination' => ''
+            'destination' => '',
         ], $pixelData);
     }
 
@@ -36,8 +37,8 @@ function handlePixelRequest(PDO $pdo, string $path): void
    ====================================================== */
 function handleThreatFeed(PDO $pdo, array $settings): void
 {
-    $threshold = (int)($settings['feed_score_threshold'] ?? 25);
-    $windowMinutes = (int)($settings['feed_time_window_minutes'] ?? 1440);
+    $threshold = (int) ($settings['feed_score_threshold'] ?? 25);
+    $windowMinutes = (int) ($settings['feed_time_window_minutes'] ?? 1440);
 
     $cutoff = (int) round(microtime(true) * 1000) - ($windowMinutes * 60 * 1000);
 
@@ -98,18 +99,18 @@ function handleAdminPage(PDO $pdo, array $settings): void
     requireAdminAuth();
 
     $appName = $settings['app_name'] ?? 'SignalTrace';
-    $baseUrl = trim((string)($settings['base_url'] ?? ''));
-    $defaultRedirectUrl = trim((string)($settings['default_redirect_url'] ?? 'https://example.com/'));
-    $unknownPathBehavior = trim((string)($settings['unknown_path_behavior'] ?? 'redirect'));
+    $baseUrl = trim((string) ($settings['base_url'] ?? ''));
+    $defaultRedirectUrl = trim((string) ($settings['default_redirect_url'] ?? 'https://example.com/'));
+    $unknownPathBehavior = trim((string) ($settings['unknown_path_behavior'] ?? 'redirect'));
     $pixelEnabled = ($settings['pixel_enabled'] ?? '1') === '1';
     $noiseFilterEnabled = ($settings['noise_filter_enabled'] ?? '1') === '1';
 
-    $tokenFilter = trim((string)($_GET['token'] ?? ''));
-    $ipFilter = trim((string)($_GET['ip'] ?? ''));
-    $visitorFilter = trim((string)($_GET['visitor'] ?? ''));
+    $tokenFilter = trim((string) ($_GET['token'] ?? ''));
+    $ipFilter = trim((string) ($_GET['ip'] ?? ''));
+    $visitorFilter = trim((string) ($_GET['visitor'] ?? ''));
     $knownOnly = isset($_GET['known']) && $_GET['known'] === '1';
-    $dateFrom = trim((string)($_GET['date_from'] ?? ''));
-    $dateTo = trim((string)($_GET['date_to'] ?? ''));
+    $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
+    $dateTo = trim((string) ($_GET['date_to'] ?? ''));
     $asnRules = getAsnRules($pdo);
 
     $clicks = getRecentClicksAdvancedFiltered(
@@ -120,7 +121,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $visitorFilter !== '' ? $visitorFilter : null,
         $knownOnly,
         $dateFrom !== '' ? $dateFrom : null,
-        $dateTo !== '' ? $dateTo : null
+        $dateTo !== '' ? $dateTo : null,
     );
 
     $links = getAllLinks($pdo);
@@ -129,7 +130,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $pdo,
         $knownOnly,
         $dateFrom !== '' ? $dateFrom : null,
-        $dateTo !== '' ? $dateTo : null
+        $dateTo !== '' ? $dateTo : null,
     );
 
     $skipPatterns = getSkipPatterns($pdo);
@@ -137,14 +138,30 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $showAll = isset($_GET['show_all']) && $_GET['show_all'] === '1';
 
     $refreshParams = [];
-    if ($tokenFilter !== '') $refreshParams['token'] = $tokenFilter;
-    if ($ipFilter !== '') $refreshParams['ip'] = $ipFilter;
-    if ($visitorFilter !== '') $refreshParams['visitor'] = $visitorFilter;
-    if ($knownOnly) $refreshParams['known'] = '1';
-    if ($showTopTokens) $refreshParams['show_top_tokens'] = '1';
-    if ($showAll) $refreshParams['show_all'] = '1';
-    if ($dateFrom !== '') $refreshParams['date_from'] = $dateFrom;
-    if ($dateTo !== '') $refreshParams['date_to'] = $dateTo;
+    if ($tokenFilter !== '') {
+        $refreshParams['token'] = $tokenFilter;
+    }
+    if ($ipFilter !== '') {
+        $refreshParams['ip'] = $ipFilter;
+    }
+    if ($visitorFilter !== '') {
+        $refreshParams['visitor'] = $visitorFilter;
+    }
+    if ($knownOnly) {
+        $refreshParams['known'] = '1';
+    }
+    if ($showTopTokens) {
+        $refreshParams['show_top_tokens'] = '1';
+    }
+    if ($showAll) {
+        $refreshParams['show_all'] = '1';
+    }
+    if ($dateFrom !== '') {
+        $refreshParams['date_from'] = $dateFrom;
+    }
+    if ($dateTo !== '') {
+        $refreshParams['date_to'] = $dateTo;
+    }
 
     $refreshUrl = '/admin' . (!empty($refreshParams) ? '?' . http_build_query($refreshParams) : '');
 
@@ -162,9 +179,9 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $clicks,
         $links,
         $tokenCounts,
-	$skipPatterns,
-	$asnRules,
-	$refreshUrl
+        $skipPatterns,
+        $asnRules,
+        $refreshUrl,
     );
 
     exit;
@@ -175,8 +192,8 @@ function handleAdminPage(PDO $pdo, array $settings): void
    ====================================================== */
 function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $skipPatternMap): void
 {
-    $defaultRedirectUrl = trim((string)($settings['default_redirect_url'] ?? 'https://example.com/'));
-    $unknownPathBehavior = trim((string)($settings['unknown_path_behavior'] ?? 'redirect'));
+    $defaultRedirectUrl = trim((string) ($settings['default_redirect_url'] ?? 'https://example.com/'));
+    $unknownPathBehavior = trim((string) ($settings['unknown_path_behavior'] ?? 'redirect'));
     $noiseFilterEnabled = ($settings['noise_filter_enabled'] ?? '1') === '1';
 
     $token = normalizeTokenFromPath($path);
@@ -184,9 +201,9 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     $link = getLinkByToken($pdo, $token);
 
     if (
-        !$link &&
-        $noiseFilterEnabled &&
-        shouldSkipLogging($token, $path, $requestData['user_agent'] ?? null, $skipPatternMap)
+        !$link
+        && $noiseFilterEnabled
+        && shouldSkipLogging($token, $path, $requestData['user_agent'] ?? null, $skipPatternMap)
     ) {
         redirectOr404($unknownPathBehavior, $defaultRedirectUrl);
     }
@@ -200,7 +217,7 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     logClick($pdo, [
         'id' => null,
         'token' => $token,
-        'destination' => ''
+        'destination' => '',
     ], $requestData);
 
     redirectOr404($unknownPathBehavior, $defaultRedirectUrl);

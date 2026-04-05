@@ -59,3 +59,9 @@ Thumbs.db
 # -----------------------------
 # DO NOT IGNORE:
 # composer.lock
+
+# -----------------------------
+# PHP CS Fixer
+# -----------------------------
+.php-cs-fixer.cache
+.php-cs-fixer.dist.php

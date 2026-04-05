@@ -17,21 +17,21 @@ function renderAdminPage(
     array $tokenCounts,
     array $skipPatterns,
     array $asnRules,
-    string $refreshUrl
+    string $refreshUrl,
 ): void {
     $pdo = db();
 
-    $dateFrom = trim((string)($_GET['date_from'] ?? ''));
-    $dateTo = trim((string)($_GET['date_to'] ?? ''));
+    $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
+    $dateTo = trim((string) ($_GET['date_to'] ?? ''));
     $showAll = isset($_GET['show_all']) && $_GET['show_all'] === '1';
 
-    $activeTab = trim((string)($_GET['tab'] ?? ''));
-    $editLinkId = (int)($_GET['edit_link_id'] ?? 0);
+    $activeTab = trim((string) ($_GET['tab'] ?? ''));
+    $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
 
     $editLink = null;
     if ($editLinkId > 0) {
         foreach ($links as $candidateLink) {
-            if ((int)$candidateLink['id'] === $editLinkId) {
+            if ((int) $candidateLink['id'] === $editLinkId) {
                 $editLink = $candidateLink;
                 break;
             }
@@ -39,20 +39,20 @@ function renderAdminPage(
     }
 
     $hasActiveFilter = (
-        $tokenFilter !== '' ||
-        $ipFilter !== '' ||
-        $visitorFilter !== '' ||
-	$knownOnly ||
-	$showAll ||
-        $dateFrom !== '' ||
-        $dateTo !== ''
+        $tokenFilter !== ''
+        || $ipFilter !== ''
+        || $visitorFilter !== ''
+    || $knownOnly
+    || $showAll
+        || $dateFrom !== ''
+        || $dateTo !== ''
     );
     $exportUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/export/json';
 
     $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
-    $threatFeedWindowHours = (string)(getSetting($pdo, 'threat_feed_window_hours', '168') ?? '168');
-    $threatFeedMinConfidence = (string)(getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
-    $dataRetentionDays = (string)(getSetting($pdo, 'data_retention_days', '0') ?? '0');
+    $threatFeedWindowHours = (string) (getSetting($pdo, 'threat_feed_window_hours', '168') ?? '168');
+    $threatFeedMinConfidence = (string) (getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
+    $dataRetentionDays = (string) (getSetting($pdo, 'data_retention_days', '0') ?? '0');
 
     $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
         $params = [];
@@ -74,12 +74,12 @@ function renderAdminPage(
         }
         if ($dateTo !== '') {
             $params['date_to'] = $dateTo;
-	}
-	if ($showAll) {
-	    $params['show_all'] = '1';
-	}
+        }
+        if ($showAll) {
+            $params['show_all'] = '1';
+        }
 
-	if ($activeTab !== '') {
+        if ($activeTab !== '') {
             $params['tab'] = $activeTab;
         }
 
@@ -685,49 +685,60 @@ function renderAdminPage(
 		    <?php endif; ?>
                 </div>
             <?php endif; ?>
-	    <?php if ($tokenFilter !== '' && !$knownOnly && $ipFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
-                <form method="post" action="/admin/delete-token-clicks" class="inline-form" onsubmit="return confirm('Delete unknown-only clicks for this token/path?');">
-                    <h2>Token Cleanup</h2>
-                    <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
-                    <input type="hidden" name="mode" value="unknown_only">
-                    <button type="submit" class="warning-button">Delete Unknown Token Hits</button>
-		</form>
-
-		<form method="post" action="/admin/delete-ip-clicks" class="inline-action-form" onsubmit="return confirm('Delete unknown-only clicks for this IP?');">
-		    <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-		    <input type="hidden" name="mode" value="unknown_only">
-		    <button type="submit" class="warning-button">Delete Unknown IP Hits</button>
-		</form>
-
-		<form method="post" action="/admin/delete-ip-clicks" class="inline-action-form" onsubmit="return confirm('Delete ALL clicks for this IP?');">
-		    <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-		    <input type="hidden" name="mode" value="all">
-		    <button type="submit" class="danger-button">Delete All Clicks for IP</button>
-		</form>
-		
-                <form method="post" action="/admin/delete-token-clicks" class="inline-form" onsubmit="return confirm('Delete ALL clicks for this token/path?');">
-                    <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
-                    <input type="hidden" name="mode" value="all">
-                    <button type="submit" class="danger-button">Delete All Clicks for Token</button>
-                </form>
-	    <?php endif; ?>
 
 
-	    <?php if ($ipFilter !== '' && !$knownOnly && $tokenFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
-	       <form method="post" action="/admin/delete-ip-clicks" class="inline-form">
-                  <h2>IP Cleanup</h2>
-	             <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
-        		<div class="filter-actions" style="margin-left: 0;">
-		            <button type="submit" name="mode" value="unknown_only" class="warning-button" onclick="return confirm('Delete unknown-only clicks for this IP?');">
-		                Delete Unknown IP Hits
-		            </button>
 
-		            <button type="submit" name="mode" value="all" class="danger-button" onclick="return confirm('Delete ALL clicks for this IP?');">
-		                Delete All Clicks for IP
-		            </button>
-		        </div>
-		    </form>
-	    <?php endif; ?>
+<?php if ($tokenFilter !== '' && !$knownOnly && $ipFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
+    <form method="post" action="/admin/delete-token-clicks" class="inline-form">
+        <h2>Token Cleanup</h2>
+        <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
+
+        <div class="filter-actions" style="margin-left: 0;">
+            <button type="submit"
+                    name="mode"
+                    value="unknown_only"
+                    class="warning-button"
+                    onclick="return confirm('Delete unknown-only clicks for this token/path?');">
+                Delete Unknown Token Hits
+            </button>
+
+            <button type="submit"
+                    name="mode"
+                    value="all"
+                    class="danger-button"
+                    onclick="return confirm('Delete ALL clicks for this token/path?');">
+                Delete All Clicks for Token
+            </button>
+        </div>
+    </form>
+<?php endif; ?>
+
+<?php if ($ipFilter !== '' && !$knownOnly && $tokenFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
+    <form method="post" action="/admin/delete-ip-clicks" class="inline-form">
+        <h2>IP Cleanup</h2>
+        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+
+        <div class="filter-actions" style="margin-left: 0;">
+            <button type="submit"
+                    name="mode"
+                    value="unknown_only"
+                    class="warning-button"
+                    onclick="return confirm('Delete unknown-only clicks for this IP?');">
+                Delete Unknown IP Hits
+            </button>
+
+            <button type="submit"
+                    name="mode"
+                    value="all"
+                    class="danger-button"
+                    onclick="return confirm('Delete ALL clicks for this IP?');">
+                Delete All Clicks for IP
+            </button>
+        </div>
+    </form>
+<?php endif; ?>
+
+
 
 	    <?php $showTopTokens = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1'; ?>
             <?php if ($showTopTokens): ?>
@@ -743,13 +754,13 @@ function renderAdminPage(
                     <?php foreach ($tokenCounts as $row): ?>
                         <tr>
                             <td class="mono">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string)$row['token']])) ?>">
-                                    <?= h((string)$row['token']) ?>
+                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $row['token']])) ?>">
+                                    <?= h((string) $row['token']) ?>
                                 </a>
                             </td>
-                            <td><?= (int)$row['hit_count'] ?></td>
-                            <td><?= h((string)$row['last_seen']) ?></td>
-                            <td><?= ((int)$row['is_known'] === 1) ? 'Yes' : 'No' ?></td>
+                            <td><?= (int) $row['hit_count'] ?></td>
+                            <td><?= h((string) $row['last_seen']) ?></td>
+                            <td><?= ((int) $row['is_known'] === 1) ? 'Yes' : 'No' ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </table>
@@ -774,24 +785,24 @@ function renderAdminPage(
                     </tr>
                     <?php foreach ($clicks as $i => $c): ?>
                         <?php
-                        $confidenceLabel = (string)($c['confidence_label'] ?? '');
+                        $confidenceLabel = (string) ($c['confidence_label'] ?? '');
                         $badgeClass = match ($confidenceLabel) {
                             'human' => 'badge badge-human',
                             'likely-human' => 'badge badge-likely-human',
                             'suspicious' => 'badge badge-suspicious',
                             'bot' => 'badge badge-bot',
-                            default => 'badge'
+                            default => 'badge',
                         };
                         $detailsId = 'details-' . $i;
-			$rowToken = (string)($c['token'] ?? '');
-			$displayToken = ($rowToken === 'root') ? '/' : $rowToken;
-                        $rowIp = (string)($c['ip'] ?? '');
-                        $rowVisitor = (string)($c['visitor_hash'] ?? '');
-                        $rowUa = (string)($c['user_agent'] ?? '');
+                        $rowToken = (string) ($c['token'] ?? '');
+                        $displayToken = ($rowToken === 'root') ? '/' : $rowToken;
+                        $rowIp = (string) ($c['ip'] ?? '');
+                        $rowVisitor = (string) ($c['visitor_hash'] ?? '');
+                        $rowUa = (string) ($c['user_agent'] ?? '');
                         ?>
                         <tr class="<?= $confidenceLabel === 'bot' ? 'bot' : '' ?>">
-                            <td class="time-col"><?= h((string)($c['clicked_at'] ?? '')) ?></td>
-                            <td class="type-col"><?= h((string)($c['event_type'] ?? 'click')) ?></td>
+                            <td class="time-col"><?= h((string) ($c['clicked_at'] ?? '')) ?></td>
+                            <td class="type-col"><?= h((string) ($c['event_type'] ?? 'click')) ?></td>
                             <td class="mono token-col">
                                 <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>">
                                     <?= h($rowToken) ?>
@@ -802,8 +813,8 @@ function renderAdminPage(
                                     <?= h($rowIp) ?>
                                 </a>
                             </td>
-			    <td><?= h((string)($c['ip_org'] ?? '')) ?></td>
-			    <?php $rowScore = (int)($c['confidence_score'] ?? 0); ?>
+			    <td><?= h((string) ($c['ip_org'] ?? '')) ?></td>
+			    <?php $rowScore = (int) ($c['confidence_score'] ?? 0); ?>
                             <td class="classification-col">
 			        <span class="<?= h($badgeClass) ?>">
 			            <?= h($confidenceLabel) ?>
@@ -820,7 +831,7 @@ function renderAdminPage(
                                     <div class="detail-box">
                                         <strong>Identity</strong>
                                         <div>
-                                            <span class="mono">Click ID:</span> <?= h((string)($c['id'] ?? '')) ?>
+                                            <span class="mono">Click ID:</span> <?= h((string) ($c['id'] ?? '')) ?>
                                         </div>
 					<div>
 					    <span class="mono">IP:</span>
@@ -831,16 +842,16 @@ function renderAdminPage(
 					    <a class="copy-button" href="https://ipinfo.io/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="View IPInfo">Info</a>
 					</div>
 					<?php
-					    $rowAsn = (string)($c['ip_asn'] ?? '');
-					    $asnRule = $rowAsn !== '' ? getAsnRuleByAsn($pdo, $rowAsn) : null;
-?>
+                        $rowAsn = (string) ($c['ip_asn'] ?? '');
+                        $asnRule = $rowAsn !== '' ? getAsnRuleByAsn($pdo, $rowAsn) : null;
+                        ?>
 					<div>
 					    <span class="mono">ASN:</span> <?= h($rowAsn) ?>
 
 					    <?php if ($rowAsn !== '' && $asnRule === null): ?>
 					        <form method="post" action="/admin/create-asn-rule" class="inline-action-form" style="display:inline-block;">
 					            <input type="hidden" name="asn" value="<?= h($rowAsn) ?>">
-					            <input type="hidden" name="label" value="<?= h((string)($c['ip_org'] ?? '')) ?>">
+					            <input type="hidden" name="label" value="<?= h((string) ($c['ip_org'] ?? '')) ?>">
 					            <input type="hidden" name="penalty" value="10">
 					            <button type="submit" class="copy-button">Add ASN Rule</button>
 					        </form>
@@ -848,34 +859,34 @@ function renderAdminPage(
 					        <span class="badge badge-suspicious">ASN rule active</span>
 					    <?php endif; ?>
 					</div>
-                                        <div><span class="mono">Org:</span> <?= h((string)($c['ip_org'] ?? '')) ?></div>
-                                        <div><span class="mono">Country:</span> <?= h((string)($c['ip_country'] ?? '')) ?></div>
+                                        <div><span class="mono">Org:</span> <?= h((string) ($c['ip_org'] ?? '')) ?></div>
+                                        <div><span class="mono">Country:</span> <?= h((string) ($c['ip_country'] ?? '')) ?></div>
                                         <div>
                                             <span class="mono">Visitor:</span>
                                             <a class="pill-link mono" href="<?= h($buildAdminUrl(['visitor' => $rowVisitor])) ?>"><?= h($rowVisitor) ?></a>
                                             <button type="button" class="copy-button" onclick="copyText('<?= h($rowVisitor) ?>')">Copy</button>
                                         </div>
-                                        <div><span class="mono">XFF:</span> <?= h((string)($c['x_forwarded_for'] ?? '')) ?></div>
+                                        <div><span class="mono">XFF:</span> <?= h((string) ($c['x_forwarded_for'] ?? '')) ?></div>
                                     </div>
 
                                     <div class="detail-box">
 					<strong>Scoring</strong>
 					<?php
-						$score = (int)($c['confidence_score'] ?? 0);
-						if ($score <= 10) {
-						    $confidenceLevel = 'high';
-						} elseif ($score <= 30) {
-						    $confidenceLevel = 'medium';
-						} elseif ($score <= 60) {
-						    $confidenceLevel = 'low';
-						} else {
-						    $confidenceLevel = 'very low';
-						}
-					?>
-					<div><span class="mono">Classification:</span> <?= h((string)($c['confidence_label'] ?? '')) ?> (<?= h((string)($c['confidence_score'] ?? '')) ?>)</div>
-                                        <div><span class="mono">Reason:</span> <span class="wrap"><?= h((string)($c['confidence_reason'] ?? '')) ?></span></div>
+                                                $score = (int) ($c['confidence_score'] ?? 0);
+                        if ($score <= 10) {
+                            $confidenceLevel = 'high';
+                        } elseif ($score <= 30) {
+                            $confidenceLevel = 'medium';
+                        } elseif ($score <= 60) {
+                            $confidenceLevel = 'low';
+                        } else {
+                            $confidenceLevel = 'very low';
+                        }
+                        ?>
+					<div><span class="mono">Classification:</span> <?= h((string) ($c['confidence_label'] ?? '')) ?> (<?= h((string) ($c['confidence_score'] ?? '')) ?>)</div>
+                                        <div><span class="mono">Reason:</span> <span class="wrap"><?= h((string) ($c['confidence_reason'] ?? '')) ?></span></div>
                                         <div><span class="mono">First for token:</span> <?= !empty($c['first_for_token']) ? 'Yes' : 'No' ?></div>
-                                        <div><span class="mono">Prior events for token:</span> <?= h((string)($c['prior_events_for_token'] ?? '0')) ?></div>
+                                        <div><span class="mono">Prior events for token:</span> <?= h((string) ($c['prior_events_for_token'] ?? '0')) ?></div>
                                     </div>
 
                                     <div class="detail-box">
@@ -885,25 +896,25 @@ function renderAdminPage(
                                             <a class="pill-link mono" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>"><?= h($rowToken) ?></a>
                                             <button type="button" class="copy-button" onclick="copyText('<?= h($rowToken) ?>')">Copy</button>
                                         </div>
-                                        <div><span class="mono">Method:</span> <?= h((string)($c['request_method'] ?? '')) ?></div>
-                                        <div><span class="mono">Host:</span> <?= h((string)($c['host'] ?? '')) ?></div>
-                                        <div><span class="mono">Scheme:</span> <?= h((string)($c['scheme'] ?? '')) ?></div>
-                                        <div><span class="mono">URI:</span> <span class="wrap"><?= h((string)($c['request_uri'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Query:</span> <span class="wrap"><?= h((string)($c['query_string'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Remote port:</span> <?= h((string)($c['remote_port'] ?? '')) ?></div>
+                                        <div><span class="mono">Method:</span> <?= h((string) ($c['request_method'] ?? '')) ?></div>
+                                        <div><span class="mono">Host:</span> <?= h((string) ($c['host'] ?? '')) ?></div>
+                                        <div><span class="mono">Scheme:</span> <?= h((string) ($c['scheme'] ?? '')) ?></div>
+                                        <div><span class="mono">URI:</span> <span class="wrap"><?= h((string) ($c['request_uri'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Query:</span> <span class="wrap"><?= h((string) ($c['query_string'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Remote port:</span> <?= h((string) ($c['remote_port'] ?? '')) ?></div>
                                     </div>
 
                                     <div class="detail-box">
                                         <strong>Headers</strong>
-                                        <div><span class="mono">Referer:</span> <span class="wrap"><?= h((string)($c['referer'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept:</span> <span class="wrap"><?= h((string)($c['accept'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept-Language:</span> <span class="wrap"><?= h((string)($c['accept_language'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept-Encoding:</span> <span class="wrap"><?= h((string)($c['accept_encoding'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-Fetch-Site:</span> <span class="wrap"><?= h((string)($c['sec_fetch_site'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-Fetch-Mode:</span> <span class="wrap"><?= h((string)($c['sec_fetch_mode'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-Fetch-Dest:</span> <span class="wrap"><?= h((string)($c['sec_fetch_dest'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-CH-UA:</span> <span class="wrap"><?= h((string)($c['sec_ch_ua'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-CH-UA-Platform:</span> <span class="wrap"><?= h((string)($c['sec_ch_ua_platform'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Referer:</span> <span class="wrap"><?= h((string) ($c['referer'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Accept:</span> <span class="wrap"><?= h((string) ($c['accept'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Accept-Language:</span> <span class="wrap"><?= h((string) ($c['accept_language'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Accept-Encoding:</span> <span class="wrap"><?= h((string) ($c['accept_encoding'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-Fetch-Site:</span> <span class="wrap"><?= h((string) ($c['sec_fetch_site'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-Fetch-Mode:</span> <span class="wrap"><?= h((string) ($c['sec_fetch_mode'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-Fetch-Dest:</span> <span class="wrap"><?= h((string) ($c['sec_fetch_dest'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-CH-UA:</span> <span class="wrap"><?= h((string) ($c['sec_ch_ua'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Sec-CH-UA-Platform:</span> <span class="wrap"><?= h((string) ($c['sec_ch_ua_platform'] ?? '')) ?></span></div>
                                     </div>
 
                                     <div class="detail-box" style="grid-column: 1 / -1;">
@@ -917,7 +928,7 @@ function renderAdminPage(
                                     <div class="detail-box" style="grid-column: 1 / -1;">
                                         <strong>Actions</strong>
                                         <form method="post" action="/admin/delete-click" class="inline-action-form" onsubmit="return confirm('Delete this click?');">
-                                            <input type="hidden" name="id" value="<?= h((string)($c['id'] ?? '')) ?>">
+                                            <input type="hidden" name="id" value="<?= h((string) ($c['id'] ?? '')) ?>">
                                             <button type="submit" class="danger-button">Delete This Click</button>
                                         </form>
 
@@ -954,16 +965,16 @@ function renderAdminPage(
 	    <form method="post" action="/admin/update-link">
 	        <h2>Edit Token</h2>
 
-	        <input type="hidden" name="id" value="<?= (int)$editLink['id'] ?>">
+	        <input type="hidden" name="id" value="<?= (int) $editLink['id'] ?>">
 
 	        <label for="edit_token">Token / Path</label>
-	        <input id="edit_token" type="text" name="token" required value="<?= h((string)$editLink['token']) ?>">
+	        <input id="edit_token" type="text" name="token" required value="<?= h((string) $editLink['token']) ?>">
 
 	        <label for="edit_destination">Destination URL</label>
-	        <input id="edit_destination" type="url" name="destination" required value="<?= h((string)$editLink['destination']) ?>">
+	        <input id="edit_destination" type="url" name="destination" required value="<?= h((string) $editLink['destination']) ?>">
 
 	        <label for="edit_description">Description</label>
-	        <input id="edit_description" type="text" name="description" value="<?= h((string)($editLink['description'] ?? '')) ?>">
+	        <input id="edit_description" type="text" name="description" value="<?= h((string) ($editLink['description'] ?? '')) ?>">
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 
 	        <button type="submit">Save Changes</button>
@@ -1004,25 +1015,25 @@ function renderAdminPage(
                     </tr>
 		    <?php foreach ($links as $link): ?>
 		   <?php
-			$tokenUrl = $baseUrl !== ''
-			    ? rtrim($baseUrl, '/') . '/' . ltrim((string)$link['token'], '/')
-			    : '';
+            $tokenUrl = $baseUrl !== ''
+                ? rtrim($baseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
+                : '';
 
-			$pixelUrl = $baseUrl !== ''
-			    ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
-			    : '';
-		?>
+		        $pixelUrl = $baseUrl !== ''
+		            ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
+		            : '';
+		        ?>
 		<tr>
-		    <td><?= (int)$link['id'] ?></td>
+		    <td><?= (int) $link['id'] ?></td>
 		    <td class="mono">
-		        <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string)$link['token'], 'tab' => 'links'])) ?>">
-		            <?= h((string)$link['token']) ?>
+		        <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $link['token'], 'tab' => 'links'])) ?>">
+		            <?= h((string) $link['token']) ?>
 		        </a>
 		    </td>
-		    <td><?= h((string)($link['description'] ?? '')) ?></td>
-		    <td class="wrap"><?= h((string)$link['destination']) ?></td>
-		    <td><?= ((int)$link['active'] === 1) ? 'Yes' : 'No' ?></td>
-		    <td><?= (int)$link['click_count'] ?></td>
+		    <td><?= h((string) ($link['description'] ?? '')) ?></td>
+		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
+		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
+		    <td><?= (int) $link['click_count'] ?></td>
 
 		    <td class="mono wrap">
 		        <?php if ($tokenUrl !== ''): ?>
@@ -1046,29 +1057,29 @@ function renderAdminPage(
 
 			   <form method="get" action="/admin" class="inline-action-form">
 			       <input type="hidden" name="tab" value="links">
-			       <input type="hidden" name="edit_link_id" value="<?= (int)$link['id'] ?>">
+			       <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
 	 		       <button type="submit">Edit</button>
 			   </form>
 
-		        <?php if ((int)$link['active'] === 1): ?>
+		        <?php if ((int) $link['active'] === 1): ?>
 		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
-               			 <input type="hidden" name="id" value="<?= (int)$link['id'] ?>">
+               			 <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
 		                <button type="submit">Deactivate</button>
 		            </form>
 		        <?php else: ?>
 		            <form method="post" action="/admin/activate-link" class="inline-action-form">
-		                <input type="hidden" name="id" value="<?= (int)$link['id'] ?>">
+		                <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
 		                <button type="submit">Activate</button>
    		         </form>
      			 <?php endif; ?>
 
 		        <form method="post" action="/admin/delete-link" class="inline-action-form" onsubmit="return confirm('Delete this token/path?');">
-		            <input type="hidden" name="id" value="<?= (int)$link['id'] ?>">
+		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
 		            <button type="submit">Delete</button>
 		        </form>
 
 		        <form method="post" action="/admin/delete-link" class="inline-action-form" onsubmit="return confirm('Delete this token/path and all related clicks?');">
-		            <input type="hidden" name="id" value="<?= (int)$link['id'] ?>">
+		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
 		            <input type="hidden" name="delete_clicks" value="1">
 		            <button type="submit" class="danger-button">Delete + Clicks</button>
 		        </form>
@@ -1104,25 +1115,25 @@ function renderAdminPage(
 	            </tr>
 	            <?php foreach ($asnRules as $rule): ?>
 	                <tr>
-	                    <td><?= (int)$rule['id'] ?></td>
-	                    <td class="mono"><?= h((string)$rule['asn']) ?></td>
-	                    <td><?= h((string)($rule['label'] ?? '')) ?></td>
-	                    <td><?= (int)$rule['penalty'] ?></td>
-	                    <td><?= ((int)$rule['active'] === 1) ? 'Yes' : 'No' ?></td>
+	                    <td><?= (int) $rule['id'] ?></td>
+	                    <td class="mono"><?= h((string) $rule['asn']) ?></td>
+	                    <td><?= h((string) ($rule['label'] ?? '')) ?></td>
+	                    <td><?= (int) $rule['penalty'] ?></td>
+	                    <td><?= ((int) $rule['active'] === 1) ? 'Yes' : 'No' ?></td>
 	                    <td class="skip-actions-col">
-	                        <?php if ((int)$rule['active'] === 1): ?>
+	                        <?php if ((int) $rule['active'] === 1): ?>
 	                            <form method="post" action="/admin/deactivate-asn-rule" class="inline-action-form">
-	                                <input type="hidden" name="id" value="<?= (int)$rule['id'] ?>">
+	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
 	                                <button type="submit">Deactivate</button>
 	                            </form>
 	                        <?php else: ?>
 	                            <form method="post" action="/admin/activate-asn-rule" class="inline-action-form">
-	                                <input type="hidden" name="id" value="<?= (int)$rule['id'] ?>">
+	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
 	                                <button type="submit">Activate</button>
 	                            </form>
 	                        <?php endif; ?>
 	                        <form method="post" action="/admin/delete-asn-rule" class="inline-action-form" onsubmit="return confirm('Delete this ASN rule?');">
-	                            <input type="hidden" name="id" value="<?= (int)$rule['id'] ?>">
+	                            <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
 	                            <button type="submit">Delete</button>
 	                        </form>
 	                    </td>
@@ -1138,13 +1149,13 @@ function renderAdminPage(
                     <h2>Settings</h2>
 
                     <label for="app_name">App Name</label>
-                    <input id="app_name" type="text" name="app_name" value="<?= h((string)$appName) ?>" required>
+                    <input id="app_name" type="text" name="app_name" value="<?= h((string) $appName) ?>" required>
 
                     <label for="base_url">Base URL</label>
-                    <input id="base_url" type="url" name="base_url" value="<?= h((string)$baseUrl) ?>" placeholder="https://yourdomain.example">
+                    <input id="base_url" type="url" name="base_url" value="<?= h((string) $baseUrl) ?>" placeholder="https://yourdomain.example">
 
                     <label for="default_redirect_url">Default Redirect URL</label>
-                    <input id="default_redirect_url" type="url" name="default_redirect_url" value="<?= h((string)$defaultRedirectUrl) ?>" required>
+                    <input id="default_redirect_url" type="url" name="default_redirect_url" value="<?= h((string) $defaultRedirectUrl) ?>" required>
 
                     <label for="unknown_path_behavior">Unknown Path Behavior</label>
                     <select id="unknown_path_behavior" name="unknown_path_behavior">
@@ -1164,7 +1175,7 @@ function renderAdminPage(
 		   </div>
 
 		   <label for="display_min_score">Minimum Display Score</label>
-		   <input id="display_min_score" type="number"  min="0" max="100" name="display_min_score" value="<?= h((string)getSetting($pdo, 'display_min_score', '20')) ?>">
+		   <input id="display_min_score" type="number"  min="0" max="100" name="display_min_score" value="<?= h((string) getSetting($pdo, 'display_min_score', '20')) ?>">
 
 		   <p class="muted">Hide lower-scored events from the dashboard unless “Show all” is checked.</p>
 
@@ -1275,25 +1286,25 @@ function renderAdminPage(
                     </tr>
                     <?php foreach ($skipPatterns as $pattern): ?>
                         <tr>
-                            <td><?= (int)$pattern['id'] ?></td>
-                            <td><?= h((string)$pattern['type']) ?></td>
-                            <td class="mono"><?= h((string)$pattern['pattern']) ?></td>
-                            <td><?= ((int)$pattern['active'] === 1) ? 'Yes' : 'No' ?></td>
+                            <td><?= (int) $pattern['id'] ?></td>
+                            <td><?= h((string) $pattern['type']) ?></td>
+                            <td class="mono"><?= h((string) $pattern['pattern']) ?></td>
+                            <td><?= ((int) $pattern['active'] === 1) ? 'Yes' : 'No' ?></td>
                             <td class="skip-actions-col">
-                                <?php if ((int)$pattern['active'] === 1): ?>
+                                <?php if ((int) $pattern['active'] === 1): ?>
                                     <form method="post" action="/admin/deactivate-skip-pattern" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int)$pattern['id'] ?>">
+                                        <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
                                         <button type="submit">Deactivate</button>
                                     </form>
                                 <?php else: ?>
                                     <form method="post" action="/admin/activate-skip-pattern" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int)$pattern['id'] ?>">
+                                        <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
                                         <button type="submit">Activate</button>
                                     </form>
                                 <?php endif; ?>
 
                                 <form method="post" action="/admin/delete-skip-pattern" class="inline-action-form" onsubmit="return confirm('Delete this skip pattern?');">
-                                    <input type="hidden" name="id" value="<?= (int)$pattern['id'] ?>">
+                                    <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
                                     <button type="submit">Delete</button>
                                 </form>
                             </td>

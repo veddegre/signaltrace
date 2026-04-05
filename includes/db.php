@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
@@ -174,8 +175,8 @@ function seedDefaultSettings(PDO $pdo): void
         'threat_feed_enabled' => '1',
         'threat_feed_window_hours' => '168',
         'threat_feed_min_confidence' => 'suspicious',
-	'data_retention_days' => '0',
-	'display_min_score' => '20',
+        'data_retention_days' => '0',
+        'display_min_score' => '20',
     ];
 
     $stmt = $pdo->prepare("
@@ -193,7 +194,7 @@ function seedDefaultSettings(PDO $pdo): void
 
 function seedDefaultSkipPatterns(PDO $pdo): void
 {
-    $count = (int)$pdo->query("SELECT COUNT(*) FROM skip_patterns")->fetchColumn();
+    $count = (int) $pdo->query("SELECT COUNT(*) FROM skip_patterns")->fetchColumn();
     if ($count > 0) {
         return;
     }
@@ -239,7 +240,7 @@ function getSetting(PDO $pdo, string $key, ?string $default = null): ?string
     $stmt->execute([':key' => $key]);
     $value = $stmt->fetchColumn();
 
-    return $value === false ? $default : (string)$value;
+    return $value === false ? $default : (string) $value;
 }
 
 function setSetting(PDO $pdo, string $key, string $value): bool
@@ -281,9 +282,9 @@ function getActiveSkipPatternMap(PDO $pdo): array
     ];
 
     foreach ($rows as $row) {
-        $type = strtolower((string)$row['type']);
+        $type = strtolower((string) $row['type']);
         if (isset($map[$type])) {
-            $map[$type][] = strtolower((string)$row['pattern']);
+            $map[$type][] = strtolower((string) $row['pattern']);
         }
     }
 
@@ -390,10 +391,10 @@ function lookupIpEnrichment(string $ip): array
         try {
             $asn = $readers['asn']->asn($ip);
             $result['ip_asn'] = isset($asn->autonomousSystemNumber)
-                ? (string)$asn->autonomousSystemNumber
+                ? (string) $asn->autonomousSystemNumber
                 : null;
             $result['ip_org'] = isset($asn->autonomousSystemOrganization)
-                ? (string)$asn->autonomousSystemOrganization
+                ? (string) $asn->autonomousSystemOrganization
                 : null;
         } catch (Throwable $e) {
         }
@@ -403,7 +404,7 @@ function lookupIpEnrichment(string $ip): array
         try {
             $country = $readers['country']->country($ip);
             $result['ip_country'] = isset($country->country->isoCode)
-                ? (string)$country->country->isoCode
+                ? (string) $country->country->isoCode
                 : null;
         } catch (Throwable $e) {
         }
@@ -441,7 +442,7 @@ function getLastSeenForIp(PDO $pdo, string $ip): ?int
         return null;
     }
 
-    return (int)$value;
+    return (int) $value;
 }
 
 function getRecentEventCountForIp(PDO $pdo, string $ip, int $windowSeconds = 10): int
@@ -463,7 +464,7 @@ function getRecentEventCountForIp(PDO $pdo, string $ip, int $windowSeconds = 10)
         ':cutoff_ms' => $cutoffMs,
     ]);
 
-    return (int)$stmt->fetchColumn();
+    return (int) $stmt->fetchColumn();
 }
 
 function getDistinctTokenCountForIp(PDO $pdo, string $ip, int $windowSeconds = 30): int
@@ -485,7 +486,7 @@ function getDistinctTokenCountForIp(PDO $pdo, string $ip, int $windowSeconds = 3
         ':cutoff_ms' => $cutoffMs,
     ]);
 
-    return (int)$stmt->fetchColumn();
+    return (int) $stmt->fetchColumn();
 }
 
 function getLinkByToken(PDO $pdo, string $token): ?array
@@ -576,13 +577,13 @@ function getPriorEventsForToken(PDO $pdo, string $token, ?string $visitorHash): 
         ':visitor_hash' => $visitorHash,
     ]);
 
-    return (int)$stmt->fetchColumn();
+    return (int) $stmt->fetchColumn();
 }
 
 function logClick(PDO $pdo, array $link, array $requestData): void
 {
-    $ip = (string)($requestData['ip'] ?? '');
-    $token = (string)($link['token'] ?? '');
+    $ip = (string) ($requestData['ip'] ?? '');
+    $token = (string) ($link['token'] ?? '');
     $visitorHash = $requestData['visitor_hash'] ?? null;
     $priorEventsForToken = getPriorEventsForToken($pdo, $token, is_string($visitorHash) ? $visitorHash : null);
     $firstForToken = $priorEventsForToken === 0 ? 1 : 0;
@@ -775,7 +776,7 @@ function getRecentClicksAdvancedFiltered(
     ?string $visitorFilter = null,
     bool $knownOnly = false,
     ?string $dateFrom = null,
-    ?string $dateTo = null
+    ?string $dateTo = null,
 ): array {
     $sql = "
         SELECT
@@ -790,10 +791,10 @@ function getRecentClicksAdvancedFiltered(
     $params = [];
 
     $showAll = isset($_GET['show_all']) && $_GET['show_all'] === '1';
-    $minScore = (int)getSetting($pdo, 'display_min_score', '20');
+    $minScore = (int) getSetting($pdo, 'display_min_score', '20');
     if (!$showAll && $minScore > 0) {
-    	$sql .= " AND (c.confidence_score IS NULL OR c.confidence_score >= :minScore) ";
-    	$params[':minScore'] = $minScore;
+        $sql .= " AND (c.confidence_score IS NULL OR c.confidence_score >= :minScore) ";
+        $params[':minScore'] = $minScore;
     }
 
     if ($tokenFilter !== null && $tokenFilter !== '') {
@@ -821,7 +822,7 @@ function getRecentClicksAdvancedFiltered(
     }
 
     if ($dateTo !== null && $dateTo !== '') {
-	$sql .= " AND substr(c.clicked_at, 1, 10) <= :dateTo "; 
+        $sql .= " AND substr(c.clicked_at, 1, 10) <= :dateTo ";
         $params[':dateTo'] = $dateTo;
     }
 
@@ -846,8 +847,8 @@ function getThreatFeedIps(PDO $pdo): array
         return [];
     }
 
-    $windowHours = max(1, (int)getSetting($pdo, 'threat_feed_window_hours', '168'));
-    $minConfidence = strtolower((string)getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
+    $windowHours = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
+    $minConfidence = strtolower((string) getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
 
     $allowedLabels = match ($minConfidence) {
         'bot' => ['bot'],
@@ -874,7 +875,7 @@ function getThreatFeedIps(PDO $pdo): array
 
     $params = array_merge(
         ['-' . $windowHours . ' hours'],
-        $allowedLabels
+        $allowedLabels,
     );
 
     $stmt = $pdo->prepare($sql);
@@ -882,7 +883,7 @@ function getThreatFeedIps(PDO $pdo): array
 
     $ips = [];
     foreach ($stmt->fetchAll() as $row) {
-        $ip = trim((string)($row['ip'] ?? ''));
+        $ip = trim((string) ($row['ip'] ?? ''));
         if ($ip === '') {
             continue;
         }
@@ -900,7 +901,7 @@ function exportClicksAsJson(
     bool $knownOnly = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
-    int $limit = 1000
+    int $limit = 1000,
 ): array {
     return getRecentClicksAdvancedFiltered(
         $pdo,
@@ -910,7 +911,7 @@ function exportClicksAsJson(
         $visitorFilter,
         $knownOnly,
         $dateFrom,
-        $dateTo
+        $dateTo,
     );
 }
 
@@ -950,7 +951,7 @@ function getActiveAsnPenaltyMap(PDO $pdo): array
 
     $map = [];
     foreach ($rows as $row) {
-        $map[(string)$row['asn']] = (int)$row['penalty'];
+        $map[(string) $row['asn']] = (int) $row['penalty'];
     }
 
     return $map;

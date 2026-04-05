@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 function handleAdminActions(PDO $pdo, string $path): bool
@@ -33,10 +34,10 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleCreateLink($pdo);
             return true;
 
-       case '/admin/update-link':
-	    requireAdminAuth();
-	    handleUpdateLink($pdo);
-	    return true;
+        case '/admin/update-link':
+            requireAdminAuth();
+            handleUpdateLink($pdo);
+            return true;
 
         case '/admin/delete-link':
             requireAdminAuth();
@@ -86,32 +87,32 @@ function handleAdminActions(PDO $pdo, string $path): bool
         case '/admin/delete-token-clicks':
             requireAdminAuth();
             handleDeleteTokenClicks($pdo);
-	    return true;
+            return true;
 
-	case '/admin/create-asn-rule':
-	    requireAdminAuth();
+        case '/admin/create-asn-rule':
+            requireAdminAuth();
             handleCreateAsnRule($pdo);
             return true;
 
-       case '/admin/activate-asn-rule':
-           requireAdminAuth();
-	   handleToggleAsnRule($pdo, true);
-           return true;
+        case '/admin/activate-asn-rule':
+            requireAdminAuth();
+            handleToggleAsnRule($pdo, true);
+            return true;
 
-      case '/admin/deactivate-asn-rule':
-          requireAdminAuth();
-          handleToggleAsnRule($pdo, false);
-          return true;
+        case '/admin/deactivate-asn-rule':
+            requireAdminAuth();
+            handleToggleAsnRule($pdo, false);
+            return true;
 
-      case '/admin/delete-asn-rule':
-          requireAdminAuth();
-          handleDeleteAsnRule($pdo);
-          return true;
-      
-      case '/admin/delete-ip-clicks':
-	  requireAdminAuth();
-	  handleDeleteIpClicks($pdo);
-	  return true;
+        case '/admin/delete-asn-rule':
+            requireAdminAuth();
+            handleDeleteAsnRule($pdo);
+            return true;
+
+        case '/admin/delete-ip-clicks':
+            requireAdminAuth();
+            handleDeleteIpClicks($pdo);
+            return true;
 
         default:
             return false;
@@ -120,10 +121,10 @@ function handleAdminActions(PDO $pdo, string $path): bool
 
 function handleUpdateLink(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
-    $token = trim((string)($_POST['token'] ?? ''), '/');
-    $destination = trim((string)($_POST['destination'] ?? ''));
-    $description = trim((string)($_POST['description'] ?? ''));
+    $id = (int) ($_POST['id'] ?? 0);
+    $token = trim((string) ($_POST['token'] ?? ''), '/');
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+    $description = trim((string) ($_POST['description'] ?? ''));
 
     if ($id <= 0) {
         http_response_code(400);
@@ -162,22 +163,22 @@ function handleUpdateLink(PDO $pdo): void
 
 function handleSaveSettings(PDO $pdo): void
 {
-    $appNameInput = trim((string)($_POST['app_name'] ?? 'SignalTrace'));
-    $baseUrlInput = trim((string)($_POST['base_url'] ?? ''));
-    $defaultRedirectUrlInput = trim((string)($_POST['default_redirect_url'] ?? ''));
-    $unknownPathBehaviorInput = trim((string)($_POST['unknown_path_behavior'] ?? 'redirect'));
+    $appNameInput = trim((string) ($_POST['app_name'] ?? 'SignalTrace'));
+    $baseUrlInput = trim((string) ($_POST['base_url'] ?? ''));
+    $defaultRedirectUrlInput = trim((string) ($_POST['default_redirect_url'] ?? ''));
+    $unknownPathBehaviorInput = trim((string) ($_POST['unknown_path_behavior'] ?? 'redirect'));
     $pixelEnabledInput = isset($_POST['pixel_enabled']) ? '1' : '0';
     $noiseFilterEnabledInput = isset($_POST['noise_filter_enabled']) ? '1' : '0';
 
-    $displayMinScoreInput = trim((string)($_POST['display_min_score'] ?? '20'));
+    $displayMinScoreInput = trim((string) ($_POST['display_min_score'] ?? '20'));
 
     if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
-	    http_response_code(400);
-	    echo 'Display minimum score must be numeric.';
-	    exit;
+        http_response_code(400);
+        echo 'Display minimum score must be numeric.';
+        exit;
     }
-    
-    $displayMinScoreInput = (string)max(0, min(100, (int)$displayMinScoreInput));
+
+    $displayMinScoreInput = (string) max(0, min(100, (int) $displayMinScoreInput));
 
     if ($appNameInput === '') {
         http_response_code(400);
@@ -218,8 +219,8 @@ function handleSaveSettings(PDO $pdo): void
 function handleSaveThreatFeedSettings(PDO $pdo): void
 {
     $enabledInput = isset($_POST['threat_feed_enabled']) ? '1' : '0';
-    $windowHoursInput = max(1, (int)($_POST['threat_feed_window_hours'] ?? 168));
-    $minConfidenceInput = strtolower(trim((string)($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
+    $windowHoursInput = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
+    $minConfidenceInput = strtolower(trim((string) ($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
 
     if (!in_array($minConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
         http_response_code(400);
@@ -228,7 +229,7 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
     }
 
     setSetting($pdo, 'threat_feed_enabled', $enabledInput);
-    setSetting($pdo, 'threat_feed_window_hours', (string)$windowHoursInput);
+    setSetting($pdo, 'threat_feed_window_hours', (string) $windowHoursInput);
     setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
 
     header('Location: /admin', true, 302);
@@ -237,9 +238,9 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
 
 function handleSaveRetentionSettings(PDO $pdo): void
 {
-    $retentionDaysInput = max(0, (int)($_POST['data_retention_days'] ?? 0));
+    $retentionDaysInput = max(0, (int) ($_POST['data_retention_days'] ?? 0));
 
-    setSetting($pdo, 'data_retention_days', (string)$retentionDaysInput);
+    setSetting($pdo, 'data_retention_days', (string) $retentionDaysInput);
 
     header('Location: /admin', true, 302);
     exit;
@@ -247,7 +248,7 @@ function handleSaveRetentionSettings(PDO $pdo): void
 
 function handleRunCleanup(PDO $pdo): void
 {
-    $days = (int)getSetting($pdo, 'data_retention_days', '0');
+    $days = (int) getSetting($pdo, 'data_retention_days', '0');
 
     if ($days <= 0) {
         header('Location: /admin', true, 302);
@@ -262,9 +263,9 @@ function handleRunCleanup(PDO $pdo): void
 
 function handleCreateLink(PDO $pdo): void
 {
-    $token = trim((string)($_POST['token'] ?? ''), '/');
-    $destination = trim((string)($_POST['destination'] ?? ''));
-    $description = trim((string)($_POST['description'] ?? ''));
+    $token = trim((string) ($_POST['token'] ?? ''), '/');
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+    $description = trim((string) ($_POST['description'] ?? ''));
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -297,7 +298,7 @@ function handleCreateLink(PDO $pdo): void
 
 function handleDeleteLink(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
     $deleteClicks = isset($_POST['delete_clicks']) && $_POST['delete_clicks'] === '1';
 
     if ($id <= 0) {
@@ -313,7 +314,7 @@ function handleDeleteLink(PDO $pdo): void
 
 function handleDeactivateLink(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -328,7 +329,7 @@ function handleDeactivateLink(PDO $pdo): void
 
 function handleActivateLink(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -343,8 +344,8 @@ function handleActivateLink(PDO $pdo): void
 
 function handleCreateSkipPattern(PDO $pdo): void
 {
-    $type = strtolower(trim((string)($_POST['type'] ?? '')));
-    $pattern = strtolower(trim((string)($_POST['pattern'] ?? '')));
+    $type = strtolower(trim((string) ($_POST['type'] ?? '')));
+    $pattern = strtolower(trim((string) ($_POST['pattern'] ?? '')));
 
     if (!in_array($type, ['exact', 'contains', 'prefix'], true)) {
         http_response_code(400);
@@ -365,8 +366,8 @@ function handleCreateSkipPattern(PDO $pdo): void
 
 function handleAddTokenToSkip(PDO $pdo): void
 {
-    $token = strtolower(trim((string)($_POST['token'] ?? '')));
-    $redirectToken = trim((string)($_POST['redirect_token'] ?? $token));
+    $token = strtolower(trim((string) ($_POST['token'] ?? '')));
+    $redirectToken = trim((string) ($_POST['redirect_token'] ?? $token));
 
     if ($token === '') {
         http_response_code(400);
@@ -386,7 +387,7 @@ function handleAddTokenToSkip(PDO $pdo): void
 
 function handleDeleteSkipPattern(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -401,7 +402,7 @@ function handleDeleteSkipPattern(PDO $pdo): void
 
 function handleToggleSkipPattern(PDO $pdo, bool $active): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -416,7 +417,7 @@ function handleToggleSkipPattern(PDO $pdo, bool $active): void
 
 function handleDeleteClick(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -433,8 +434,8 @@ function handleDeleteClick(PDO $pdo): void
 
 function handleDeleteTokenClicks(PDO $pdo): void
 {
-    $token = trim((string)($_POST['token'] ?? ''));
-    $mode = trim((string)($_POST['mode'] ?? 'unknown_only'));
+    $token = trim((string) ($_POST['token'] ?? ''));
+    $mode = trim((string) ($_POST['mode'] ?? 'unknown_only'));
 
     if ($token === '') {
         http_response_code(400);
@@ -469,9 +470,9 @@ function handleDeleteTokenClicks(PDO $pdo): void
 
 function handleCreateAsnRule(PDO $pdo): void
 {
-    $asn = trim((string)($_POST['asn'] ?? ''));
-    $label = trim((string)($_POST['label'] ?? ''));
-    $penalty = (int)($_POST['penalty'] ?? 10);
+    $asn = trim((string) ($_POST['asn'] ?? ''));
+    $label = trim((string) ($_POST['label'] ?? ''));
+    $penalty = (int) ($_POST['penalty'] ?? 10);
 
     if ($asn === '' || !ctype_digit($asn)) {
         http_response_code(400);
@@ -494,7 +495,7 @@ function handleCreateAsnRule(PDO $pdo): void
 
 function handleToggleAsnRule(PDO $pdo, bool $active): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -509,7 +510,7 @@ function handleToggleAsnRule(PDO $pdo, bool $active): void
 
 function handleDeleteAsnRule(PDO $pdo): void
 {
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -524,8 +525,8 @@ function handleDeleteAsnRule(PDO $pdo): void
 
 function handleDeleteIpClicks(PDO $pdo): void
 {
-    $ip = trim((string)($_POST['ip'] ?? ''));
-    $mode = trim((string)($_POST['mode'] ?? 'unknown_only'));
+    $ip = trim((string) ($_POST['ip'] ?? ''));
+    $mode = trim((string) ($_POST['mode'] ?? 'unknown_only'));
 
     if ($ip === '') {
         http_response_code(400);

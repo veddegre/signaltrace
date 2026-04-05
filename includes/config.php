@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 const DB_PATH = __DIR__ . '/../data/database.db';
@@ -16,9 +17,9 @@ if (!is_file($localConfig)) {
 require $localConfig;
 
 if (
-    !defined('VISITOR_HASH_SALT') || VISITOR_HASH_SALT === '' ||
-    !defined('ADMIN_USERNAME') || ADMIN_USERNAME === '' ||
-    !defined('ADMIN_PASSWORD_HASH') || ADMIN_PASSWORD_HASH === ''
+    !defined('VISITOR_HASH_SALT') || VISITOR_HASH_SALT === ''
+    || !defined('ADMIN_USERNAME') || ADMIN_USERNAME === ''
+    || !defined('ADMIN_PASSWORD_HASH') || ADMIN_PASSWORD_HASH === ''
 ) {
     http_response_code(500);
     exit('SignalTrace is not configured. Required config values are missing.');
