@@ -126,7 +126,35 @@ Generate a visitor salt:
 openssl rand -hex 64
 ```
 
-Optional settings are documented in `config.local.php.example` and include the login rate limiting thresholds, reverse proxy trust, and the export API token.
+Optional settings are documented in `config.local.php.example`. The most important ones:
+
+```php
+// How many failed login attempts are allowed before an IP is locked out.
+// Defaults to 5.
+define('AUTH_MAX_FAILURES', 5);
+
+// How long a lockout lasts in seconds. Defaults to 900 (15 minutes).
+define('AUTH_LOCKOUT_SECS', 900);
+
+// Set this to your reverse proxy's IP address if SignalTrace is behind
+// nginx, a load balancer, or similar. When set, X-Forwarded-For is trusted
+// only from that IP, and the rightmost entry in the header is used as the
+// real client IP. Leave blank if SignalTrace connects directly to the internet.
+define('TRUSTED_PROXY_IP', '');
+
+// Your site's own domain (e.g. 'example.com'). When set, requests that
+// arrive at the root path with your domain in the Referer header receive
+// a small score penalty. Helps catch internal scanner traffic.
+// Leave blank to disable.
+define('SELF_REFERER_DOMAIN', '');
+
+// A static token for authenticating export requests from Splunk or other
+// automation tools. When set, requests can authenticate with an
+// Authorization: Bearer header instead of HTTP Basic Auth.
+// Generate with: openssl rand -hex 32
+// Leave blank to require admin credentials for all export access.
+define('EXPORT_API_TOKEN', '');
+```
 
 ---
 
