@@ -389,7 +389,7 @@ function calculateConfidence(PDO $pdo, array $requestData): array
         ? strtolower(SELF_REFERER_DOMAIN) : '';
 
     if ($selfDomain !== '' && $referer !== '' && str_contains(strtolower($referer), $selfDomain) && $path === '/') {
-        $score -= 8; $reasons[] = 'self_referer_root';
+        $score -= 15; $reasons[] = 'self_referer_root';
     }
 
     $hostingSignals = [
@@ -406,7 +406,7 @@ function calculateConfidence(PDO $pdo, array $requestData): array
         'm247', 'combahton', 'heficed', 'datacamp',
         // Generic keywords — specific enough to avoid corporate proxy false positives
         'datacenter', 'data center', 'colocation', 'colo',
-        'dedicated server', 'server farm',
+        'dedicated server', 'server farm', 'idc',
     ];
     foreach ($hostingSignals as $signal) {
         if ($org !== '' && str_contains($org, $signal)) {

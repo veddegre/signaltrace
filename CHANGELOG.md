@@ -2,11 +2,25 @@
 
 ---
 
+## [2.1.2] — 2026
+
+### Scoring
+
+`self_referer_root` penalty increased from -8 to -15. A request arriving at `/` with your own domain as the Referer is a stronger signal of programmatic traffic than the previous penalty reflected — real browsers navigating fresh to a site don't produce this pattern.
+
+`idc` added to the hosting provider signal list. Internet Data Center is a common suffix in Chinese carrier org names (e.g. "IDC, China Telecommunications Corporation") that was previously slipping past the datacenter keyword matching.
+
+---
+
 ## [2.1.1] — 2026
 
 ### Scoring
 
 Classification thresholds were tightened. The likely-human band was narrowed from 45–74 to 60–74, the suspicious band widened from 20–44 to 25–59, and the bot threshold raised from below 20 to below 25. In practice this means borderline requests that previously received a likely-human label — correct Sec-Fetch headers but missing Accept-Language or Client Hints, or coming from backbone/transit infrastructure — now score as suspicious, which is a more honest assessment of the uncertainty.
+
+`idc` was added to the hosting provider signal keyword list. Chinese and Asian datacenter operators commonly include "IDC" (Internet Data Center) in their org names — this was previously not caught by the existing keyword set, allowing traffic from Chinese datacenter infrastructure to avoid the hosting provider penalty.
+
+The `self_referer_root` penalty was increased from -8 to -15. A request arriving at `/` with your own domain in the Referer header is a reliable indicator of programmatically constructed traffic — a real browser navigating fresh to a page doesn't produce this pattern. The previous penalty was too light to meaningfully affect the classification of requests that otherwise had plausible browser headers.
 
 ### Splunk Dashboard
 
@@ -195,4 +209,3 @@ Table column headers were shifted downward into the first data row due to `posit
 ## [1.0.0] — Initial Release
 
 Custom token tracking with redirect support, full request logging, visitor fingerprinting, tracking pixel support, confidence scoring across four labels, bot signature detection, path-based risk detection, behavioral detection (rapid repeat, burst, multi-token scan), ASN-based scoring rules, skip patterns for noise filtering, admin dashboard with filtering and cleanup tools, threat feed at `/feed/ips.txt`, JSON export, GeoIP enrichment via MaxMind, SQLite backend, HTTP Basic Auth admin.
-
