@@ -1,383 +1,605 @@
 {
-  "title": "SignalTrace Security Overview",
-  "description": "Detailed Dashboard Studio dashboard for SignalTrace data in index=security sourcetype=signaltrace.",
-  "defaults": {
-    "dataSources": {
-      "ds.search": {
-        "options": {
-          "queryParameters": {
-            "earliest": "$global_time.earliest$",
-            "latest": "$global_time.latest$"
-          }
+    "title": "SignalTrace Security Overview",
+    "description": "",
+    "inputs": {
+        "input_global_time": {
+            "options": {
+                "defaultValue": "-24h@h,now",
+                "token": "global_time"
+            },
+            "title": "Time Range",
+            "type": "input.timerange"
         }
-      }
+    },
+    "defaults": {
+        "dataSources": {
+            "ds.search": {
+                "options": {
+                    "queryParameters": {
+                        "earliest": "$global_time.earliest$",
+                        "latest": "$global_time.latest$"
+                    }
+                }
+            }
+        }
+    },
+    "visualizations": {
+        "viz_avg_confidence": {
+            "dataSources": {
+                "primary": "ds_avg_confidence"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "majorColor": "#06b6d4",
+                "showSparklineAreaGraph": false,
+                "trendDisplay": "off",
+                "underLabel": "Avg confidence score"
+            },
+            "title": "Avg Confidence Score",
+            "type": "splunk.singlevalue"
+        },
+        "viz_bot_by_country": {
+            "dataSources": {
+                "primary": "ds_bot_by_country"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#ef4444",
+                    "#f97316",
+                    "#eab308"
+                ]
+            },
+            "title": "Bot Traffic by Country",
+            "type": "splunk.bar"
+        },
+        "viz_bot_count": {
+            "dataSources": {
+                "primary": "ds_bot_count"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "majorColor": "#ef4444",
+                "showSparklineAreaGraph": true,
+                "showSparklineTooltip": true,
+                "sparklineAreaColor": "#ef4444",
+                "sparklineDisplay": "below",
+                "sparklineStrokeColor": "#ef4444",
+                "trendColor": "#fca5a5",
+                "trendDisplay": "absolute",
+                "underLabel": "Bot-classified hits"
+            },
+            "title": "Bot Events",
+            "type": "splunk.singlevalue"
+        },
+        "viz_bot_pct": {
+            "dataSources": {
+                "primary": "ds_bot_pct"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "majorColor": "#f59e0b",
+                "numberPrecision": 1,
+                "trendColor": "#fcd34d",
+                "trendDisplay": "off",
+                "underLabel": "Classified as bot",
+                "unit": "%",
+                "unitPosition": "after"
+            },
+            "title": "Bot %",
+            "type": "splunk.singlevalue"
+        },
+        "viz_confidence_mix": {
+            "dataSources": {
+                "primary": "ds_confidence_mix"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "collapseLabel": "other",
+                "collapseThreshold": 0.02,
+                "seriesColors": [
+                    "#ef4444",
+                    "#f59e0b",
+                    "#38bdf8",
+                    "#22c55e"
+                ]
+            },
+            "title": "Confidence Label Distribution",
+            "type": "splunk.pie"
+        },
+        "viz_confidence_reasons": {
+            "dataSources": {
+                "primary": "ds_confidence_reasons"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#a78bfa",
+                    "#38bdf8",
+                    "#22c55e",
+                    "#f59e0b",
+                    "#ef4444"
+                ]
+            },
+            "title": "Top Detection Signals",
+            "type": "splunk.bar"
+        },
+        "viz_events_over_time": {
+            "dataSources": {
+                "primary": "ds_events_over_time"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "dataValuesDisplay": "off",
+                "seriesColors": [
+                    "#ef4444",
+                    "#f59e0b",
+                    "#38bdf8",
+                    "#22c55e"
+                ]
+            },
+            "title": "Events Over Time by Confidence Label",
+            "type": "splunk.line"
+        },
+        "viz_recent_events": {
+            "dataSources": {
+                "primary": "ds_recent_events"
+            },
+            "options": {
+                "backgroundColor": "#111827"
+            },
+            "title": "Recent Events",
+            "type": "splunk.table"
+        },
+        "viz_top_bot_tokens": {
+            "dataSources": {
+                "primary": "ds_top_bot_tokens"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#ef4444",
+                    "#f97316",
+                    "#eab308",
+                    "#a855f7"
+                ]
+            },
+            "title": "Top Bot-Classified Tokens",
+            "type": "splunk.bar"
+        },
+        "viz_top_countries": {
+            "dataSources": {
+                "primary": "ds_top_countries"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#22c55e",
+                    "#06b6d4",
+                    "#3b82f6",
+                    "#8b5cf6"
+                ]
+            },
+            "title": "Top Countries",
+            "type": "splunk.bar"
+        },
+        "viz_top_ips": {
+            "dataSources": {
+                "primary": "ds_top_ips"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#38bdf8",
+                    "#6366f1",
+                    "#8b5cf6",
+                    "#ec4899"
+                ]
+            },
+            "title": "Top Source IPs",
+            "type": "splunk.bar"
+        },
+        "viz_top_orgs": {
+            "dataSources": {
+                "primary": "ds_top_orgs"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#14b8a6",
+                    "#22c55e",
+                    "#84cc16",
+                    "#eab308"
+                ]
+            },
+            "title": "Top ASN Organizations",
+            "type": "splunk.bar"
+        },
+        "viz_top_tokens": {
+            "dataSources": {
+                "primary": "ds_top_tokens"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "seriesColors": [
+                    "#8b5cf6",
+                    "#ec4899",
+                    "#f43f5e",
+                    "#f97316"
+                ]
+            },
+            "title": "Top Tokens / Paths",
+            "type": "splunk.bar"
+        },
+        "viz_total_events": {
+            "dataSources": {
+                "primary": "ds_total_events"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "majorColor": "#38bdf8",
+                "showSparklineAreaGraph": true,
+                "showSparklineTooltip": true,
+                "sparklineAreaColor": "#38bdf8",
+                "sparklineDisplay": "below",
+                "sparklineStrokeColor": "#38bdf8",
+                "trendColor": "#93c5fd",
+                "trendDisplay": "absolute",
+                "underLabel": "All SignalTrace events"
+            },
+            "title": "Total Events",
+            "type": "splunk.singlevalue"
+        },
+        "viz_unique_ips": {
+            "dataSources": {
+                "primary": "ds_unique_ips"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "majorColor": "#22c55e",
+                "showSparklineAreaGraph": true,
+                "showSparklineTooltip": true,
+                "sparklineAreaColor": "#22c55e",
+                "sparklineDisplay": "below",
+                "sparklineStrokeColor": "#22c55e",
+                "trendColor": "#86efac",
+                "trendDisplay": "absolute",
+                "underLabel": "Distinct source IPs"
+            },
+            "title": "Unique IPs",
+            "type": "splunk.singlevalue"
+        },
+        "viz_unique_tokens": {
+            "dataSources": {
+                "primary": "ds_unique_tokens"
+            },
+            "options": {
+                "backgroundColor": "#111827",
+                "majorColor": "#a78bfa",
+                "showSparklineAreaGraph": true,
+                "showSparklineTooltip": true,
+                "sparklineAreaColor": "#a78bfa",
+                "sparklineDisplay": "below",
+                "sparklineStrokeColor": "#a78bfa",
+                "trendColor": "#c4b5fd",
+                "trendDisplay": "absolute",
+                "underLabel": "Distinct paths / tokens"
+            },
+            "title": "Unique Tokens",
+            "type": "splunk.singlevalue"
+        }
+    },
+    "dataSources": {
+        "ds_avg_confidence": {
+            "name": "Average Confidence Score",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | stats avg(confidence_score) as avg_confidence | eval avg_confidence=round(avg_confidence,2)"
+            },
+            "type": "ds.search"
+        },
+        "ds_bot_by_country": {
+            "name": "Bot Traffic by Country",
+            "options": {
+                "query": "index=security sourcetype=signaltrace confidence_label=bot | eval ip_country=coalesce(ip_country,\"unknown\") | stats count by ip_country | sort - count | head 15"
+            },
+            "type": "ds.search"
+        },
+        "ds_bot_count": {
+            "name": "Bot Count",
+            "options": {
+                "query": "index=security sourcetype=signaltrace confidence_label=bot | timechart span=15m count as bot_events | table bot_events _time"
+            },
+            "type": "ds.search"
+        },
+        "ds_bot_pct": {
+            "name": "Bot Percent",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | stats count as total, count(eval(confidence_label=\"bot\" OR is_bot=1)) as bot_count | eval bot_pct=round((bot_count/total)*100,1) | table bot_pct"
+            },
+            "type": "ds.search"
+        },
+        "ds_confidence_mix": {
+            "name": "Confidence Mix",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | eval confidence_label=coalesce(confidence_label,\"unknown\") | stats count by confidence_label | sort - count"
+            },
+            "type": "ds.search"
+        },
+        "ds_confidence_reasons": {
+            "name": "Confidence Reasons",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | makemv delim=\", \" confidence_reason | mvexpand confidence_reason | eval confidence_reason=coalesce(confidence_reason,\"unknown\") | stats count by confidence_reason | sort - count | head 15"
+            },
+            "type": "ds.search"
+        },
+        "ds_events_over_time": {
+            "name": "Events Over Time",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | eval confidence_label=coalesce(confidence_label,\"unknown\") | timechart span=15m count by confidence_label limit=10 useother=f"
+            },
+            "type": "ds.search"
+        },
+        "ds_recent_events": {
+            "name": "Recent Events",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | eval ip_country=coalesce(ip_country,\"unknown\"), ip_org=coalesce(ip_org,\"unknown\"), request_uri=coalesce(request_uri,\"\"), user_agent=coalesce(user_agent,\"\") | sort - clicked_at | table clicked_at id ip ip_country ip_org confidence_label confidence_score token request_uri event_type request_method user_agent | head 50"
+            },
+            "type": "ds.search"
+        },
+        "ds_top_bot_tokens": {
+            "name": "Top Bot Tokens",
+            "options": {
+                "query": "index=security sourcetype=signaltrace confidence_label=bot | eval token=coalesce(token,\"(null)\") | stats count by token | sort - count | head 10"
+            },
+            "type": "ds.search"
+        },
+        "ds_top_countries": {
+            "name": "Top Countries",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | eval ip_country=coalesce(ip_country,\"unknown\") | stats count by ip_country | sort - count | head 10"
+            },
+            "type": "ds.search"
+        },
+        "ds_top_ips": {
+            "name": "Top IPs",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | stats count by ip | sort - count | head 10"
+            },
+            "type": "ds.search"
+        },
+        "ds_top_orgs": {
+            "name": "Top Organizations",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | eval ip_org=coalesce(ip_org,\"unknown\") | stats count by ip_org | sort - count | head 10"
+            },
+            "type": "ds.search"
+        },
+        "ds_top_tokens": {
+            "name": "Top Tokens",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | eval token=coalesce(token,\"(null)\") | stats count by token | sort - count | head 10"
+            },
+            "type": "ds.search"
+        },
+        "ds_total_events": {
+            "name": "Total Events",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | timechart span=15m count as total | table total _time"
+            },
+            "type": "ds.search"
+        },
+        "ds_unique_ips": {
+            "name": "Unique IPs",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | timechart span=15m dc(ip) as unique_ips | table unique_ips _time"
+            },
+            "type": "ds.search"
+        },
+        "ds_unique_tokens": {
+            "name": "Unique Tokens",
+            "options": {
+                "query": "index=security sourcetype=signaltrace | timechart span=15m dc(token) as unique_tokens | table unique_tokens _time"
+            },
+            "type": "ds.search"
+        }
+    },
+    "layout": {
+        "globalInputs": [
+            "input_global_time"
+        ],
+        "layoutDefinitions": {
+            "layout_events": {
+                "options": {
+                    "display": "auto-scale",
+                    "height": 1080,
+                    "width": 1920
+                },
+                "structure": [
+                    {
+                        "item": "viz_recent_events",
+                        "position": {
+                            "h": 1020,
+                            "w": 1880,
+                            "x": 20,
+                            "y": 20
+                        },
+                        "type": "block"
+                    }
+                ],
+                "type": "absolute"
+            },
+            "layout_overview": {
+                "options": {
+                    "display": "auto-scale",
+                    "height": 1080,
+                    "width": 1920
+                },
+                "structure": [
+                    {
+                        "item": "viz_total_events",
+                        "position": {
+                            "h": 100,
+                            "w": 290,
+                            "x": 20,
+                            "y": 20
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_unique_ips",
+                        "position": {
+                            "h": 100,
+                            "w": 290,
+                            "x": 320,
+                            "y": 20
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_unique_tokens",
+                        "position": {
+                            "h": 100,
+                            "w": 290,
+                            "x": 620,
+                            "y": 20
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_bot_pct",
+                        "position": {
+                            "h": 100,
+                            "w": 290,
+                            "x": 920,
+                            "y": 20
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_avg_confidence",
+                        "position": {
+                            "h": 100,
+                            "w": 290,
+                            "x": 1220,
+                            "y": 20
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_bot_count",
+                        "position": {
+                            "h": 100,
+                            "w": 290,
+                            "x": 1520,
+                            "y": 20
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_events_over_time",
+                        "position": {
+                            "h": 260,
+                            "w": 1360,
+                            "x": 20,
+                            "y": 140
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_confidence_mix",
+                        "position": {
+                            "h": 260,
+                            "w": 510,
+                            "x": 1390,
+                            "y": 140
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_top_ips",
+                        "position": {
+                            "h": 230,
+                            "w": 590,
+                            "x": 20,
+                            "y": 420
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_top_countries",
+                        "position": {
+                            "h": 230,
+                            "w": 590,
+                            "x": 630,
+                            "y": 420
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_top_orgs",
+                        "position": {
+                            "h": 230,
+                            "w": 670,
+                            "x": 1240,
+                            "y": 420
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_top_tokens",
+                        "position": {
+                            "h": 230,
+                            "w": 890,
+                            "x": 20,
+                            "y": 670
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_top_bot_tokens",
+                        "position": {
+                            "h": 230,
+                            "w": 890,
+                            "x": 930,
+                            "y": 670
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_confidence_reasons",
+                        "position": {
+                            "h": 230,
+                            "w": 1080,
+                            "x": 20,
+                            "y": 920
+                        },
+                        "type": "block"
+                    },
+                    {
+                        "item": "viz_bot_by_country",
+                        "position": {
+                            "h": 230,
+                            "w": 780,
+                            "x": 1120,
+                            "y": 920
+                        },
+                        "type": "block"
+                    }
+                ],
+                "type": "absolute"
+            }
+        },
+        "tabs": {
+            "items": [
+                {
+                    "label": "Overview",
+                    "layoutId": "layout_overview"
+                },
+                {
+                    "label": "Recent Events",
+                    "layoutId": "layout_events"
+                }
+            ]
+        }
     }
-  },
-  "inputs": {
-    "input_global_time": {
-      "type": "input.timerange",
-      "title": "Time Range",
-      "options": {
-        "token": "global_time",
-        "defaultValue": "-24h@h,now"
-      }
-    }
-  },
-  "visualizations": {
-    "viz_total_events": {
-      "type": "splunk.singlevalue",
-      "title": "Total Events",
-      "dataSources": { "primary": "ds_total_events" }
-    },
-    "viz_unique_ips": {
-      "type": "splunk.singlevalue",
-      "title": "Unique IPs",
-      "dataSources": { "primary": "ds_unique_ips" }
-    },
-    "viz_unique_tokens": {
-      "type": "splunk.singlevalue",
-      "title": "Unique Tokens",
-      "dataSources": { "primary": "ds_unique_tokens" }
-    },
-    "viz_bot_pct": {
-      "type": "splunk.singlevalue",
-      "title": "Bot %",
-      "dataSources": { "primary": "ds_bot_pct" }
-    },
-    "viz_avg_confidence": {
-      "type": "splunk.singlevalue",
-      "title": "Avg Confidence Score",
-      "dataSources": { "primary": "ds_avg_confidence" }
-    },
-    "viz_high_confidence_events": {
-      "type": "splunk.singlevalue",
-      "title": "High Confidence Events (>=10)",
-      "dataSources": { "primary": "ds_high_confidence_events" }
-    },
-    "viz_events_over_time": {
-      "type": "splunk.line",
-      "title": "Events Over Time by Confidence Label",
-      "dataSources": { "primary": "ds_events_over_time" }
-    },
-    "viz_confidence_mix": {
-      "type": "splunk.pie",
-      "title": "Confidence Label Distribution",
-      "dataSources": { "primary": "ds_confidence_mix" }
-    },
-    "viz_event_type_mix": {
-      "type": "splunk.pie",
-      "title": "Event Type Distribution",
-      "dataSources": { "primary": "ds_event_type_mix" }
-    },
-    "viz_top_ips": {
-      "type": "splunk.bar",
-      "title": "Top Source IPs",
-      "dataSources": { "primary": "ds_top_ips" }
-    },
-    "viz_top_countries": {
-      "type": "splunk.bar",
-      "title": "Top Countries",
-      "dataSources": { "primary": "ds_top_countries" }
-    },
-    "viz_top_orgs": {
-      "type": "splunk.bar",
-      "title": "Top ASN Organizations",
-      "dataSources": { "primary": "ds_top_orgs" }
-    },
-    "viz_top_tokens": {
-      "type": "splunk.bar",
-      "title": "Top Tokens / Paths",
-      "dataSources": { "primary": "ds_top_tokens" }
-    },
-    "viz_top_bot_tokens": {
-      "type": "splunk.bar",
-      "title": "Top Bot-Classified Tokens",
-      "dataSources": { "primary": "ds_top_bot_tokens" }
-    },
-    "viz_confidence_reasons": {
-      "type": "splunk.bar",
-      "title": "Top Confidence Reasons",
-      "dataSources": { "primary": "ds_confidence_reasons" }
-    },
-    "viz_request_methods": {
-      "type": "splunk.column",
-      "title": "Request Methods",
-      "dataSources": { "primary": "ds_request_methods" }
-    },
-    "viz_ip_daily_uniques": {
-      "type": "splunk.line",
-      "title": "Daily Unique IPs",
-      "dataSources": { "primary": "ds_ip_daily_uniques" }
-    },
-    "viz_avg_confidence_over_time": {
-      "type": "splunk.line",
-      "title": "Average Confidence Over Time",
-      "dataSources": { "primary": "ds_avg_confidence_over_time" }
-    },
-    "viz_suspicious_or_human": {
-      "type": "splunk.bar",
-      "title": "Likely-Human / Human / Suspicious by Country",
-      "dataSources": { "primary": "ds_suspicious_or_human" }
-    },
-    "viz_recent_events": {
-      "type": "splunk.table",
-      "title": "Recent Events",
-      "dataSources": { "primary": "ds_recent_events" }
-    }
-  },
-  "dataSources": {
-    "ds_total_events": {
-      "type": "ds.search",
-      "name": "Total Events",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | stats count as total"
-      }
-    },
-    "ds_unique_ips": {
-      "type": "ds.search",
-      "name": "Unique IPs",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | stats dc(ip) as unique_ips"
-      }
-    },
-    "ds_unique_tokens": {
-      "type": "ds.search",
-      "name": "Unique Tokens",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | stats dc(token) as unique_tokens"
-      }
-    },
-    "ds_bot_pct": {
-      "type": "ds.search",
-      "name": "Bot Percent",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval is_bot_norm=if(confidence_label=\"bot\" OR is_bot=1,1,0) | stats count as total sum(is_bot_norm) as bots | eval bot_pct=round((bots/total)*100,2) | fields bot_pct"
-      }
-    },
-    "ds_avg_confidence": {
-      "type": "ds.search",
-      "name": "Average Confidence Score",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | stats avg(confidence_score) as avg_confidence | eval avg_confidence=round(avg_confidence,2)"
-      }
-    },
-    "ds_high_confidence_events": {
-      "type": "ds.search",
-      "name": "High Confidence Events",
-      "options": {
-        "query": "index=security sourcetype=signaltrace confidence_score>=10 | stats count as high_confidence_events"
-      }
-    },
-    "ds_events_over_time": {
-      "type": "ds.search",
-      "name": "Events Over Time",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval confidence_label=coalesce(confidence_label,\"unknown\") | timechart span=15m count by confidence_label limit=10 useother=f"
-      }
-    },
-    "ds_confidence_mix": {
-      "type": "ds.search",
-      "name": "Confidence Mix",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval confidence_label=coalesce(confidence_label,\"unknown\") | stats count by confidence_label | sort - count"
-      }
-    },
-    "ds_event_type_mix": {
-      "type": "ds.search",
-      "name": "Event Type Mix",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval event_type=coalesce(event_type,\"unknown\") | stats count by event_type | sort - count"
-      }
-    },
-    "ds_top_ips": {
-      "type": "ds.search",
-      "name": "Top IPs",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | stats count by ip | sort - count | head 15"
-      }
-    },
-    "ds_top_countries": {
-      "type": "ds.search",
-      "name": "Top Countries",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval ip_country=coalesce(ip_country,\"unknown\") | stats count by ip_country | sort - count | head 15"
-      }
-    },
-    "ds_top_orgs": {
-      "type": "ds.search",
-      "name": "Top Organizations",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval ip_org=coalesce(ip_org,\"unknown\") | stats count by ip_org | sort - count | head 15"
-      }
-    },
-    "ds_top_tokens": {
-      "type": "ds.search",
-      "name": "Top Tokens",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval token=coalesce(token,\"(null)\") | stats count by token | sort - count | head 15"
-      }
-    },
-    "ds_top_bot_tokens": {
-      "type": "ds.search",
-      "name": "Top Bot Tokens",
-      "options": {
-        "query": "index=security sourcetype=signaltrace confidence_label=bot | eval token=coalesce(token,\"(null)\") | stats count by token | sort - count | head 15"
-      }
-    },
-    "ds_confidence_reasons": {
-      "type": "ds.search",
-      "name": "Confidence Reasons",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | makemv delim=\", \" confidence_reason | mvexpand confidence_reason | eval confidence_reason=coalesce(confidence_reason,\"unknown\") | stats count by confidence_reason | sort - count | head 20"
-      }
-    },
-    "ds_request_methods": {
-      "type": "ds.search",
-      "name": "Request Methods",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval request_method=coalesce(request_method,\"unknown\") | stats count by request_method | sort - count"
-      }
-    },
-    "ds_ip_daily_uniques": {
-      "type": "ds.search",
-      "name": "Daily Unique IPs",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | timechart span=1d dc(ip) as unique_ips"
-      }
-    },
-    "ds_avg_confidence_over_time": {
-      "type": "ds.search",
-      "name": "Average Confidence Over Time",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | where isnotnull(confidence_score) | timechart span=1h avg(confidence_score) as avg_confidence"
-      }
-    },
-    "ds_suspicious_or_human": {
-      "type": "ds.search",
-      "name": "Likely Human and Suspicious by Country",
-      "options": {
-        "query": "index=security sourcetype=signaltrace (confidence_label=\"human\" OR confidence_label=\"likely-human\" OR confidence_label=\"suspicious\") | eval ip_country=coalesce(ip_country,\"unknown\") | stats count by ip_country confidence_label | sort - count | head 20"
-      }
-    },
-    "ds_recent_events": {
-      "type": "ds.search",
-      "name": "Recent Events",
-      "options": {
-        "query": "index=security sourcetype=signaltrace | eval ip_country=coalesce(ip_country,\"unknown\"), ip_org=coalesce(ip_org,\"unknown\"), request_uri=coalesce(request_uri,\"\"), user_agent=coalesce(user_agent,\"\") | sort - clicked_at | table clicked_at id ip ip_country ip_org confidence_label confidence_score token request_uri event_type request_method user_agent | head 50"
-      }
-    }
-  },
-  "layout": {
-    "type": "absolute",
-    "globalInputs": [
-      "input_global_time"
-    ],
-    "options": {
-      "width": 1600,
-      "height": 2500,
-      "display": "auto-scale"
-    },
-    "structure": [
-      {
-        "item": "viz_total_events",
-        "type": "block",
-        "position": { "x": 20, "y": 20, "w": 240, "h": 120 }
-      },
-      {
-        "item": "viz_unique_ips",
-        "type": "block",
-        "position": { "x": 280, "y": 20, "w": 240, "h": 120 }
-      },
-      {
-        "item": "viz_unique_tokens",
-        "type": "block",
-        "position": { "x": 540, "y": 20, "w": 240, "h": 120 }
-      },
-      {
-        "item": "viz_bot_pct",
-        "type": "block",
-        "position": { "x": 800, "y": 20, "w": 240, "h": 120 }
-      },
-      {
-        "item": "viz_avg_confidence",
-        "type": "block",
-        "position": { "x": 1060, "y": 20, "w": 240, "h": 120 }
-      },
-      {
-        "item": "viz_high_confidence_events",
-        "type": "block",
-        "position": { "x": 1320, "y": 20, "w": 260, "h": 120 }
-      },
-      {
-        "item": "viz_events_over_time",
-        "type": "block",
-        "position": { "x": 20, "y": 170, "w": 1020, "h": 320 }
-      },
-      {
-        "item": "viz_confidence_mix",
-        "type": "block",
-        "position": { "x": 1060, "y": 170, "w": 250, "h": 320 }
-      },
-      {
-        "item": "viz_event_type_mix",
-        "type": "block",
-        "position": { "x": 1330, "y": 170, "w": 250, "h": 320 }
-      },
-      {
-        "item": "viz_top_ips",
-        "type": "block",
-        "position": { "x": 20, "y": 520, "w": 500, "h": 300 }
-      },
-      {
-        "item": "viz_top_countries",
-        "type": "block",
-        "position": { "x": 540, "y": 520, "w": 500, "h": 300 }
-      },
-      {
-        "item": "viz_top_orgs",
-        "type": "block",
-        "position": { "x": 1060, "y": 520, "w": 520, "h": 300 }
-      },
-      {
-        "item": "viz_top_tokens",
-        "type": "block",
-        "position": { "x": 20, "y": 850, "w": 780, "h": 320 }
-      },
-      {
-        "item": "viz_top_bot_tokens",
-        "type": "block",
-        "position": { "x": 820, "y": 850, "w": 760, "h": 320 }
-      },
-      {
-        "item": "viz_confidence_reasons",
-        "type": "block",
-        "position": { "x": 20, "y": 1200, "w": 1040, "h": 320 }
-      },
-      {
-        "item": "viz_request_methods",
-        "type": "block",
-        "position": { "x": 1080, "y": 1200, "w": 500, "h": 320 }
-      },
-      {
-        "item": "viz_ip_daily_uniques",
-        "type": "block",
-        "position": { "x": 20, "y": 1550, "w": 780, "h": 300 }
-      },
-      {
-        "item": "viz_avg_confidence_over_time",
-        "type": "block",
-        "position": { "x": 820, "y": 1550, "w": 760, "h": 300 }
-      },
-      {
-        "item": "viz_suspicious_or_human",
-        "type": "block",
-        "position": { "x": 20, "y": 1880, "w": 1560, "h": 260 }
-      },
-      {
-        "item": "viz_recent_events",
-        "type": "block",
-        "position": { "x": 20, "y": 2170, "w": 1560, "h": 300 }
-      }
-    ]
-  }
 }
