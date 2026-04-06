@@ -486,8 +486,8 @@ function calculateConfidence(PDO $pdo, array $requestData): array
     /* === FINALIZE === */
     $score = max(0, min(100, $score));
     if ($score >= 75)     { $label = 'human'; }
-    elseif ($score >= 45) { $label = 'likely-human'; }
-    elseif ($score >= 20) { $label = 'suspicious'; }
+    elseif ($score >= 60) { $label = 'likely-human'; }
+    elseif ($score >= 25) { $label = 'suspicious'; }
     else                  { $label = 'bot'; }
 
     return [

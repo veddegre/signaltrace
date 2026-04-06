@@ -328,7 +328,7 @@ When polled with no filters, the export applies the configured confidence thresh
 
 ## Detection and Scoring
 
-Each request is scored on arrival. The score runs from 0 (definitely a bot) to 100 (definitely human) and resolves to one of four labels: **bot**, **suspicious**, **likely-human**, or **human**.
+Each request is scored on arrival. The score runs from 0 (definitely a bot) to 100 (definitely human) and resolves to one of four labels: **bot**, **suspicious**, **likely-human**, or **human**. The bands are: human ≥75, likely-human ≥60, suspicious ≥25, bot <25.
 
 Signals that reduce the score include missing Accept-Language, Accept-Encoding, and Sec-Fetch headers; a browser UA with no supporting browser headers (spoofed UA detection); `Accept: */*` which is what HTTP libraries send by default; known automation UA signatures; raw IP in the Host header; exploit-like query strings; and hosting/datacenter IP ranges detected via ASN org name.
 
@@ -475,4 +475,3 @@ MIT
 ---
 
 Most tools try to hide the noise. SignalTrace makes it visible.
-
