@@ -108,6 +108,19 @@ if ($path === '/admin.css') {
     exit;
 }
 
+if ($path === '/signaltrace_transparent.png') {
+    requireAdminAuth();
+    $logoPath = __DIR__ . '/signaltrace_transparent.png';
+    if (is_file($logoPath)) {
+        header('Content-Type: image/png');
+        header('Cache-Control: private, max-age=86400');
+        readfile($logoPath);
+    } else {
+        http_response_code(404);
+    }
+    exit;
+}
+
 /* ============================================================
    HEALTH CHECK
    ============================================================ */
@@ -188,6 +201,7 @@ $reserved = [
     '/admin/run-cleanup',
     '/health',
     '/admin.css',
+    '/signaltrace_transparent.png',
     '/feed/ips.txt',
     '/export/json',
     '/export/csv',

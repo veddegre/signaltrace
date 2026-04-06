@@ -156,7 +156,10 @@ function renderAdminPage(
     <body>
         <header class="page-header">
             <div class="page-header-left">
-                <h1><?= h($appName) ?></h1>
+                <a href="/admin" class="header-home-link">
+                    <img src="/signaltrace_transparent.png" alt="SignalTrace" class="header-logo">
+                    <h1><?= h($appName) ?></h1>
+                </a>
                 <span class="header-tag">Admin</span>
             </div>
             <button type="button" class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">

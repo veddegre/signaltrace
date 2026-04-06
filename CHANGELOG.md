@@ -2,6 +2,66 @@
 
 ---
 
+## [2.1.0] — 2026
+
+### Detection and Scoring
+
+The `accept_wildcard` signal was added. `Accept: */*` is the default sent by curl, wget, and most HTTP libraries — a reliable indicator the UA string may be fabricated regardless of how convincing it looks. Penalty is -15.
+
+The `browser_ua_unsupported` signal was added. Previously a browser-looking UA received a +10 bonus unconditionally. Now the bonus only applies when at least one corroborating browser header is present (Accept-Language, Sec-Fetch-Mode, or Sec-CH-UA). A browser UA with none of those headers scores -10 instead of +10 — a 20 point swing that correctly classifies the spoofed-Chrome-UA-from-scanner pattern seen frequently in real traffic.
+
+The high-risk path list was further expanded to include `_environment` (Symfony/Laravel env probe), `.ssh/`, `config.php`, `configuration.php`, `wp-config.php`, `laravel.log`, `shell.php`, `cmd.php`, and generic webshell patterns. The medium-risk list was expanded to include `wp-content`, `wp-includes`, `phpmyadmin`, `adminer`, `actuator/`, `/console`, `telescope`, `horizon`, and `/.well-known/security`.
+
+Hosting and datacenter IP detection was significantly broadened. The provider list now covers HostRoyale, Hetzner, LeasWeb, Serverius, Psychz, Quadranet, M247, Combahton, Heficed, Datacamp, and others, plus generic org name keywords (`datacenter`, `data center`, `colocation`, `colo`, `dedicated server`, `server farm`) to catch providers not named explicitly. The broad keywords `hosting`, `vps`, and `cloud` were deliberately excluded to avoid penalising corporate proxy traffic.
+
+### Security Audit Fixes
+
+Auth lockout now uses `getClientIp()` instead of `$_SERVER['REMOTE_ADDR']` directly. Behind a trusted proxy, the two values differ — the old behaviour could lock out the proxy's IP rather than the real client's.
+
+The `auth_failures` pruning window was corrected to match the lockout window exactly. The previous implementation pruned at `AUTH_LOCKOUT_SECS * 2`, which allowed old failures to briefly re-count toward a new lockout after the window had expired.
+
+The export auth query parameter was renamed from `?token=` to `?api_key=` to eliminate a collision with the `?path=` export filter parameter. The old name caused filter parameters to be silently misinterpreted as authentication tokens.
+
+Webhook SSRF protection was added. The webhook URL host is now checked against private and loopback IP ranges before any request is fired.
+
+Webhook user agent strings are now sanitised before inclusion in Slack and JSON payloads. Control characters are stripped and the string is truncated to 300 characters.
+
+`/admin.css` now requires admin authentication before being served. Previously it was publicly accessible.
+
+The `?page=` parameter is now clamped to the total number of pages after the query runs, preventing large OFFSET queries from unbounded page numbers.
+
+### Bug Fixes
+
+The `allowedLabels` match logic in both `exportClicks()` and `getThreatFeedIps()` was corrected. The logic is "include this classification and everything worse" — selecting `bot` includes only bot hits, `suspicious` includes suspicious and bot, `likely-human` includes likely-human, suspicious, and bot, and `human` includes everything. The previous implementation had no `suspicious` arm and the default case was inconsistent between the two functions.
+
+Apache strips the `Authorization` header before it reaches PHP unless explicitly configured otherwise. The `SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=$1` directive is now documented in the README, the Splunk integration wiki, and is included in the Docker Apache config so Docker deployments work correctly without manual configuration.
+
+### Admin UI
+
+Dark mode was added with OS-level preference detection and a manual toggle in the page header. The preference is persisted per browser via localStorage.
+
+The admin layout is now fully mobile-responsive with breakpoints at 1100px, 700px, and 480px. The page header is sticky. Tables scroll horizontally within their containers. Date filter inputs show visible labels on mobile.
+
+The SignalTrace logo now appears in the page header. Clicking the logo or the app name navigates to `/admin` and clears all active filters. The logo is hidden on the 480px breakpoint to preserve space.
+
+### Docker
+
+Docker and Docker Compose support was added. A `Dockerfile`, `docker-compose.yml`, `docker/entrypoint.sh`, `docker/apache.conf`, and `.env.example` are now included. The entrypoint generates `config.local.php` from environment variables, initialises the database on first run, and downloads GeoIP databases if MaxMind credentials are provided. The Docker Apache config includes the `SetEnvIf` directive so Bearer token auth works without additional configuration.
+
+### Splunk App
+
+A minimal Splunk app was added under `splunk/signaltrace/`. It includes a scripted input with checkpoint-based deduplication and lock file to prevent overlapping runs, `inputs.conf`, `props.conf`, and a Dashboard Studio dashboard covering total events, unique IPs and tokens, bot percentage, confidence label distribution, top source IPs, countries, ASN organisations, tokens, detection signals breakdown, and a recent events table.
+
+### Documentation
+
+`CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, and GitHub issue templates were added.
+
+A wiki was created covering: Scoring Reference, Splunk Integration, Deployment: Nginx, Deployment: Behind a Reverse Proxy, GeoIP Setup and Maintenance, Tuning Guide, and Threat Feed Integration.
+
+`README.md` was substantially rewritten with a clearer introduction, Docker quick start, full optional config documentation, updated project structure, and a production checklist.
+
+---
+
 ## [2.0.0] — 2026
 
 A substantial rewrite. Every file was touched. The core tracking and token model is unchanged and existing databases are automatically migrated on first boot.

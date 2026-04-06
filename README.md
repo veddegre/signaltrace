@@ -1,9 +1,15 @@
 # SignalTrace
 
-![PHP](https://img.shields.io/badge/PHP-8.1%2B-blue)
-![SQLite](https://img.shields.io/badge/Database-SQLite-lightgrey)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-Active-success)
+<p align="center">
+  <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace" width="160">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/PHP-8.1%2B-blue" alt="PHP">
+  <img src="https://img.shields.io/badge/Database-SQLite-lightgrey" alt="SQLite">
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
+</p>
 
 SignalTrace is a self-hosted honeypot and link tracker. It logs every interaction with your custom paths, scores each request for bot/human likelihood, and feeds the results into your security tooling.
 
@@ -21,9 +27,12 @@ Good for: phishing simulations, honeypot deployments, recon detection, link trac
 
 ---
 
-## Screenshot
+## Screenshots
 
-[![SignalTrace Dashboard](docs/images/dashboard.png?raw=1&v=3)](docs/images/dashboard.png?raw=1&v=3)
+<p align="center">
+  <img src="docs/images/dashboard-dark.png" alt="SignalTrace Dashboard — Dark Mode" width="49%">
+  <img src="docs/images/dashboard-light.png" alt="SignalTrace Dashboard — Light Mode" width="49%">
+</p>
 
 ---
 
@@ -70,6 +79,8 @@ docker compose up -d
 ```
 
 SignalTrace will be available at `http://localhost/admin`. On first start the database is initialised automatically. If MaxMind credentials are set in `.env`, GeoIP databases are downloaded as well.
+
+The Docker Apache config includes the `Authorization` header fix required for Bearer token auth — you don't need to add anything manually if you're using Docker.
 
 ### 3. Updating
 
@@ -217,6 +228,10 @@ sudo vi /etc/apache2/sites-available/signaltrace.conf
     ServerName yourdomain.example
     DocumentRoot /var/www/signaltrace/public
 
+    # Pass the Authorization header through to PHP.
+    # Required for Bearer token authentication on the export and feed endpoints.
+    SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=$1
+
     <Directory /var/www/signaltrace/public>
         AllowOverride All
         Require all granted
@@ -281,6 +296,12 @@ define('EXPORT_API_TOKEN', 'your-generated-token');
 ```
 
 Generate one with `openssl rand -hex 32`.
+
+Apache strips the `Authorization` header before it reaches PHP by default. Verify your vhost config includes this line — without it, Bearer token auth will silently fail:
+
+```apache
+SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=$1
+```
 
 Then poll either export endpoint on a schedule:
 
@@ -359,10 +380,14 @@ signaltrace/
 │   ├── schema.sql
 │   └── seed.sql
 ├── docker/
+│   ├── apache.conf
 │   └── entrypoint.sh
 ├── docs/
 │   └── images/
-│       └── dashboard.png
+│       ├── dashboard-dark.png
+│       ├── dashboard-light.png
+│       ├── signaltrace.png
+│       └── signaltrace_transparent.png
 ├── includes/
 │   ├── admin_actions.php
 │   ├── admin_view.php
@@ -374,7 +399,21 @@ signaltrace/
 │   └── router.php
 ├── public/
 │   ├── admin.css
-│   └── index.php
+│   ├── index.php
+│   └── signaltrace_transparent.png
+├── splunk/
+│   ├── README.md
+│   └── signaltrace/
+│       ├── app.conf
+│       ├── bin/
+│       │   └── signaltrace_fetch.sh
+│       ├── dashboards/
+│       │   └── signaltrace_overview.json
+│       ├── default/
+│       │   ├── inputs.conf
+│       │   └── props.conf
+│       └── metadata/
+│           └── default.meta
 └── vendor/
 ```
 
@@ -409,7 +448,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 
 ## Tech Stack
 
-PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments.
+PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments. A Splunk app with scripted input and Dashboard Studio dashboard is included under `splunk/`.
 
 ---
 
@@ -436,3 +475,4 @@ MIT
 ---
 
 Most tools try to hide the noise. SignalTrace makes it visible.
+

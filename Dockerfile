@@ -21,13 +21,10 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
-# Configure Apache — document root points at public/, rewrite rules enabled
-RUN sed -i \
-    's|DocumentRoot /var/www/html|DocumentRoot /var/www/signaltrace/public|g' \
-    /etc/apache2/sites-available/000-default.conf \
-    && sed -i \
-    '/<\/VirtualHost>/i \\t<Directory /var/www/signaltrace/public>\n\t\tAllowOverride All\n\t\tRequire all granted\n\t</Directory>' \
-    /etc/apache2/sites-available/000-default.conf
+# Install the SignalTrace vhost config.
+# This sets the document root, enables AllowOverride, and passes the
+# Authorization header through to PHP (required for Bearer token auth).
+COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
 
 WORKDIR /var/www/signaltrace
 
