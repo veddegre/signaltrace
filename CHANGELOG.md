@@ -2,6 +2,20 @@
 
 ---
 
+## [2.1.3] — 2026
+
+### Splunk App
+
+The single dashboard was split into two separate dashboards.
+
+**SignalTrace — Overview** (`signaltrace_overview.json`) is designed for SOC screen display. It has no inputs and always shows the last 24 hours, hardcoded at the defaults level so it never drifts regardless of user interaction. Panels cover the six stat cards, events over time, confidence distribution, top IPs, traffic by country, top ASN organisations, top tokens, top bot tokens, top detection signals, and bot traffic by country.
+
+**SignalTrace — Event Investigation** (`signaltrace_events.json`) is designed for hands-on investigation. It has a time range picker, token/path text filter, IP text filter, and classification dropdown. All filters default to show everything and are applied on Enter for text fields. The table returns up to 200 results.
+
+Additional dashboard fixes in this release: bar charts trimmed to top 5 results for readability and given value labels; country and org panels converted from bar charts to tables; `splunk.fillergauge` and `splunk.markergauge` replaced with `splunk.singlevalue` for the avg confidence and bot count panels; bot percentage query rewritten to return a scalar value; the broken "High Confidence Events (>=10)" panel removed and replaced with a Bot Events sparkline panel.
+
+---
+
 ## [2.1.2] — 2026
 
 ### Scoring

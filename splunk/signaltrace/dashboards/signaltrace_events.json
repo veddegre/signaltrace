@@ -1,0 +1,103 @@
+{
+    "title": "SignalTrace — Event Investigation",
+    "description": "Filterable event view for investigating SignalTrace activity. Use the filters to drill into specific tokens, IPs, or classification labels.",
+    "inputs": {
+        "input_global_time": {
+            "options": {
+                "defaultValue": "-24h@h,now",
+                "token": "global_time"
+            },
+            "title": "Time Range",
+            "type": "input.timerange"
+        },
+        "input_token_filter": {
+            "options": {
+                "defaultValue": "*",
+                "token": "token_filter",
+                "placeholder": "Filter by token or path (press Enter to apply)"
+            },
+            "title": "Token / Path",
+            "type": "input.text"
+        },
+        "input_ip_filter": {
+            "options": {
+                "defaultValue": "*",
+                "token": "ip_filter",
+                "placeholder": "Filter by IP (press Enter to apply)"
+            },
+            "title": "IP Address",
+            "type": "input.text"
+        },
+        "input_label_filter": {
+            "options": {
+                "defaultValue": "*",
+                "token": "label_filter",
+                "items": [
+                    { "label": "All",          "value": "*" },
+                    { "label": "Bot",          "value": "bot" },
+                    { "label": "Suspicious",   "value": "suspicious" },
+                    { "label": "Likely-Human", "value": "likely-human" },
+                    { "label": "Human",        "value": "human" }
+                ]
+            },
+            "title": "Classification",
+            "type": "input.dropdown"
+        }
+    },
+    "defaults": {
+        "dataSources": {
+            "ds.search": {
+                "options": {
+                    "queryParameters": {
+                        "earliest": "$global_time.earliest$",
+                        "latest": "$global_time.latest$"
+                    }
+                }
+            }
+        }
+    },
+    "visualizations": {
+        "viz_recent_events": {
+            "dataSources": { "primary": "ds_recent_events" },
+            "options": { "backgroundColor": "#111827" },
+            "title": "Recent Events",
+            "type": "splunk.table"
+        }
+    },
+    "dataSources": {
+        "ds_recent_events": {
+            "name": "Recent Events",
+            "options": {
+                "query": "index=security sourcetype=signaltrace token=$token_filter$ ip=$ip_filter$ confidence_label=$label_filter$ | eval ip_country=coalesce(ip_country,\"unknown\"), ip_org=coalesce(ip_org,\"unknown\"), request_uri=coalesce(request_uri,\"\"), user_agent=coalesce(user_agent,\"\") | sort - clicked_at | table clicked_at id ip ip_country ip_org confidence_label confidence_score token request_uri event_type request_method user_agent | head 200"
+            },
+            "type": "ds.search"
+        }
+    },
+    "layout": {
+        "globalInputs": [
+            "input_global_time",
+            "input_token_filter",
+            "input_ip_filter",
+            "input_label_filter"
+        ],
+        "layoutDefinitions": {
+            "layout_events": {
+                "options": {
+                    "display": "auto-scale",
+                    "height": 1080,
+                    "width": 1920
+                },
+                "structure": [
+                    { "item": "viz_recent_events", "position": { "h": 980, "w": 1880, "x": 20, "y": 20 }, "type": "block" }
+                ],
+                "type": "absolute"
+            }
+        },
+        "tabs": {
+            "items": [
+                { "label": "Event Investigation", "layoutId": "layout_events" }
+            ]
+        }
+    }
+}
+
