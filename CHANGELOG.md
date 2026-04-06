@@ -2,6 +2,28 @@
 
 ---
 
+## [2.1.1] — 2026
+
+### Scoring
+
+Classification thresholds were tightened. The likely-human band was narrowed from 45–74 to 60–74, the suspicious band widened from 20–44 to 25–59, and the bot threshold raised from below 20 to below 25. In practice this means borderline requests that previously received a likely-human label — correct Sec-Fetch headers but missing Accept-Language or Client Hints, or coming from backbone/transit infrastructure — now score as suspicious, which is a more honest assessment of the uncertainty.
+
+### Splunk Dashboard
+
+The dashboard was redesigned for 1920×1080 with no scrolling. The layout is now two tabs — Overview and Recent Events. The Overview tab fits all meaningful panels on a single screen: six stat cards across the top, an events-over-time chart with confidence distribution pie, three equal columns for top IPs/countries/orgs, a full-width row for top tokens and top bot tokens, and a bottom row with detection signals breakdown and bot traffic by country.
+
+Removed panels: Event Type Distribution, Daily Unique IPs, Average Confidence Over Time, Request Methods, and the Likely-Human/Suspicious by Country stacked bar. All were either redundant with other panels, rarely interesting in practice, or producing misleading output.
+
+The "High Confidence Events (>=10)" panel was removed. The query (`confidence_score>=10`) matched almost everything and the concept was wrong — it was styled in red suggesting threat volume but the threshold included most legitimate traffic. Replaced with a Bot Events single-value panel with sparkline.
+
+The bot percentage query was rewritten to return a single scalar value instead of a timechart, which was being fed into a radial gauge that couldn't display it correctly.
+
+The Likely-Human/Suspicious by Country panel was replaced with Bot Traffic by Country — a simple bar chart of bot-classified hits by country, which is more actionable.
+
+`viz_avg_confidence` and `viz_high_confidence_events` were switched from `splunk.fillergauge` and `splunk.markergauge` to `splunk.singlevalue` — the gauge types have minimum size requirements that caused "too small to render content" errors at the panel dimensions used in the layout.
+
+---
+
 ## [2.1.0] — 2026
 
 ### Detection and Scoring
@@ -173,3 +195,4 @@ Table column headers were shifted downward into the first data row due to `posit
 ## [1.0.0] — Initial Release
 
 Custom token tracking with redirect support, full request logging, visitor fingerprinting, tracking pixel support, confidence scoring across four labels, bot signature detection, path-based risk detection, behavioral detection (rapid repeat, burst, multi-token scan), ASN-based scoring rules, skip patterns for noise filtering, admin dashboard with filtering and cleanup tools, threat feed at `/feed/ips.txt`, JSON export, GeoIP enrichment via MaxMind, SQLite backend, HTTP Basic Auth admin.
+
