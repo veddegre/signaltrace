@@ -48,29 +48,20 @@ Software requirements: PHP 8.1+, SQLite3, Apache with mod_rewrite, Composer.
 
 The fastest way to get SignalTrace running is with Docker Compose.
 
-### 1. Clone and configure
+### 1. Clone and run the setup script
 
 ```bash
 git clone https://github.com/veddegre/signaltrace.git
 cd signaltrace
-cp .env.example .env
+chmod +x setup.sh
+./setup.sh
 ```
 
-Edit `.env` and fill in the three required values. Generate them with:
+The setup script will ask whether you are doing a Docker or manual install, then walk through all configuration options. For Docker it generates `.env`. For a manual install it writes `includes/config.local.php` directly.
 
-```bash
-# Password hash
-php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;"
+It will prompt for your admin username, password, host port (Docker only), MaxMind credentials, export API token, and reverse proxy IP. All optional values can be left blank.
 
-# Visitor salt
-openssl rand -hex 64
-```
-
-If PHP isn't installed locally, Docker can generate them for you:
-
-```bash
-docker run --rm php:8.2-cli php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;"
-```
+If PHP is not installed on the host and you chose Docker, the script will build the container first and generate the bcrypt password hash from inside it automatically.
 
 ### 2. Start the container
 
@@ -78,9 +69,7 @@ docker run --rm php:8.2-cli php -r "echo password_hash('yourpassword', PASSWORD_
 docker compose up -d
 ```
 
-SignalTrace will be available at `http://localhost/admin`. On first start the database is initialised automatically. If MaxMind credentials are set in `.env`, GeoIP databases are downloaded as well.
-
-The Docker Apache config includes the `Authorization` header fix required for Bearer token auth — you don't need to add anything manually if you're using Docker.
+SignalTrace will be available at `http://localhost:PORT/admin` where PORT is the port you selected during setup. On first start the database is initialised automatically. If MaxMind credentials are set, GeoIP databases are downloaded as well.
 
 ### 3. Updating
 
@@ -91,6 +80,12 @@ docker compose up -d
 ```
 
 The SQLite database and GeoIP databases are stored in named Docker volumes and persist across rebuilds.
+
+### Notes
+
+The Docker image is based on Ubuntu 24.04. The MaxMind PPA is used to install `geoipupdate`. The Apache config includes the `Authorization` header fix required for Bearer token auth — you don't need to add anything manually if you're using Docker.
+
+On Proxmox LXC containers, the `security_opt: apparmor=unconfined` setting in `docker-compose.yml` is required for the container runtime to function correctly.
 
 ---
 
@@ -108,7 +103,9 @@ sudo chown -R www-data:www-data signaltrace
 
 ```bash
 sudo apt update
-sudo apt install -y apache2 php php-sqlite3 php-mbstring php-xml php-curl sqlite3 composer unzip geoipupdate
+sudo apt install -y apache2 php php-sqlite3 php-mbstring php-xml php-curl sqlite3 composer unzip software-properties-common
+sudo add-apt-repository ppa:maxmind/ppa
+sudo apt update && sudo apt install -y geoipupdate
 ```
 
 ### 3. Install PHP dependencies
@@ -126,9 +123,18 @@ sudo chown -R www-data:www-data /var/www/signaltrace/data
 sudo chmod -R 775 /var/www/signaltrace/data
 ```
 
-### 5. Set up GeoIP
+### 5. Run the setup script
 
-Create a free account at [maxmind.com](https://www.maxmind.com) to get a license key, then configure `/etc/GeoIP.conf`:
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+Select option 2 (Manual) when prompted. The script will walk through all configuration options and write `includes/config.local.php` for you.
+
+### 6. Set up GeoIP
+
+Configure `/etc/GeoIP.conf` with your MaxMind credentials (the setup script will have prompted for these):
 
 ```
 AccountID YOUR_ACCOUNT_ID
@@ -140,9 +146,9 @@ EditionIDs GeoLite2-ASN GeoLite2-Country
 sudo geoipupdate
 ```
 
-The databases land at `/var/lib/GeoIP/` which is where SignalTrace looks by default. You can override the paths with the `MAXMIND_ASN_DB` and `MAXMIND_COUNTRY_DB` environment variables if needed.
+The databases land at `/var/lib/GeoIP/` which is where SignalTrace looks by default.
 
-### 6. Initialize the database
+### 7. Initialize the database
 
 ```bash
 sqlite3 /var/www/signaltrace/data/database.db < db/schema.sql
@@ -156,68 +162,23 @@ sqlite3 /var/www/signaltrace/data/database.db < db/seed.sql
 
 ---
 
-## Configuration
+## Configuration Tuning
 
-Copy the example config and edit it:
-
-```bash
-cp includes/config.local.php.example includes/config.local.php
-vi includes/config.local.php
-```
-
-The required values are the admin username, a bcrypt password hash, and a random salt for visitor fingerprinting:
+The setup script handles required configuration. For optional tuning, open `includes/config.local.php` (manual install) and uncomment the settings you want to adjust:
 
 ```php
-define('ADMIN_USERNAME',      'admin');
-define('ADMIN_PASSWORD_HASH', 'replace-with-hash');
-define('VISITOR_HASH_SALT',   'replace-with-secret');
-```
-
-Generate a password hash:
-
-```bash
-php -r "echo password_hash('your-password', PASSWORD_DEFAULT) . PHP_EOL;"
-```
-
-Generate a visitor salt:
-
-```bash
-openssl rand -hex 64
-```
-
-Optional settings are documented in `config.local.php.example`. The most important ones:
-
-```php
-// How many failed login attempts are allowed before an IP is locked out.
-// Defaults to 5.
+// How many failed login attempts before an IP is locked out. Default: 5.
 define('AUTH_MAX_FAILURES', 5);
 
-// How long a lockout lasts in seconds. Defaults to 900 (15 minutes).
+// How long a lockout lasts in seconds. Default: 900 (15 minutes).
 define('AUTH_LOCKOUT_SECS', 900);
 
-// Set this to your reverse proxy's IP address if SignalTrace is behind
-// nginx, a load balancer, or similar. When set, X-Forwarded-For is trusted
-// only from that IP, and the rightmost entry in the header is used as the
-// real client IP. Leave blank if SignalTrace connects directly to the internet.
-define('TRUSTED_PROXY_IP', '');
-
-// Your site's own domain (e.g. 'example.com'). When set, requests that
-// arrive at the root path with your domain in the Referer header receive
-// a small score penalty. Helps catch internal scanner traffic.
-// Leave blank to disable.
-define('SELF_REFERER_DOMAIN', '');
-
-// A static token for authenticating export requests from Splunk or other
-// automation tools. When set, requests can authenticate with an
-// Authorization: Bearer header instead of HTTP Basic Auth.
-// Generate with: openssl rand -hex 32
-// Leave blank to require admin credentials for all export access.
-define('EXPORT_API_TOKEN', '');
+// Your site's own domain. When set, requests to / with your domain in the
+// Referer header receive a score penalty — helps catch crawler traffic.
+define('SELF_REFERER_DOMAIN', 'example.com');
 ```
 
----
-
-## Apache Configuration
+For Docker deployments these values can be added to `.env` and will be picked up by the entrypoint on container start.
 
 ```bash
 sudo vi /etc/apache2/sites-available/signaltrace.conf
@@ -289,13 +250,12 @@ Behaviour is configured in the Settings tab: time window, minimum confidence thr
 
 ## SIEM and Splunk Integration
 
-Set an export API token in `config.local.php`:
+Set an export API token in `.env` (Docker) or `config.local.php` (manual install):
 
-```php
-define('EXPORT_API_TOKEN', 'your-generated-token');
+```bash
+# Generate with
+openssl rand -hex 32
 ```
-
-Generate one with `openssl rand -hex 32`.
 
 Apache strips the `Authorization` header before it reaches PHP by default. Verify your vhost config includes this line — without it, Bearer token auth will silently fail:
 
@@ -322,7 +282,17 @@ Or with a query parameter if your tooling doesn't support custom headers (note t
 https://yourdomain.example/export/csv?api_key=your-generated-token
 ```
 
-When polled with no filters, the export applies the configured confidence threshold, minimum score, and time window from Settings. Pass `?ip=`, `?path=`, `?date_from=`, or other filter parameters to override the configured settings and get exactly the filtered view instead.
+When polled with no filters, the export applies the configured confidence threshold, minimum score, and time window from Settings. Pass `?ip=`, `?path=`, `?date_from=`, or other filter parameters to override.
+
+### Splunk App
+
+A ready-to-use Splunk integration is included under `splunk/signaltrace/`. Copy the folder into your Splunk `etc/apps/` directory and restart Splunk. Configure the scripted input in `bin/signaltrace_fetch.sh` with your SignalTrace URL and API token.
+
+The app includes two Dashboard Studio dashboards:
+
+**SignalTrace — Overview** (`dashboards/signaltrace_overview.json`) is designed for SOC screen display. It has no inputs and always shows the last 24 hours. Panels cover stat cards, events over time, confidence distribution, top IPs, traffic by country, top ASN organisations, top tokens, top bot tokens, top detection signals, and bot traffic by country.
+
+**SignalTrace — Event Investigation** (`dashboards/signaltrace_events.json`) is designed for hands-on investigation. It has a time range picker, token/path text filter, IP filter, and classification dropdown. The table returns up to 200 results.
 
 ---
 
@@ -372,6 +342,7 @@ signaltrace/
 ├── docker-compose.yml
 ├── docker-compose.override.yml.example
 ├── .env.example
+├── setup.sh
 ├── composer.json
 ├── composer.lock
 ├── data/
@@ -408,7 +379,8 @@ signaltrace/
 │       ├── bin/
 │       │   └── signaltrace_fetch.sh
 │       ├── dashboards/
-│       │   └── signaltrace_overview.json
+│       │   ├── signaltrace_overview.json
+│       │   └── signaltrace_events.json
 │       ├── default/
 │       │   ├── inputs.conf
 │       │   └── props.conf
@@ -448,7 +420,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 
 ## Tech Stack
 
-PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments. A Splunk app with scripted input and Dashboard Studio dashboard is included under `splunk/`.
+Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`.
 
 ---
 

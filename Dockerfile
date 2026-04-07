@@ -1,18 +1,24 @@
-FROM php:8.2-apache
+FROM ubuntu:24.04
 
-# Install system dependencies and PHP extensions
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Apache, PHP, and system dependencies
 RUN apt-get update && apt-get install -y \
-        libsqlite3-dev \
-        libcurl4-openssl-dev \
-        libxml2-dev \
+        apache2 \
+        php \
+        php-cli \
+        php-pdo \
+        php-sqlite3 \
+        php-mbstring \
+        php-xml \
+        php-curl \
+        libapache2-mod-php \
         unzip \
         curl \
-        geoipupdate \
-    && docker-php-ext-install \
-        pdo_sqlite \
-        mbstring \
-        xml \
-        curl \
+        sqlite3 \
+        software-properties-common \
+    && add-apt-repository ppa:maxmind/ppa \
+    && apt-get update && apt-get install -y geoipupdate \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
@@ -47,4 +53,4 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 80
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["apache2-foreground"]
+CMD ["apache2ctl", "-D", "FOREGROUND"]
