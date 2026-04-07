@@ -66,11 +66,10 @@ prompt() {
 
 generate_hash() {
     local password="$1"
-    # Try PHP locally first, fall back to Docker
     if command -v php &>/dev/null; then
         php -r "echo password_hash('${password}', PASSWORD_DEFAULT) . PHP_EOL;"
-    elif command -v docker &>/dev/null; then
-        docker run --rm --security-opt apparmor=unconfined php:8.2-cli php -r "echo password_hash('${password}', PASSWORD_DEFAULT) . PHP_EOL;"
+    elif python3 -c "import bcrypt" 2>/dev/null; then
+        python3 -c "import bcrypt; print(bcrypt.hashpw('${password}'.encode(), bcrypt.gensalt()).decode())"
     else
         echo ""
     fi
@@ -93,24 +92,46 @@ prompt "Admin username" ADMIN_USERNAME "admin"
 
 # ── Required: admin password ──────────────────────────────────────────────────
 echo -e "${CYAN}Admin password${RESET}"
-echo "  Enter a password and the script will hash it for you."
-read -r -s -p "  Password: " ADMIN_PASSWORD
-echo ""
 
-if [ -z "$ADMIN_PASSWORD" ]; then
-    echo -e "${RED}Error: password cannot be blank.${RESET}"
-    exit 1
+# Check if we can auto-hash
+CAN_HASH=false
+if command -v php &>/dev/null; then
+    CAN_HASH=true
+elif python3 -c "import bcrypt" 2>/dev/null; then
+    CAN_HASH=true
 fi
 
-echo "  Generating bcrypt hash..."
-ADMIN_PASSWORD_HASH=$(generate_hash "$ADMIN_PASSWORD")
+if [ "$CAN_HASH" = true ]; then
+    echo "  Enter a password and the script will hash it for you."
+    read -r -s -p "  Password: " ADMIN_PASSWORD
+    echo ""
 
-if [ -z "$ADMIN_PASSWORD_HASH" ]; then
-    echo -e "${RED}Error: could not generate password hash. Please install PHP or Docker and try again.${RESET}"
-    exit 1
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        echo -e "${RED}Error: password cannot be blank.${RESET}"
+        exit 1
+    fi
+
+    echo "  Generating bcrypt hash..."
+    ADMIN_PASSWORD_HASH=$(generate_hash "$ADMIN_PASSWORD")
+
+    if [ -z "$ADMIN_PASSWORD_HASH" ]; then
+        echo -e "${RED}Error: could not generate password hash.${RESET}"
+        exit 1
+    fi
+    echo -e "  ${GREEN}Hash generated.${RESET}"
+else
+    echo -e "  ${YELLOW}PHP and Python bcrypt not found. Generate a hash manually using one of:${RESET}"
+    echo ""
+    echo "    php -r \"echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;\""
+    echo "    htpasswd -bnBC 10 '' yourpassword | tr -d ':\\n'"
+    echo "    docker run --rm php:8.2-cli php -r \"echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;\""
+    echo ""
+    read -r -p "  Paste your bcrypt hash: " ADMIN_PASSWORD_HASH
+    if [ -z "$ADMIN_PASSWORD_HASH" ]; then
+        echo -e "${RED}Error: hash cannot be blank.${RESET}"
+        exit 1
+    fi
 fi
-
-echo -e "  ${GREEN}Hash generated.${RESET}"
 echo ""
 
 # ── Required: visitor hash salt ───────────────────────────────────────────────
