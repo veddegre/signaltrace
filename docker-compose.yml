@@ -1,34 +1,53 @@
-services:
-  signaltrace:
-    build: .
-    container_name: signaltrace
-    restart: unless-stopped
-    security_opt:
-      - apparmor=unconfined
-    ports:
-      - "80:80"
-    volumes:
-      # Persist the SQLite database across container restarts and rebuilds
-      - signaltrace_data:/var/www/signaltrace/data
-      # Persist GeoIP databases — populated on first start if credentials are set
-      - signaltrace_geoip:/var/lib/GeoIP
-    environment:
-      # Required — copy from config.local.php.example and set these
-      SIGNALTRACE_ADMIN_USERNAME: ${SIGNALTRACE_ADMIN_USERNAME}
-      SIGNALTRACE_ADMIN_PASSWORD_HASH: ${SIGNALTRACE_ADMIN_PASSWORD_HASH}
-      SIGNALTRACE_VISITOR_HASH_SALT: ${SIGNALTRACE_VISITOR_HASH_SALT}
+FROM php:8.2-apache
 
-      # Optional — MaxMind credentials for GeoIP enrichment
-      # Sign up free at https://www.maxmind.com to get these
-      MAXMIND_ACCOUNT_ID: ${MAXMIND_ACCOUNT_ID:-}
-      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
+# Install system dependencies and PHP extensions
+RUN apt-get update && apt-get install -y \
+        libsqlite3-dev \
+        libcurl4-openssl-dev \
+        libxml2-dev \
+        unzip \
+        curl \
+        gnupg \
+    && curl -fsSL https://packagecloud.io/maxmind/ppa/gpgkey | gpg --dearmor -o /usr/share/keyrings/maxmind-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/maxmind-archive-keyring.gpg] https://packagecloud.io/maxmind/ppa/debian/ $(. /etc/os-release && echo $VERSION_CODENAME) main" > /etc/apt/sources.list.d/maxmind.list \
+    && apt-get update && apt-get install -y geoipupdate \
+    && docker-php-ext-install \
+        pdo_sqlite \
+        mbstring \
+        xml \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
 
-      # Optional — export API token for Splunk and automation
-      SIGNALTRACE_EXPORT_API_TOKEN: ${SIGNALTRACE_EXPORT_API_TOKEN:-}
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-      # Optional — set to your proxy IP if running behind a reverse proxy
-      SIGNALTRACE_TRUSTED_PROXY_IP: ${SIGNALTRACE_TRUSTED_PROXY_IP:-}
+# Enable Apache mod_rewrite
+RUN a2enmod rewrite
 
-volumes:
-  signaltrace_data:
-  signaltrace_geoip:
+# Install the SignalTrace vhost config.
+# This sets the document root, enables AllowOverride, and passes the
+# Authorization header through to PHP (required for Bearer token auth).
+COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
+
+WORKDIR /var/www/signaltrace
+
+# Copy application files
+COPY . .
+
+# Install PHP dependencies
+RUN composer install --no-dev --no-interaction --prefer-dist
+
+# Create data directory and set permissions
+RUN mkdir -p /var/www/signaltrace/data \
+    && chown -R www-data:www-data /var/www/signaltrace \
+    && chmod -R 755 /var/www/signaltrace \
+    && chmod -R 775 /var/www/signaltrace/data
+
+# Copy entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["apache2-foreground"]
