@@ -70,7 +70,7 @@ generate_hash() {
     if command -v php &>/dev/null; then
         php -r "echo password_hash('${password}', PASSWORD_DEFAULT) . PHP_EOL;"
     elif command -v docker &>/dev/null; then
-        docker run --rm php:8.2-cli php -r "echo password_hash('${password}', PASSWORD_DEFAULT) . PHP_EOL;"
+        docker run --rm --security-opt apparmor=unconfined php:8.2-cli php -r "echo password_hash('${password}', PASSWORD_DEFAULT) . PHP_EOL;"
     else
         echo ""
     fi
