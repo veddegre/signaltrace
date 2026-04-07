@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
         unzip \
         curl \
         sqlite3 \
+        vim \
         software-properties-common \
     && add-apt-repository ppa:maxmind/ppa \
     && apt-get update && apt-get install -y geoipupdate \
