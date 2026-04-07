@@ -90,6 +90,25 @@ echo -e "${BOLD}── Required ────────────────
 echo ""
 prompt "Admin username" ADMIN_USERNAME "admin"
 
+# ── Required: port ────────────────────────────────────────────────────────────
+echo -e "${CYAN}Host port${RESET}"
+echo "  Which port should SignalTrace listen on?"
+
+# Find first unused port starting from 8080
+find_free_port() {
+    local port=8080
+    while ss -tlnp 2>/dev/null | grep -q ":${port} " || \
+          grep -q ":${port}->" /proc/net/tcp 2>/dev/null; do
+        port=$((port + 1))
+    done
+    echo $port
+}
+
+SUGGESTED_PORT=$(find_free_port)
+read -r -p "  Port [${SUGGESTED_PORT}]: " PORT_INPUT
+SIGNALTRACE_PORT="${PORT_INPUT:-$SUGGESTED_PORT}"
+echo ""
+
 # ── Required: admin password ──────────────────────────────────────────────────
 echo -e "${CYAN}Admin password${RESET}"
 
@@ -200,6 +219,7 @@ cat > "$ENV_FILE" << EOF
 # ============================================================
 
 SIGNALTRACE_ADMIN_USERNAME=${ADMIN_USERNAME}
+SIGNALTRACE_PORT=${SIGNALTRACE_PORT}
 SIGNALTRACE_ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
 SIGNALTRACE_VISITOR_HASH_SALT=${VISITOR_HASH_SALT}
 
@@ -232,6 +252,8 @@ echo -e "${GREEN}${BOLD}.env file written successfully.${RESET}"
 echo ""
 echo "Next step:"
 echo "  docker compose up -d"
+echo ""
+echo -e "${CYAN}SignalTrace will be available at: http://localhost:${SIGNALTRACE_PORT}${RESET}"
 echo ""
 
 if [ -n "$SIGNALTRACE_EXPORT_API_TOKEN" ]; then
