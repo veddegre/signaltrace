@@ -3,6 +3,8 @@ services:
     build: .
     container_name: signaltrace
     restart: unless-stopped
+    security_opt:
+      - apparmor=unconfined
     ports:
       - "80:80"
     volumes:
