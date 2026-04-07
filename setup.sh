@@ -71,7 +71,8 @@ generate_hash() {
     elif python3 -c "import bcrypt" 2>/dev/null; then
         python3 -c "import bcrypt; print(bcrypt.hashpw('${password}'.encode(), bcrypt.gensalt()).decode())"
     else
-        echo ""
+        # Fall back to the built image — hash generated after build
+        echo "__DEFER__"
     fi
 }
 
@@ -111,45 +112,28 @@ echo ""
 
 # ── Required: admin password ──────────────────────────────────────────────────
 echo -e "${CYAN}Admin password${RESET}"
+echo "  Enter a password and the script will hash it for you."
+read -r -s -p "  Password: " ADMIN_PASSWORD
+echo ""
 
-# Check if we can auto-hash
-CAN_HASH=false
-if command -v php &>/dev/null; then
-    CAN_HASH=true
-elif python3 -c "import bcrypt" 2>/dev/null; then
-    CAN_HASH=true
+if [ -z "$ADMIN_PASSWORD" ]; then
+    echo -e "${RED}Error: password cannot be blank.${RESET}"
+    exit 1
 fi
 
-if [ "$CAN_HASH" = true ]; then
-    echo "  Enter a password and the script will hash it for you."
-    read -r -s -p "  Password: " ADMIN_PASSWORD
-    echo ""
+echo "  Generating bcrypt hash..."
+ADMIN_PASSWORD_HASH=$(generate_hash "$ADMIN_PASSWORD")
 
-    if [ -z "$ADMIN_PASSWORD" ]; then
-        echo -e "${RED}Error: password cannot be blank.${RESET}"
-        exit 1
-    fi
-
-    echo "  Generating bcrypt hash..."
-    ADMIN_PASSWORD_HASH=$(generate_hash "$ADMIN_PASSWORD")
-
+if [ "$ADMIN_PASSWORD_HASH" = "__DEFER__" ]; then
+    echo -e "  ${YELLOW}PHP not found locally — hash will be generated from the container after build.${RESET}"
+    DEFER_HASH=true
+else
     if [ -z "$ADMIN_PASSWORD_HASH" ]; then
         echo -e "${RED}Error: could not generate password hash.${RESET}"
         exit 1
     fi
     echo -e "  ${GREEN}Hash generated.${RESET}"
-else
-    echo -e "  ${YELLOW}PHP and Python bcrypt not found. Generate a hash manually using one of:${RESET}"
-    echo ""
-    echo "    php -r \"echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;\""
-    echo "    htpasswd -bnBC 10 '' yourpassword | tr -d ':\\n'"
-    echo "    docker run --rm php:8.2-cli php -r \"echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;\""
-    echo ""
-    read -r -p "  Paste your bcrypt hash: " ADMIN_PASSWORD_HASH
-    if [ -z "$ADMIN_PASSWORD_HASH" ]; then
-        echo -e "${RED}Error: hash cannot be blank.${RESET}"
-        exit 1
-    fi
+    DEFER_HASH=false
 fi
 echo ""
 
@@ -220,7 +204,7 @@ cat > "$ENV_FILE" << EOF
 
 SIGNALTRACE_ADMIN_USERNAME=${ADMIN_USERNAME}
 SIGNALTRACE_PORT=${SIGNALTRACE_PORT}
-SIGNALTRACE_ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+SIGNALTRACE_ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-__PENDING__}
 SIGNALTRACE_VISITOR_HASH_SALT=${VISITOR_HASH_SALT}
 
 # ============================================================
@@ -245,6 +229,27 @@ SIGNALTRACE_EXPORT_API_TOKEN=${SIGNALTRACE_EXPORT_API_TOKEN}
 
 SIGNALTRACE_TRUSTED_PROXY_IP=${SIGNALTRACE_TRUSTED_PROXY_IP}
 EOF
+
+# ── Deferred hash generation ──────────────────────────────────────────────────
+if [ "$DEFER_HASH" = true ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Building container to generate password hash..."
+    echo ""
+    if ! docker compose build --quiet 2>&1; then
+        echo -e "${RED}Error: docker compose build failed. Fix the build error and re-run setup.sh.${RESET}"
+        exit 1
+    fi
+    echo "  Generating hash from container..."
+    ADMIN_PASSWORD_HASH=$(docker run --rm signaltrace-signaltrace php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT) . PHP_EOL;" 2>/dev/null)
+    if [ -z "$ADMIN_PASSWORD_HASH" ]; then
+        echo -e "${RED}Error: could not generate hash from container.${RESET}"
+        exit 1
+    fi
+    # Update the placeholder in .env
+    sed -i "s|SIGNALTRACE_ADMIN_PASSWORD_HASH=__PENDING__|SIGNALTRACE_ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}|" "$ENV_FILE"
+    echo -e "  ${GREEN}Hash generated and written to .env.${RESET}"
+    echo ""
+fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
