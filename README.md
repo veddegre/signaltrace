@@ -51,7 +51,7 @@ The fastest way to get SignalTrace running is with Docker Compose.
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/yourusername/signaltrace.git
+git clone https://github.com/veddegre/signaltrace.git
 cd signaltrace
 cp .env.example .env
 ```
@@ -100,7 +100,7 @@ The SQLite database and GeoIP databases are stored in named Docker volumes and p
 
 ```bash
 cd /var/www
-sudo git clone https://github.com/yourusername/signaltrace.git
+sudo git clone https://github.com/veddegre/signaltrace.git
 sudo chown -R www-data:www-data signaltrace
 ```
 
