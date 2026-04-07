@@ -156,11 +156,11 @@ fi
 echo ""
 
 # -- Docker only: port ---------------------------------------------------------
+CONTAINER_WAS_RUNNING=false
 if [ "$INSTALL_TYPE" = "1" ]; then
     echo -e "${BOLD}── Docker Configuration ─────────────────────────────────────${RESET}"
     echo ""
 
-    CONTAINER_WAS_RUNNING=false
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^signaltrace$"; then
         CONTAINER_WAS_RUNNING=true
         echo "  Stopping existing container to free port..."
@@ -168,7 +168,7 @@ if [ "$INSTALL_TYPE" = "1" ]; then
         echo ""
     fi
 
-    EXISTING_PORT=$(grep "^SIGNALTRACE_PORT=" "$OUTPUT_FILE" 2>/dev/null | cut -d= -f2)
+    EXISTING_PORT=$(grep "^SIGNALTRACE_PORT=" "$OUTPUT_FILE" 2>/dev/null | cut -d= -f2 | tr -d '"')
     if [ -n "$EXISTING_PORT" ]; then
         SUGGESTED_PORT="$EXISTING_PORT"
     else
@@ -262,11 +262,15 @@ if [ "$DEFER_HASH" = true ]; then
     ADMIN_PASSWORD_HASH=$(docker exec signaltrace php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT);" 2>/dev/null)
 
     if [ -z "$ADMIN_PASSWORD_HASH" ]; then
-        echo -e "${RED}Error: could not generate hash via Docker.${RESET}"
+        echo -e "${RED}Error: could not generate hash via Docker. Run manually:${RESET}"
+        echo ""
+        echo "  HASH=\$(docker exec signaltrace php -r \"echo password_hash('yourpassword', PASSWORD_DEFAULT);\")"
+        echo "  sed -i \"s|SIGNALTRACE_ADMIN_PASSWORD_HASH='__DEFER__'|SIGNALTRACE_ADMIN_PASSWORD_HASH='\${HASH}'|\" .env"
+        echo "  docker compose restart"
         exit 1
     fi
 
-    # Escape $ for sed
+    # Escape $ signs before passing to sed
     ESC_HASH=$(echo "$ADMIN_PASSWORD_HASH" | sed 's/\$/\\$/g')
     sed -i "s|SIGNALTRACE_ADMIN_PASSWORD_HASH='__DEFER__'|SIGNALTRACE_ADMIN_PASSWORD_HASH='${ESC_HASH}'|" "$OUTPUT_FILE"
 
@@ -286,11 +290,20 @@ if [ "$INSTALL_TYPE" = "1" ]; then
     else
         echo "Next step: docker compose up -d"
     fi
+    echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
 else
-    echo "Next: Configure Apache and restart: sudo systemctl restart apache2"
+    echo "Next steps:"
+    echo "  1. Run geoipupdate to download GeoIP databases (if MaxMind credentials are set)"
+    echo "  2. Initialise the database:"
+    echo "       sqlite3 /var/www/signaltrace/data/database.db < db/schema.sql"
+    echo "  3. Configure your Apache vhost — see README.md for the full config"
+    echo "  4. Restart Apache: sudo systemctl restart apache2"
 fi
+echo ""
 
 if [ -n "$SIGNALTRACE_EXPORT_API_TOKEN" ]; then
-    echo -e "${YELLOW}API Token: $SIGNALTRACE_EXPORT_API_TOKEN${RESET}"
+    echo -e "${YELLOW}Note: save your export API token — it will not be shown again:${RESET}"
+    echo "  $SIGNALTRACE_EXPORT_API_TOKEN"
+    echo ""
 fi

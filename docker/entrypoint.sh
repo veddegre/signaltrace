@@ -38,11 +38,11 @@ printf "define('ADMIN_PASSWORD_HASH', '%s');\n" "$SIGNALTRACE_ADMIN_PASSWORD_HAS
 printf "define('VISITOR_HASH_SALT',   '%s');\n" "$SIGNALTRACE_VISITOR_HASH_SALT" >> "$CONFIG_FILE"
 
 if [ -n "$SIGNALTRACE_EXPORT_API_TOKEN" ]; then
-    echo "define('EXPORT_API_TOKEN', '${SIGNALTRACE_EXPORT_API_TOKEN}');" >> "$CONFIG_FILE"
+    printf "define('EXPORT_API_TOKEN', '%s');\n" "$SIGNALTRACE_EXPORT_API_TOKEN" >> "$CONFIG_FILE"
 fi
 
 if [ -n "$SIGNALTRACE_TRUSTED_PROXY_IP" ]; then
-    echo "define('TRUSTED_PROXY_IP', '${SIGNALTRACE_TRUSTED_PROXY_IP}');" >> "$CONFIG_FILE"
+    printf "define('TRUSTED_PROXY_IP', '%s');\n" "$SIGNALTRACE_TRUSTED_PROXY_IP" >> "$CONFIG_FILE"
 fi
 
 chown www-data:www-data "$CONFIG_FILE"

@@ -2,7 +2,31 @@
 
 ---
 
-## [2.1.3] — 2026
+## [2.2.0] — April 7, 2026
+
+### Docker
+
+The Docker base image was switched from `php:8.2-apache` (Debian trixie) to `ubuntu:24.04`. The Debian image did not have `geoipupdate` available in its default package repositories. Ubuntu 24.04 supports the MaxMind PPA directly, making `geoipupdate` installable without additional workarounds. `sqlite3` is now explicitly installed in the image, which was missing and caused the entrypoint to crash on first run.
+
+The `docker-compose.yml` now includes `security_opt: apparmor=unconfined` which is required for Docker to function correctly on Proxmox LXC containers where the AppArmor kernel interface is present but not writable from inside the container.
+
+The host port is now configurable via `SIGNALTRACE_PORT` in `.env` with a default of 80. This allows SignalTrace to coexist with other containers on the same host without port conflicts.
+
+The entrypoint was rewritten to use `printf` with `%s` arguments for all config values instead of a heredoc. The heredoc approach caused bcrypt hashes to be truncated and corrupted because the shell interpreted `$2y$10$...` as variable expansions. The `printf` approach passes values as arguments so the shell never touches their contents.
+
+### Setup Script
+
+`setup.sh` is now a universal setup script supporting both Docker and manual installs. At startup it asks which install type you are doing, then branches accordingly — Docker writes `.env`, manual install writes `includes/config.local.php` directly.
+
+Both paths share the same prompts for admin username, password, MaxMind credentials, export API token, and reverse proxy IP. The Docker path additionally prompts for a host port, auto-detecting a free port as the default.
+
+The script auto-generates the bcrypt password hash using PHP locally if available, Python bcrypt if available, or by starting the container and running `docker exec` if neither is present on the host. The hash is written with single quotes in `.env` and `$` signs are escaped before any `sed` operations to prevent shell expansion from corrupting it.
+
+If a container is already running when the script is re-run, it is stopped first so its port is freed for detection, the existing port is read from `.env` and offered as the default, and the container is restarted automatically at the end.
+
+---
+
+## [2.1.3] — April 6, 2026
 
 ### Splunk App
 
@@ -16,7 +40,7 @@ Additional dashboard fixes in this release: bar charts trimmed to top 5 results 
 
 ---
 
-## [2.1.2] — 2026
+## [2.1.2] — April 6, 2026
 
 ### Scoring
 
@@ -26,7 +50,7 @@ Additional dashboard fixes in this release: bar charts trimmed to top 5 results 
 
 ---
 
-## [2.1.1] — 2026
+## [2.1.1] — April 6, 2026
 
 ### Scoring
 
@@ -52,7 +76,7 @@ The Likely-Human/Suspicious by Country panel was replaced with Bot Traffic by Co
 
 ---
 
-## [2.1.0] — 2026
+## [2.1.0] — April 6, 2026
 
 ### Detection and Scoring
 
@@ -112,7 +136,7 @@ A wiki was created covering: Scoring Reference, Splunk Integration, Deployment: 
 
 ---
 
-## [2.0.0] — 2026
+## [2.0.0] — April 4, 2026
 
 A substantial rewrite. Every file was touched. The core tracking and token model is unchanged and existing databases are automatically migrated on first boot.
 
@@ -220,6 +244,6 @@ Table column headers were shifted downward into the first data row due to `posit
 
 ---
 
-## [1.0.0] — Initial Release
+## [1.0.0] — April 2, 2026
 
 Custom token tracking with redirect support, full request logging, visitor fingerprinting, tracking pixel support, confidence scoring across four labels, bot signature detection, path-based risk detection, behavioral detection (rapid repeat, burst, multi-token scan), ASN-based scoring rules, skip patterns for noise filtering, admin dashboard with filtering and cleanup tools, threat feed at `/feed/ips.txt`, JSON export, GeoIP enrichment via MaxMind, SQLite backend, HTTP Basic Auth admin.
