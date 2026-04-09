@@ -45,6 +45,18 @@ if [ -n "$SIGNALTRACE_TRUSTED_PROXY_IP" ]; then
     printf "define('TRUSTED_PROXY_IP', '%s');\n" "$SIGNALTRACE_TRUSTED_PROXY_IP" >> "$CONFIG_FILE"
 fi
 
+if [ -n "$AUTH_MAX_FAILURES" ]; then
+    printf "define('AUTH_MAX_FAILURES', %s);\n" "$AUTH_MAX_FAILURES" >> "$CONFIG_FILE"
+fi
+
+if [ -n "$AUTH_LOCKOUT_SECS" ]; then
+    printf "define('AUTH_LOCKOUT_SECS', %s);\n" "$AUTH_LOCKOUT_SECS" >> "$CONFIG_FILE"
+fi
+
+if [ -n "$SELF_REFERER_DOMAIN" ]; then
+    printf "define('SELF_REFERER_DOMAIN', '%s');\n" "$SELF_REFERER_DOMAIN" >> "$CONFIG_FILE"
+fi
+
 chown www-data:www-data "$CONFIG_FILE"
 chmod 640 "$CONFIG_FILE"
 

@@ -1,7 +1,7 @@
-# SignalTrace
+# SignalTrace Tracking & Analysis
 
 <p align="center">
-  <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace" width="160">
+  <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace Tracking & Analysis" width="160">
 </p>
 
 <p align="center">
@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
 </p>
 
-SignalTrace is a self-hosted honeypot and link tracker. It logs every interaction with your custom paths, scores each request for bot/human likelihood, and feeds the results into your security tooling.
+SignalTrace is a self-hosted tracking and analysis platform for honeypot deployment, link tracking, and security visibility. It logs every interaction with your custom paths, scores each request for bot/human likelihood, and feeds the results into your security tooling.
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
 
@@ -19,11 +19,11 @@ No external services required. One PHP app, one SQLite database, one Apache vhos
 
 ## Why SignalTrace
 
-Most honeypot tools tell you *that* something hit an endpoint. SignalTrace tells you *what kind of thing* hit it, how confident the assessment is, and why — with enough detail to act on immediately or pipe into a SIEM.
+Most tracking tools tell you *that* something hit an endpoint. SignalTrace tells you *what kind of thing* hit it, how confident the assessment is, and why — with enough detail to act on immediately or pipe into a SIEM.
 
 Every hit gets a 0–100 human-likelihood score with named signal reasons. The built-in threat feed at `/feed/ips.txt` is ready to consume from a firewall or block list. The JSON and CSV export endpoints support token-based authentication for scheduled Splunk ingestion.
 
-Good for: phishing simulations, honeypot deployments, recon detection, link tracking, threat feed generation.
+Good for: phishing simulations, honeypot deployments, recon detection, link tracking, and threat feed generation.
 
 ---
 
@@ -127,58 +127,29 @@ sudo chmod -R 775 /var/www/signaltrace/data
 
 ```bash
 chmod +x setup.sh
-./setup.sh
+sudo ./setup.sh
 ```
 
-Select option 2 (Manual) when prompted. The script will walk through all configuration options and write `includes/config.local.php` for you.
+Select option 2 (Manual) when prompted. The script will walk through all configuration options and then automatically:
 
-### 6. Set up GeoIP
+- Write `includes/config.local.php`
+- Configure `/etc/GeoIP.conf` and run `geoipupdate` to download the MaxMind databases (if credentials were provided)
+- Initialise the SQLite database, with an option to load sample data
+- Set correct `www-data` ownership on all files
 
-Configure `/etc/GeoIP.conf` with your MaxMind credentials (the setup script will have prompted for these):
-
-```
-AccountID YOUR_ACCOUNT_ID
-LicenseKey YOUR_LICENSE_KEY
-EditionIDs GeoLite2-ASN GeoLite2-Country
-```
-
-```bash
-sudo geoipupdate
-```
-
-The databases land at `/var/lib/GeoIP/` which is where SignalTrace looks by default.
-
-### 7. Initialize the database
-
-```bash
-sqlite3 /var/www/signaltrace/data/database.db < db/schema.sql
-```
-
-Optionally load sample data to see the dashboard with something in it:
-
-```bash
-sqlite3 /var/www/signaltrace/data/database.db < db/seed.sql
-```
+After the script completes the only remaining steps are configuring Apache and restarting it.
 
 ---
 
 ## Configuration Tuning
 
-The setup script handles required configuration. For optional tuning, open `includes/config.local.php` (manual install) and uncomment the settings you want to adjust:
+The setup script prompts for all configuration including optional tuning values — auth lockout threshold and duration, self-referrer domain penalty, reverse proxy IP, and export API token. You don't need to edit any files manually after running it.
 
-```php
-// How many failed login attempts before an IP is locked out. Default: 5.
-define('AUTH_MAX_FAILURES', 5);
+If you need to change a value after the initial setup, edit `includes/config.local.php` directly (manual install) or update `.env` and restart the container (Docker). The available settings and their defaults are documented in `includes/config.local.php.example`.
 
-// How long a lockout lasts in seconds. Default: 900 (15 minutes).
-define('AUTH_LOCKOUT_SECS', 900);
+---
 
-// Your site's own domain. When set, requests to / with your domain in the
-// Referer header receive a score penalty — helps catch crawler traffic.
-define('SELF_REFERER_DOMAIN', 'example.com');
-```
-
-For Docker deployments these values can be added to `.env` and will be picked up by the entrypoint on container start.
+## Apache Configuration
 
 ```bash
 sudo vi /etc/apache2/sites-available/signaltrace.conf
@@ -234,7 +205,7 @@ sudo certbot renew --dry-run
 
 ## Admin
 
-```
+```text
 https://yourdomain.example/admin
 ```
 
@@ -265,20 +236,20 @@ SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=$1
 
 Then poll either export endpoint on a schedule:
 
-```
+```text
 https://yourdomain.example/export/json
 https://yourdomain.example/export/csv
 ```
 
 Authenticate with a header (recommended, not logged by Apache):
 
-```
+```text
 Authorization: Bearer your-generated-token
 ```
 
 Or with a query parameter if your tooling doesn't support custom headers (note this appears in access logs):
 
-```
+```text
 https://yourdomain.example/export/csv?api_key=your-generated-token
 ```
 
@@ -334,7 +305,7 @@ ASN rules let you add manual score penalties for specific networks via the UI.
 
 ## Project Structure
 
-```
+```text
 signaltrace/
 ├── LICENSE
 ├── README.md
@@ -447,3 +418,4 @@ MIT
 ---
 
 Most tools try to hide the noise. SignalTrace makes it visible.
+

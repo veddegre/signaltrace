@@ -213,9 +213,14 @@ code, .mono { font-family: var(--font-mono); font-size: 0.84rem; }
     color: var(--text);
     font-size: 1.0625rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.025em;   /* reduced from 0.04 */
     text-transform: uppercase;
     margin: 0;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: min(60vw, 700px);
 }
 
 .page-header .header-tag {

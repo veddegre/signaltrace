@@ -145,7 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_links_token             ON links(token);
 -- Default Settings
 -- ============================================================
 INSERT OR IGNORE INTO settings (key, value) VALUES
-    ('app_name',                 'SignalTrace'),
+    ('app_name',                 'SignalTrace - Tracking & Analysis'),
     ('base_url',                 ''),
     ('default_redirect_url',     'https://example.com/'),
     ('unknown_path_behavior',    'redirect'),

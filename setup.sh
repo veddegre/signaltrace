@@ -219,6 +219,30 @@ echo "  Set this if SignalTrace runs behind nginx, Caddy, or Traefik."
 echo ""
 prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "" ""
 
+# -- Optional tuning -----------------------------------------------------------
+echo -e "${BOLD}── Optional Tuning ──────────────────────────────────────────${RESET}"
+echo "  Press Enter to accept defaults for all of these."
+echo ""
+
+echo -e "${CYAN}Auth lockout threshold${RESET}"
+echo "  Failed login attempts before an IP is locked out."
+read -r -p "  Value [5]: " AUTH_MAX_FAILURES_INPUT
+AUTH_MAX_FAILURES="${AUTH_MAX_FAILURES_INPUT:-5}"
+echo ""
+
+echo -e "${CYAN}Auth lockout duration${RESET}"
+echo "  How long a lockout lasts in seconds."
+read -r -p "  Value [900]: " AUTH_LOCKOUT_SECS_INPUT
+AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS_INPUT:-900}"
+echo ""
+
+echo -e "${CYAN}Self-referrer domain${RESET}"
+echo "  Your site's own domain (e.g. example.com). When set, requests"
+echo "  arriving at / with your domain in the Referer header receive a"
+echo "  score penalty — helps catch crawler traffic. Leave blank to disable."
+read -r -p "  Value (leave blank to skip): " SELF_REFERER_DOMAIN
+echo ""
+
 # -- Write output file ---------------------------------------------------------
 if [ "$INSTALL_TYPE" = "1" ]; then
     cat > "$OUTPUT_FILE" << EOF
@@ -230,6 +254,9 @@ MAXMIND_ACCOUNT_ID="${MAXMIND_ACCOUNT_ID}"
 MAXMIND_LICENSE_KEY="${MAXMIND_LICENSE_KEY}"
 SIGNALTRACE_EXPORT_API_TOKEN="${SIGNALTRACE_EXPORT_API_TOKEN}"
 SIGNALTRACE_TRUSTED_PROXY_IP="${SIGNALTRACE_TRUSTED_PROXY_IP}"
+AUTH_MAX_FAILURES="${AUTH_MAX_FAILURES}"
+AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS}"
+SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN}"
 EOF
 else
     cat > "$OUTPUT_FILE" << EOF
@@ -241,7 +268,12 @@ define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');
 define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');
 define('EXPORT_API_TOKEN',    '${SIGNALTRACE_EXPORT_API_TOKEN}');
 define('TRUSTED_PROXY_IP',    '${SIGNALTRACE_TRUSTED_PROXY_IP}');
+define('AUTH_MAX_FAILURES',   ${AUTH_MAX_FAILURES});
+define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
+    if [ -n "$SELF_REFERER_DOMAIN" ]; then
+        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" >> "$OUTPUT_FILE"
+    fi
 fi
 
 # -- Deferred hash generation --------------------------------------------------
@@ -293,12 +325,80 @@ if [ "$INSTALL_TYPE" = "1" ]; then
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
 else
+    # ── GeoIP configuration ───────────────────────────────────────────────────
+    if [ -n "$MAXMIND_ACCOUNT_ID" ] && [ -n "$MAXMIND_LICENSE_KEY" ]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Configuring GeoIP..."
+        echo ""
+
+        sudo mkdir -p /var/lib/GeoIP
+
+        sudo tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
+AccountID ${MAXMIND_ACCOUNT_ID}
+LicenseKey ${MAXMIND_LICENSE_KEY}
+EditionIDs GeoLite2-ASN GeoLite2-Country
+DatabaseDirectory /var/lib/GeoIP
+GEOIPCONF
+
+        echo "  /etc/GeoIP.conf written."
+        echo "  Downloading GeoIP databases..."
+        if sudo geoipupdate; then
+            echo -e "  ${GREEN}GeoIP databases downloaded to /var/lib/GeoIP/.${RESET}"
+        else
+            echo -e "  ${YELLOW}Warning: geoipupdate failed. Run 'sudo geoipupdate' manually once credentials are correct.${RESET}"
+        fi
+        echo ""
+    else
+        echo -e "${YELLOW}Note: MaxMind credentials not provided — GeoIP enrichment will be unavailable.${RESET}"
+        echo "  To enable it later, add AccountID and LicenseKey to /etc/GeoIP.conf and run:"
+        echo "  sudo geoipupdate"
+        echo ""
+    fi
+
+    # ── Database initialisation ───────────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    DB_FILE="/var/www/signaltrace/data/database.db"
+    DB_DIR="/var/www/signaltrace/data"
+
+    if [ -f "$DB_FILE" ]; then
+        echo -e "${YELLOW}Database already exists at ${DB_FILE}.${RESET}"
+        read -r -p "  Re-initialise it? This will wipe all data. [y/N] " reinit
+        if [[ ! "$reinit" =~ ^[Yy]$ ]]; then
+            echo "  Skipping database initialisation."
+            SKIP_DB=true
+        fi
+    fi
+
+    if [ "${SKIP_DB:-false}" = false ]; then
+        echo "Initialising database..."
+        sudo mkdir -p "$DB_DIR"
+        # Remove old database so we start clean
+        [ -f "$DB_FILE" ] && sudo rm -f "$DB_FILE"
+        sudo -u www-data sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
+        sudo chown www-data:www-data "$DB_FILE"
+        sudo chmod 664 "$DB_FILE"
+        echo -e "  ${GREEN}Database initialised.${RESET}"
+        echo ""
+
+        read -r -p "  Load sample data so the dashboard has something to show? [y/N] " doseed
+        if [[ "$doseed" =~ ^[Yy]$ ]]; then
+            sudo -u www-data sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
+            echo -e "  ${GREEN}Sample data loaded.${RESET}"
+        fi
+    fi
+    echo ""
+
+    # ── Fix ownership ─────────────────────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Setting file ownership..."
+    sudo chown -R www-data:www-data /var/www/signaltrace
+    sudo chmod -R 775 /var/www/signaltrace/data
+    echo -e "  ${GREEN}Ownership set to www-data.${RESET}"
+    echo ""
+
     echo "Next steps:"
-    echo "  1. Run geoipupdate to download GeoIP databases (if MaxMind credentials are set)"
-    echo "  2. Initialise the database:"
-    echo "       sqlite3 /var/www/signaltrace/data/database.db < db/schema.sql"
-    echo "  3. Configure your Apache vhost — see README.md for the full config"
-    echo "  4. Restart Apache: sudo systemctl restart apache2"
+    echo "  1. Configure your Apache vhost — see README.md for the full config"
+    echo "  2. Restart Apache: sudo systemctl restart apache2"
 fi
 echo ""
 

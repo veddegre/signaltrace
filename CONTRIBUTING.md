@@ -1,6 +1,6 @@
-# Contributing to SignalTrace
+# Contributing to SignalTrace Tracking & Analysis
 
-Thanks for your interest in contributing. SignalTrace is a focused tool and contributions that keep it lightweight, self-contained, and easy to deploy are most welcome.
+Thanks for your interest in contributing. SignalTrace Tracking & Analysis is a focused tool and contributions that keep it lightweight, self-contained, and easy to deploy are most welcome.
 
 ---
 
@@ -42,7 +42,7 @@ Match the existing style throughout. Every file has `declare(strict_types=1)`. A
 
 ## Security
 
-SignalTrace handles hostile traffic by design, so any PR touching request handling, authentication, database queries, or output rendering gets extra scrutiny. Call out security-relevant changes explicitly in your PR description.
+SignalTrace Tracking & Analysis handles hostile traffic by design, so any PR touching request handling, authentication, database queries, or output rendering gets extra scrutiny. Call out security-relevant changes explicitly in your PR description.
 
 ## What Fits
 
