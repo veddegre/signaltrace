@@ -22,19 +22,14 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
 /* ============================================================
    SESSION — only for admin UI routes
-   Export, feed, and health endpoints must not start a session;
-   the Set-Cookie header would be sent before their own
-   Content-Type and trigger output-already-sent errors.
    ============================================================ */
 if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
     session_start();
+    require_once __DIR__ . '/../includes/demo-banner.php';
 }
 
 /* ============================================================
    SECURITY HEADERS
-   X-Content-Type-Options is sent on every response.
-   HTML-only headers (CSP, X-Frame-Options) are skipped for
-   data endpoints that set their own Content-Type.
    ============================================================ */
 $dataRoutes = ['/export/json', '/export/csv', '/feed/ips.txt', '/health'];
 
@@ -62,16 +57,9 @@ $skipPatternMap = getActiveSkipPatternMap($pdo);
 
 /* ============================================================
    EXPORT API TOKEN AUTH
-   Accepts a static token (for Splunk / automation) via:
-     • Authorization: Bearer <token>  header, OR
-     • ?token=<token>  query parameter
-   Falls back to admin Basic Auth if no token is configured
-   or the provided token does not match.
-   Define EXPORT_API_TOKEN in config.local.php to enable.
    ============================================================ */
 function requireExportAuth(): void
 {
-    // Preferred: Authorization: Bearer header — not logged by Apache by default.
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if (str_starts_with($authHeader, 'Bearer ')) {
         $provided = substr($authHeader, 7);
@@ -80,10 +68,6 @@ function requireExportAuth(): void
         }
     }
 
-    // Fallback: ?api_key= query parameter.
-    // NOTE: Query parameters appear in server access logs. Prefer the Bearer
-    // header for production use. Use ?api_key= only when headers are not
-    // configurable (e.g. some basic scripted inputs).
     $queryToken = trim((string) ($_GET['api_key'] ?? ''));
     if ($queryToken !== '' && defined('EXPORT_API_TOKEN') && EXPORT_API_TOKEN !== '' && hash_equals(EXPORT_API_TOKEN, $queryToken)) {
         return;
@@ -95,6 +79,18 @@ function requireExportAuth(): void
 /* ============================================================
    STATIC ASSETS
    ============================================================ */
+if ($path === '/favicon.ico' || $path === '/favicon.png') {
+    $logoPath = __DIR__ . '/signaltrace_transparent.png';
+    if (is_file($logoPath)) {
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=86400');
+        readfile($logoPath);
+    } else {
+        http_response_code(404);
+    }
+    exit;
+}
+
 if ($path === '/admin.css') {
     requireAdminAuth();
     $cssPath = __DIR__ . '/admin.css';
@@ -201,6 +197,8 @@ $reserved = [
     '/admin/run-cleanup',
     '/health',
     '/admin.css',
+    '/favicon.ico',
+    '/favicon.png',
     '/signaltrace_transparent.png',
     '/feed/ips.txt',
     '/export/json',
@@ -219,3 +217,4 @@ if (!in_array($path, $reserved, true)) {
    ============================================================ */
 http_response_code(404);
 echo 'Not found';
+

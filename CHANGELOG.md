@@ -2,6 +2,64 @@
 
 ---
 
+## [2.3.0] — April 9, 2026
+
+### Setup & Demo Release
+
+The setup script now handles the complete manual installation end to end — system packages, repository clone, PHP dependencies, GeoIP, database initialisation, Apache configuration, and optional Let's Encrypt HTTPS. A live demo is available at trysignaltrace.com with hourly resets.
+
+### Setup Script
+
+The manual install path was substantially reworked. Previously it assumed system packages were already installed and the repository was already cloned. The script can now be downloaded as a standalone file and run on a fresh Ubuntu server — it installs all system packages first (Apache, PHP, SQLite, Composer, geoipupdate), then clones the repository to `/var/www/signaltrace`, then proceeds with configuration. If run from inside an existing clone it detects this and skips the clone step.
+
+The script now installs PHP dependencies via Composer automatically as part of the manual install flow.
+
+GeoIP configuration is now fully automated. The script writes `/etc/GeoIP.conf` with the correct `DatabaseDirectory /var/lib/GeoIP` entry and runs `geoipupdate` to download the databases immediately. Previously the databases landed at `/usr/share/GeoIP/` (the geoipupdate default) rather than `/var/lib/GeoIP/` (where SignalTrace looks), causing ASN and country enrichment to silently fail on manual installs.
+
+Database initialisation is now part of the setup script. After writing the config file the script creates the data directory, sets correct ownership, initialises the schema, and offers to load sample data. On a re-run it detects an existing database and prompts before wiping it.
+
+Apache vhost configuration is now automated. The script prompts for a ServerName, writes `/etc/apache2/sites-available/signaltrace.conf`, enables the site, disables the default site, and restarts Apache.
+
+Let's Encrypt HTTPS is now offered as an optional final step. The script installs certbot, requests a certificate for the configured ServerName, and enables automatic HTTP→HTTPS redirect. Certificates renew automatically via the certbot systemd timer.
+
+Optional tuning values (auth lockout threshold, lockout duration, self-referrer domain) are now prompted during setup rather than requiring manual file edits afterward. They are written into `config.local.php` for manual installs and `.env` for Docker.
+
+The export API token prompt was simplified to a single prompt with three clear options: press Enter to auto-generate, type a value to use your own, or type `none` to skip.
+
+The admin password prompt now requires the password to be entered twice and loops until both entries match.
+
+A prominent warning box is displayed before the manual install proceeds, making clear it is designed for a fresh Ubuntu server and will install and configure Apache, disable the default site, and overwrite `/etc/GeoIP.conf`.
+
+### Bug Fixes
+
+`sqlite3` was being called before the data directory existed and was owned by `www-data`, causing an "unable to open database file" error on fresh installs. The fix creates the directory and sets ownership before attempting to create the database file.
+
+The seed file used hardcoded `link_id` values (1, 2, 4) that assumed specific SQLite auto-increment IDs. On a fresh install these IDs are not guaranteed, causing foreign key constraint failures. The seed now uses subquery lookups (`SELECT id FROM links WHERE token = '...'`) to resolve IDs dynamically.
+
+The `INSERT INTO links` statement in seed.sql was changed to `INSERT OR IGNORE INTO links` to prevent UNIQUE constraint failures when the seed is run against a database that already contains the sample tokens.
+
+`/favicon.ico` and `/favicon.png` routes were added to `public/index.php`. Both serve `signaltrace_transparent.png` publicly without requiring authentication. Both paths are added to the `$reserved` array so favicon requests are never logged as honeypot hits.
+
+The `$buildExportUrl` closure in `admin_view.php` contained a typo — `/expor/json` instead of `/export/json`.
+
+### Demo Infrastructure
+
+A live demo runs at `https://trysignaltrace.com/admin` (username: `demo`, password: `trysignaltrace`). The demo resets every 60 minutes via a cron job.
+
+`demo-reset.sh` — a standalone cron script that drops the database, recreates the schema, seeds sample data, sets the base URL to `https://trysignaltrace.com`, writes a reset timestamp to `data/.last_reset`, and fixes file ownership. Intended to run as root via cron: `0 * * * * /opt/signaltrace-demo/demo-reset.sh`.
+
+`demo-banner.php` — a sticky amber banner injected into the admin session block in `public/index.php`. Reads `data/.last_reset` to calculate remaining time and renders a live JavaScript countdown. Turns red and pulses under two minutes. Reloads the page automatically when the timer reaches zero so visitors see fresh data. Not part of the main repository — deployed only on the demo instance.
+
+### Marketing Website
+
+A project website is live at `https://www.trysignaltrace.com`. It matches the SignalTrace dark palette (IBM Plex fonts, same CSS variables as the admin UI) and includes a hero section with a live score card illustration, feature grid, video walkthrough placeholder, how-it-works steps, demo credentials card, and GitHub CTA. The site is a standalone `index.html` served from `/var/www/trysignaltrace-www/` behind Cloudflare — no certbot required on the origin.
+
+### Favicons
+
+Favicon `<link>` tags (`/favicon.png` and apple-touch-icon) were added to `admin_view.php`. The `/favicon.ico` and `/favicon.png` routes in `index.php` serve the transparent logo publicly so browsers receive the favicon before authentication.
+
+---
+
 ## [2.2.0] — April 7, 2026
 
 ### Docker
@@ -247,3 +305,4 @@ Table column headers were shifted downward into the first data row due to `posit
 ## [1.0.0] — April 2, 2026
 
 Custom token tracking with redirect support, full request logging, visitor fingerprinting, tracking pixel support, confidence scoring across four labels, bot signature detection, path-based risk detection, behavioral detection (rapid repeat, burst, multi-token scan), ASN-based scoring rules, skip patterns for noise filtering, admin dashboard with filtering and cleanup tools, threat feed at `/feed/ips.txt`, JSON export, GeoIP enrichment via MaxMind, SQLite backend, HTTP Basic Auth admin.
+

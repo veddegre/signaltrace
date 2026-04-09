@@ -15,6 +15,21 @@ SignalTrace is a self-hosted tracking and analysis platform for honeypot deploym
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
 
+🌐 **[trysignaltrace.com](https://www.trysignaltrace.com)** — project website
+
+---
+
+## Live Demo
+
+A live instance is running at **[trysignaltrace.com/admin](https://trysignaltrace.com/admin)** and capturing real traffic. Every scanner, bot, and automated probe that hits it is scored in real time.
+
+| | |
+|---|---|
+| **Username** | `demo` |
+| **Password** | `trysignaltrace` |
+
+The demo resets every 60 minutes. All data is sample/live traffic only — no real credentials or sensitive data are present.
+
 ---
 
 ## Why SignalTrace
@@ -360,5 +375,10 @@ MIT
 
 ---
 
-Most tools try to hide the noise. SignalTrace makes it visible.
+## Changelog
 
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+---
+
+Most tools try to hide the noise. SignalTrace makes it visible.

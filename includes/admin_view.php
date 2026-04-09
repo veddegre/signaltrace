@@ -151,7 +151,9 @@ function renderAdminPage(
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title><?= h($appName) ?></title>
-        <link rel="stylesheet" href="/admin.css">
+	<link rel="stylesheet" href="/admin.css">
+        <link rel="icon" type="image/png" href="/signaltrace_transparent.png">
+        <link rel="apple-touch-icon" href="/signaltrace_transparent.png">
     </head>
     <body>
         <header class="page-header">
@@ -1214,3 +1216,4 @@ function renderAdminPage(
     </html>
     <?php
 }
+
