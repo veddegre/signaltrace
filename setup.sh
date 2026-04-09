@@ -191,25 +191,26 @@ prompt "MaxMind License Key" MAXMIND_LICENSE_KEY "" "" "secret"
 
 # -- Shared: export API token --------------------------------------------------
 echo -e "${BOLD}── Export API Token (optional) ──────────────────────────────${RESET}"
-echo "  Used for automation. Leave blank to skip, or press Enter to auto-generate."
+echo "  Used for Splunk scripted inputs and other automation."
 echo ""
-read -r -p "  Value (Enter to auto-generate, or type your own): " EXPORT_TOKEN_INPUT
+echo "  Press Enter to auto-generate  |  Type a value to use your own  |  Type 'none' to skip"
+echo ""
+read -r -p "  Value: " EXPORT_TOKEN_INPUT
 
-if [ "$EXPORT_TOKEN_INPUT" = "" ]; then
-    read -r -p "  Auto-generate a token? [Y/n] " autogen
-    if [[ ! "$autogen" =~ ^[Nn]$ ]]; then
-        if command -v openssl &>/dev/null; then
-            SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
-            echo -e "  ${GREEN}Token generated.${RESET}"
-        else
-            SIGNALTRACE_EXPORT_API_TOKEN=""
-            echo -e "${YELLOW}openssl not found, leaving blank.${RESET}"
-        fi
+if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
+    SIGNALTRACE_EXPORT_API_TOKEN=""
+    echo -e "  ${YELLOW}Export API token disabled.${RESET}"
+elif [ -z "$EXPORT_TOKEN_INPUT" ]; then
+    if command -v openssl &>/dev/null; then
+        SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
+        echo -e "  ${GREEN}Token auto-generated.${RESET}"
     else
         SIGNALTRACE_EXPORT_API_TOKEN=""
+        echo -e "  ${YELLOW}openssl not found — token skipped. Install openssl and re-run to generate one.${RESET}"
     fi
 else
     SIGNALTRACE_EXPORT_API_TOKEN="$EXPORT_TOKEN_INPUT"
+    echo -e "  ${GREEN}Token set.${RESET}"
 fi
 echo ""
 
@@ -372,6 +373,8 @@ GEOIPCONF
     if [ "${SKIP_DB:-false}" = false ]; then
         echo "Initialising database..."
         sudo mkdir -p "$DB_DIR"
+        sudo chown www-data:www-data "$DB_DIR"
+        sudo chmod 775 "$DB_DIR"
         # Remove old database so we start clean
         [ -f "$DB_FILE" ] && sudo rm -f "$DB_FILE"
         sudo -u www-data sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
