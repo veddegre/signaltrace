@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # SignalTrace setup script
-# Supports both Docker and manual installs.
-# Run from the root of the SignalTrace repository.
+# Supports Docker and manual installs.
+# Can be run from inside the cloned repo, or downloaded standalone:
+#   curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh | sudo bash
 
 set -e
 
+REPO_URL="https://github.com/veddegre/signaltrace.git"
+INSTALL_DIR="/var/www/signaltrace"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # -- Colours ------------------------------------------------------------------
@@ -36,10 +39,59 @@ if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ]; then
     exit 1
 fi
 
-if [ "$INSTALL_TYPE" = "1" ]; then
-    OUTPUT_FILE="$SCRIPT_DIR/.env"
-else
+# -- For manual installs: install packages and clone repo first ---------------
+if [ "$INSTALL_TYPE" = "2" ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Installing system packages..."
+    echo ""
+    sudo apt-get update -qq
+    sudo apt-get install -y \
+        apache2 \
+        php \
+        php-sqlite3 \
+        php-mbstring \
+        php-xml \
+        php-curl \
+        sqlite3 \
+        composer \
+        unzip \
+        git \
+        software-properties-common
+    if ! command -v geoipupdate &>/dev/null; then
+        sudo add-apt-repository -y ppa:maxmind/ppa
+        sudo apt-get update -qq
+        sudo apt-get install -y geoipupdate
+    fi
+    sudo a2enmod rewrite
+    echo -e "  ${GREEN}System packages installed.${RESET}"
+    echo ""
+
+    # Clone repo if not already running from inside it
+    if [ ! -f "$SCRIPT_DIR/db/schema.sql" ]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Cloning SignalTrace repository..."
+        echo ""
+        if [ -d "$INSTALL_DIR" ]; then
+            echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
+            read -r -p "  Remove and re-clone? [y/N] " reclone
+            if [[ "$reclone" =~ ^[Yy]$ ]]; then
+                sudo rm -rf "$INSTALL_DIR"
+            else
+                echo "  Using existing directory."
+            fi
+        fi
+        if [ ! -d "$INSTALL_DIR" ]; then
+            sudo git clone "$REPO_URL" "$INSTALL_DIR"
+        fi
+        sudo chown -R www-data:www-data "$INSTALL_DIR"
+        SCRIPT_DIR="$INSTALL_DIR"
+        echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
+        echo ""
+    fi
+
     OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
+else
+    OUTPUT_FILE="$SCRIPT_DIR/.env"
 fi
 
 # -- Guard: existing config file -----------------------------------------------
@@ -136,7 +188,7 @@ else
         ADMIN_PASSWORD_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw('${ADMIN_PASSWORD}'.encode(), bcrypt.gensalt()).decode())")
         echo -e "  ${GREEN}Hash generated.${RESET}"
     else
-        echo -e "${YELLOW}PHP not found — hash will be generated from the container after build.${RESET}"
+        echo -e "  ${YELLOW}PHP not found — hash will be generated from the container after build.${RESET}"
         ADMIN_PASSWORD_HASH="__DEFER__"
         DEFER_HASH=true
     fi
@@ -277,7 +329,7 @@ EOF
     fi
 fi
 
-# -- Deferred hash generation --------------------------------------------------
+# -- Deferred hash generation (Docker, no local PHP) --------------------------
 if [ "$DEFER_HASH" = true ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Generating password hash via Docker..."
@@ -303,7 +355,6 @@ if [ "$DEFER_HASH" = true ]; then
         exit 1
     fi
 
-    # Escape $ signs before passing to sed
     ESC_HASH=$(echo "$ADMIN_PASSWORD_HASH" | sed 's/\$/\\$/g')
     sed -i "s|SIGNALTRACE_ADMIN_PASSWORD_HASH='__DEFER__'|SIGNALTRACE_ADMIN_PASSWORD_HASH='${ESC_HASH}'|" "$OUTPUT_FILE"
 
@@ -326,32 +377,7 @@ if [ "$INSTALL_TYPE" = "1" ]; then
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
 else
-    # ── System packages ───────────────────────────────────────────────────────
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Installing system packages..."
-    echo ""
-    sudo apt-get update -qq
-    sudo apt-get install -y \
-        apache2 \
-        php \
-        php-sqlite3 \
-        php-mbstring \
-        php-xml \
-        php-curl \
-        sqlite3 \
-        composer \
-        unzip \
-        software-properties-common
-    if ! command -v geoipupdate &>/dev/null; then
-        sudo add-apt-repository -y ppa:maxmind/ppa
-        sudo apt-get update -qq
-        sudo apt-get install -y geoipupdate
-    fi
-    sudo a2enmod rewrite
-    echo -e "  ${GREEN}System packages installed.${RESET}"
-    echo ""
-
-    # ── Composer dependencies ─────────────────────────────────────────────────
+    # ── Composer dependencies -------------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing PHP dependencies..."
     echo ""
@@ -363,21 +389,18 @@ else
     echo -e "  ${GREEN}PHP dependencies installed.${RESET}"
     echo ""
 
-    # ── GeoIP configuration ───────────────────────────────────────────────────
+    # ── GeoIP configuration --------------------------------------------------
     if [ -n "$MAXMIND_ACCOUNT_ID" ] && [ -n "$MAXMIND_LICENSE_KEY" ]; then
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "Configuring GeoIP..."
         echo ""
-
         sudo mkdir -p /var/lib/GeoIP
-
         sudo tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
 AccountID ${MAXMIND_ACCOUNT_ID}
 LicenseKey ${MAXMIND_LICENSE_KEY}
 EditionIDs GeoLite2-ASN GeoLite2-Country
 DatabaseDirectory /var/lib/GeoIP
 GEOIPCONF
-
         echo "  /etc/GeoIP.conf written."
         echo "  Downloading GeoIP databases..."
         if sudo geoipupdate; then
@@ -388,12 +411,11 @@ GEOIPCONF
         echo ""
     else
         echo -e "${YELLOW}Note: MaxMind credentials not provided — GeoIP enrichment will be unavailable.${RESET}"
-        echo "  To enable it later, add AccountID and LicenseKey to /etc/GeoIP.conf and run:"
-        echo "  sudo geoipupdate"
+        echo "  To enable it later, add your credentials to /etc/GeoIP.conf and run: sudo geoipupdate"
         echo ""
     fi
 
-    # ── Database initialisation ───────────────────────────────────────────────
+    # ── Database initialisation -----------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     DB_FILE="/var/www/signaltrace/data/database.db"
     DB_DIR="/var/www/signaltrace/data"
@@ -412,7 +434,6 @@ GEOIPCONF
         sudo mkdir -p "$DB_DIR"
         sudo chown www-data:www-data "$DB_DIR"
         sudo chmod 775 "$DB_DIR"
-        # Remove old database so we start clean
         [ -f "$DB_FILE" ] && sudo rm -f "$DB_FILE"
         sudo -u www-data sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
         sudo chown www-data:www-data "$DB_FILE"
@@ -428,7 +449,7 @@ GEOIPCONF
     fi
     echo ""
 
-    # ── Fix ownership ─────────────────────────────────────────────────────────
+    # ── Fix ownership ---------------------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Setting file ownership..."
     sudo chown -R www-data:www-data /var/www/signaltrace
@@ -436,7 +457,7 @@ GEOIPCONF
     echo -e "  ${GREEN}Ownership set to www-data.${RESET}"
     echo ""
 
-    # ── Apache vhost ──────────────────────────────────────────────────────────
+    # ── Apache vhost ----------------------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Configuring Apache..."
     echo ""

@@ -91,33 +91,28 @@ On Proxmox LXC containers, the `security_opt: apparmor=unconfined` setting in `d
 
 ## Manual Installation (Ubuntu + Apache)
 
-### 1. Clone the repository
+The setup script handles everything — packages, cloning, configuration, database, GeoIP, and Apache. Run it on a fresh Ubuntu server:
 
 ```bash
-cd /var/www
-sudo git clone https://github.com/veddegre/signaltrace.git
-sudo chown -R www-data:www-data signaltrace
-```
-
-### 2. Run the setup script
-
-```bash
-cd /var/www/signaltrace
+curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh -o setup.sh
 chmod +x setup.sh
 sudo ./setup.sh
 ```
 
-Select option 2 (Manual) when prompted. The script handles everything from there:
+Select option 2 (Manual) when prompted. The script will:
 
-- Installs system packages (Apache, PHP, SQLite, Composer, geoipupdate)
-- Installs PHP dependencies via Composer
-- Writes `includes/config.local.php`
-- Configures `/etc/GeoIP.conf` and downloads the MaxMind databases
-- Initialises the SQLite database, with an option to load sample data
-- Sets correct `www-data` ownership on all files
-- Configures and restarts Apache
+- Install Apache, PHP, SQLite, Composer, and geoipupdate
+- Clone the repository to `/var/www/signaltrace`
+- Walk through all configuration options
+- Install PHP dependencies via Composer
+- Configure `/etc/GeoIP.conf` and download the MaxMind databases
+- Initialise the SQLite database, with an option to load sample data
+- Set correct `www-data` ownership on all files
+- Configure and restart Apache
 
 When the script finishes, SignalTrace is running.
+
+If you have already cloned the repository manually, you can run `setup.sh` from inside it instead — it will detect the existing repo and skip the clone step.
 
 ---
 
@@ -354,4 +349,3 @@ MIT
 ---
 
 Most tools try to hide the noise. SignalTrace makes it visible.
-
