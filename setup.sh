@@ -326,6 +326,43 @@ if [ "$INSTALL_TYPE" = "1" ]; then
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
 else
+    # ── System packages ───────────────────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Installing system packages..."
+    echo ""
+    sudo apt-get update -qq
+    sudo apt-get install -y \
+        apache2 \
+        php \
+        php-sqlite3 \
+        php-mbstring \
+        php-xml \
+        php-curl \
+        sqlite3 \
+        composer \
+        unzip \
+        software-properties-common
+    if ! command -v geoipupdate &>/dev/null; then
+        sudo add-apt-repository -y ppa:maxmind/ppa
+        sudo apt-get update -qq
+        sudo apt-get install -y geoipupdate
+    fi
+    sudo a2enmod rewrite
+    echo -e "  ${GREEN}System packages installed.${RESET}"
+    echo ""
+
+    # ── Composer dependencies ─────────────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Installing PHP dependencies..."
+    echo ""
+    cd "$SCRIPT_DIR" && sudo -u www-data composer install --no-dev --no-interaction
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: composer install failed.${RESET}"
+        exit 1
+    fi
+    echo -e "  ${GREEN}PHP dependencies installed.${RESET}"
+    echo ""
+
     # ── GeoIP configuration ───────────────────────────────────────────────────
     if [ -n "$MAXMIND_ACCOUNT_ID" ] && [ -n "$MAXMIND_LICENSE_KEY" ]; then
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -399,9 +436,37 @@ GEOIPCONF
     echo -e "  ${GREEN}Ownership set to www-data.${RESET}"
     echo ""
 
-    echo "Next steps:"
-    echo "  1. Configure your Apache vhost — see README.md for the full config"
-    echo "  2. Restart Apache: sudo systemctl restart apache2"
+    # ── Apache vhost ──────────────────────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Configuring Apache..."
+    echo ""
+    read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
+    APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
+
+    sudo tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
+<VirtualHost *:80>
+    ServerName ${APACHE_SERVER_NAME}
+    DocumentRoot /var/www/signaltrace/public
+
+    SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
+
+    <Directory /var/www/signaltrace/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog  \${APACHE_LOG_DIR}/signaltrace_error.log
+    CustomLog \${APACHE_LOG_DIR}/signaltrace_access.log combined
+</VirtualHost>
+APACHECONF
+
+    sudo a2ensite signaltrace.conf
+    sudo a2dissite 000-default.conf 2>/dev/null || true
+    sudo systemctl restart apache2
+    echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
+    echo ""
+
+    echo -e "${CYAN}SignalTrace is available at: http://${APACHE_SERVER_NAME}/admin${RESET}"
 fi
 echo ""
 
