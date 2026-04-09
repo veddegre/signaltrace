@@ -109,8 +109,11 @@ Select option 2 (Manual) when prompted. The script will:
 - Initialise the SQLite database, with an option to load sample data
 - Set correct `www-data` ownership on all files
 - Configure and restart Apache
+- Optionally configure HTTPS via Let's Encrypt
 
 When the script finishes, SignalTrace is running.
+
+> **Warning:** The manual install is designed for a fresh Ubuntu server with no existing web services. It will install and configure Apache and disable the default site. Do not run it on a server already hosting other websites.
 
 If you have already cloned the repository manually, you can run `setup.sh` from inside it instead — it will detect the existing repo and skip the clone step.
 
@@ -126,9 +129,18 @@ If you need to change a value after the initial setup, edit `includes/config.loc
 
 ## HTTPS
 
+For manual installs, the setup script offers to configure HTTPS via Let's Encrypt at the end of the install process. Your domain must be pointed at the server before running certbot.
+
+To add HTTPS after the initial install, or to renew manually:
+
 ```bash
 sudo apt install -y certbot python3-certbot-apache
 sudo certbot --apache
+```
+
+Certificates renew automatically via a systemd timer installed by certbot. To verify auto-renewal is working:
+
+```bash
 sudo certbot renew --dry-run
 ```
 
@@ -349,3 +361,4 @@ MIT
 ---
 
 Most tools try to hide the noise. SignalTrace makes it visible.
+

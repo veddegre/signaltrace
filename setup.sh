@@ -39,6 +39,32 @@ if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ]; then
     exit 1
 fi
 
+# -- Manual install warning ----------------------------------------------------
+if [ "$INSTALL_TYPE" = "2" ]; then
+    echo ""
+    echo -e "${RED}${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${RED}${BOLD}║                        WARNING                          ║${RESET}"
+    echo -e "${RED}${BOLD}╠══════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${RED}${BOLD}║  The manual install is designed for a FRESH Ubuntu       ║${RESET}"
+    echo -e "${RED}${BOLD}║  server with no existing web services.                   ║${RESET}"
+    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  It will:                                                ║${RESET}"
+    echo -e "${RED}${BOLD}║  • Install and configure Apache                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  • Disable the default Apache site                       ║${RESET}"
+    echo -e "${RED}${BOLD}║  • Overwrite /etc/GeoIP.conf if it exists               ║${RESET}"
+    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  Do NOT run this on a server already hosting other       ║${RESET}"
+    echo -e "${RED}${BOLD}║  websites or services.                                   ║${RESET}"
+    echo -e "${RED}${BOLD}╚══════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    read -r -p "  I understand. Continue? [y/N] " confirm_manual
+    if [[ ! "$confirm_manual" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+    echo ""
+fi
+
 # -- For manual installs: install packages and clone repo first ---------------
 if [ "$INSTALL_TYPE" = "2" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -164,13 +190,22 @@ prompt "Admin username" ADMIN_USERNAME "admin"
 # -- Admin password ------------------------------------------------------------
 echo -e "${CYAN}Admin password${RESET}"
 echo "  Enter a password and the script will hash it for you."
-read -r -s -p "  Password: " ADMIN_PASSWORD
-echo ""
-
-if [ -z "$ADMIN_PASSWORD" ]; then
-    echo -e "${RED}Error: password cannot be blank.${RESET}"
-    exit 1
-fi
+while true; do
+    read -r -s -p "  Password: " ADMIN_PASSWORD
+    echo ""
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        echo -e "  ${RED}Error: password cannot be blank.${RESET}"
+        continue
+    fi
+    read -r -s -p "  Confirm password: " ADMIN_PASSWORD_CONFIRM
+    echo ""
+    if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+        echo -e "  ${RED}Passwords do not match. Try again.${RESET}"
+        echo ""
+    else
+        break
+    fi
+done
 
 DEFER_HASH=false
 
@@ -487,7 +522,43 @@ APACHECONF
     echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
     echo ""
 
-    echo -e "${CYAN}SignalTrace is available at: http://${APACHE_SERVER_NAME}/admin${RESET}"
+    # ── Let's Encrypt ---------------------------------------------------------
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${CYAN}HTTPS with Let's Encrypt (optional)${RESET}"
+    echo "  Requires a real domain name pointed at this server."
+    echo "  Will not work with an IP address or localhost."
+    echo ""
+    read -r -p "  Set up HTTPS now? [y/N] " do_letsencrypt
+    if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
+        echo ""
+        read -r -p "  Email address for Let's Encrypt notifications: " LE_EMAIL
+        if [ -z "$LE_EMAIL" ]; then
+            echo -e "  ${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
+        else
+            echo "  Installing certbot..."
+            sudo apt-get install -y certbot python3-certbot-apache -qq
+            echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
+            if sudo certbot --apache \
+                --non-interactive \
+                --agree-tos \
+                --email "$LE_EMAIL" \
+                --domains "$APACHE_SERVER_NAME" \
+                --redirect; then
+                echo -e "  ${GREEN}HTTPS configured. Certificate will auto-renew.${RESET}"
+                HTTPS_ENABLED=true
+            else
+                echo -e "  ${YELLOW}Certbot failed. Make sure your domain is pointed at this server and try:${RESET}"
+                echo "  sudo certbot --apache"
+            fi
+        fi
+    fi
+    echo ""
+
+    if [ "${HTTPS_ENABLED:-false}" = true ]; then
+        echo -e "${CYAN}SignalTrace is available at: https://${APACHE_SERVER_NAME}/admin${RESET}"
+    else
+        echo -e "${CYAN}SignalTrace is available at: http://${APACHE_SERVER_NAME}/admin${RESET}"
+    fi
 fi
 echo ""
 
