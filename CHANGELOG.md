@@ -46,14 +46,6 @@ The `$buildExportUrl` closure in `admin_view.php` contained a typo — `/expor/j
 
 A live demo runs at `https://trysignaltrace.com/admin` (username: `demo`, password: `trysignaltrace`). The demo resets every 60 minutes via a cron job.
 
-`demo-reset.sh` — a standalone cron script that drops the database, recreates the schema, seeds sample data, sets the base URL to `https://trysignaltrace.com`, writes a reset timestamp to `data/.last_reset`, and fixes file ownership. Intended to run as root via cron: `0 * * * * /opt/signaltrace-demo/demo-reset.sh`.
-
-`demo-banner.php` — a sticky amber banner injected into the admin session block in `public/index.php`. Reads `data/.last_reset` to calculate remaining time and renders a live JavaScript countdown. Turns red and pulses under two minutes. Reloads the page automatically when the timer reaches zero so visitors see fresh data. Not part of the main repository — deployed only on the demo instance.
-
-### Marketing Website
-
-A project website is live at `https://www.trysignaltrace.com`. It matches the SignalTrace dark palette (IBM Plex fonts, same CSS variables as the admin UI) and includes a hero section with a live score card illustration, feature grid, video walkthrough placeholder, how-it-works steps, demo credentials card, and GitHub CTA. The site is a standalone `index.html` served from `/var/www/trysignaltrace-www/` behind Cloudflare — no certbot required on the origin.
-
 ### Favicons
 
 Favicon `<link>` tags (`/favicon.png` and apple-touch-icon) were added to `admin_view.php`. The `/favicon.ico` and `/favicon.png` routes in `index.php` serve the transparent logo publicly so browsers receive the favicon before authentication.
