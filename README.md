@@ -12,6 +12,8 @@ SignalTrace is a self-hosted tracking and analysis platform for honeypot deploym
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
 
+https://github.com/user-attachments/assets/7998998e-3fb9-4f18-a37c-bd5f6cc19df2
+
 **Project Website:** [www.trysignaltrace.com](https://www.trysignaltrace.com)
 
 ---
