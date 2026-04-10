@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/7998998e-3fb9-4f18-a37c-bd5f6cc19df2
 ---
 
 ## Live Demo
-A live instance is running at `trysignaltrace.com/admin` and capturing real traffic. Every scanner, bot, and automated probe that hits it is scored in real time.
+A live instance is running at [trysignaltrace.com/admin](https://trysignalspace.com/admin) and capturing real traffic. Every scanner, bot, and automated probe that hits it is scored in real time.
 
 * **Username:** `demo`
 * **Password:** `trysignaltrace`
