@@ -13,9 +13,15 @@
   Self-hosted honeypot tracking, link intelligence, and request scoring for security visibility.
 </p>
 
+<p align="center">
+  Designed for SOC workflows, phishing simulations, and real-time threat intelligence generation.
+</p>
+
 SignalTrace is a self-hosted tracking and analysis platform for honeypot deployment, link tracking, and security visibility. It logs every interaction with your custom paths, scores each request for bot/human likelihood, and feeds the results into your security tooling.
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
+
+Includes built-in Splunk dashboards and SIEM-ready export endpoints.
 
 **Project Website:** [www.trysignaltrace.com](https://www.trysignaltrace.com)
 
@@ -23,7 +29,7 @@ No external services required. One PHP app, one SQLite database, one Apache vhos
 
 ## Demo
 
-A short walkthrough of SignalTrace in action:
+A short walkthrough of the dashboard, token workflow, and event investigation:
 
 https://github.com/user-attachments/assets/7998998e-3fb9-4f18-a37c-bd5f6cc19df2
 
@@ -42,9 +48,25 @@ A live instance is running at [trysignaltrace.com/admin](https://trysignaltrace.
 
 Most tracking tools tell you *that* something hit an endpoint. SignalTrace tells you *what kind of thing* hit it, how confident the assessment is, and why — with enough detail to act on immediately or pipe into a SIEM.
 
+SignalTrace provides real-time, explainable scoring — every classification is backed by named detection signals, not black-box logic.
+
 Every hit gets a 0–100 human-likelihood score with named signal reasons. The built-in threat feed at `/feed/ips.txt` is ready to consume from a firewall or block list. The JSON and CSV export endpoints support token-based authentication for scheduled Splunk ingestion.
 
-**Good for:** phishing simulations, honeypot deployments, recon detection, link tracking, and threat feed generation.
+**Use cases:** phishing simulations, honeypot deployments, recon detection, link tracking, and threat feed generation.
+
+---
+
+## How it works (high-level)
+
+SignalTrace processes every request in real time:
+
+1. Request is logged and enriched (IP, ASN, headers)
+2. Detection signals are applied
+3. A score (0–100) is calculated
+4. Classification is assigned (bot → human)
+5. Results are immediately available via dashboard, feed, or API
+
+---
 
 ## Screenshots
 
@@ -101,7 +123,9 @@ Every hit gets a 0–100 human-likelihood score with named signal reasons. The b
 
 ## Requirements
 
-SignalTrace is designed to run on minimal hardware. A 1 vCPU VM with 1 GB RAM and swap enabled is sufficient. Plan for 5–10 GB of disk depending on how much traffic you log.
+SignalTrace is designed to run on minimal hardware.
+
+A 1 vCPU VM with 1 GB RAM and swap enabled is sufficient. Plan for 5–10 GB of disk depending on how much traffic you log.
 
 **Software requirements:** PHP 8.1+, SQLite3, Apache with mod_rewrite, Composer.
 
@@ -187,12 +211,14 @@ If you need to change a value after the initial setup, edit `includes/config.loc
 For manual installs, the setup script offers to configure HTTPS via Let's Encrypt at the end of the install process. Your domain must be pointed at the server before running certbot.
 
 To add HTTPS after the initial install, or to renew manually:
+
 ```bash
 sudo apt install -y certbot python3-certbot-apache
 sudo certbot --apache
 ```
 
 Certificates renew automatically via a systemd timer installed by certbot. To verify auto-renewal is working:
+
 ```bash
 sudo certbot renew --dry-run
 ```
@@ -227,11 +253,13 @@ Then poll either export endpoint on a schedule:
 * `https://yourdomain.example/export/csv`
 
 Authenticate with a header (recommended, not logged by Apache):
+
 ```http
 Authorization: Bearer your-generated-token
 ```
 
 Or with a query parameter if your tooling doesn't support custom headers (note this appears in access logs):
+
 `https://yourdomain.example/export/csv?api_key=your-generated-token`
 
 When polled with no filters, the export applies the configured confidence threshold, minimum score, and time window from Settings. Pass `?ip=`, `?path=`, `?date_from=`, or other filter parameters to override.
