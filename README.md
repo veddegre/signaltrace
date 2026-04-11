@@ -1,5 +1,5 @@
 <p align="center"> 
-  <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace Tracking & Analysis" width="160"> 
+  <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace — Signal Trace Tracking & Analysis" width="160"> 
 </p> 
 
 <p align="center"> 
@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  Self-hosted honeypot tracking, link intelligence, and request scoring for security visibility.
+  SignalTrace Tracking & Analysis for honeypots, links, and request intelligence.
 </p>
 
 <p align="center">
   Designed for SOC workflows, phishing simulations, and real-time threat intelligence generation.
 </p>
 
-SignalTrace is a self-hosted tracking and analysis platform for honeypot deployment, link tracking, and security visibility. It logs every interaction with your custom paths, scores each request for bot/human likelihood, and feeds the results into your security tooling.
+SignalTrace is a self-hosted tracking and analysis platform for honeypot deployment, link tracking, and security visibility. It logs every interaction with custom paths, scores each request for bot or human likelihood, and makes the results immediately usable for investigation, automation, or SIEM integration.
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
 
@@ -73,8 +73,8 @@ SignalTrace processes every request in real time:
 ### Dashboard
 
 <p align="center"> 
-  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard in dark mode" width="49%"> 
-  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard in light mode" width="49%"> 
+  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard — Signal Trace tracking & analysis (dark mode)" width="49%"> 
+  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard — Signal Trace tracking & analysis (light mode)" width="49%"> 
 </p>
 
 <p align="center">
@@ -84,8 +84,8 @@ SignalTrace processes every request in real time:
 ### Core Workflow
 
 <p align="center"> 
-  <img src="docs/images/tokens.webp" alt="Token management screen" width="49%"> 
-  <img src="docs/images/details.webp" alt="Event details screen" width="49%"> 
+  <img src="docs/images/tokens.webp" alt="SignalTrace token management — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/details.webp" alt="SignalTrace event details — Signal Trace tracking & analysis" width="49%"> 
 </p>
 
 <p align="center">
@@ -93,8 +93,8 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/settings.webp" alt="Settings screen" width="49%"> 
-  <img src="docs/images/skip.webp" alt="Skip patterns screen" width="49%"> 
+  <img src="docs/images/settings.webp" alt="SignalTrace settings — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/skip.webp" alt="SignalTrace skip patterns — Signal Trace tracking & analysis" width="49%"> 
 </p>
 
 <p align="center">
@@ -102,8 +102,8 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/asn.webp" alt="ASN rules screen" width="49%"> 
-  <img src="docs/images/settings2.webp" alt="Export and cleanup settings" width="49%"> 
+  <img src="docs/images/asn.webp" alt="SignalTrace ASN rules — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/settings2.webp" alt="SignalTrace export and cleanup settings — Signal Trace tracking & analysis" width="49%"> 
 </p>
 
 <p align="center">
@@ -113,8 +113,8 @@ SignalTrace processes every request in real time:
 ### Splunk Dashboards
 
 <p align="center"> 
-  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk overview dashboard" width="49%"> 
-  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk event investigation dashboard" width="49%"> 
+  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk overview — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk investigation — Signal Trace tracking & analysis" width="49%"> 
 </p>
 
 <p align="center">
