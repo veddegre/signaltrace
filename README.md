@@ -171,7 +171,8 @@ Select option 2 (Manual) when prompted. The script will:
 
 When the script finishes, SignalTrace is running.
 
-**Warning:** The manual install is designed for a fresh Ubuntu server with no existing web services. It will install and configure Apache and disable the default site. Do not run it on a server already hosting other websites.
+> [!WARNING]
+> The manual install is designed for a fresh Ubuntu server with no existing web services. It will install and configure Apache and disable the default site. Do not run it on a server already hosting other websites.
 
 If you have already cloned the repository manually, you can run `setup.sh` from inside it instead — it will detect the existing repo and skip the clone step.
 
