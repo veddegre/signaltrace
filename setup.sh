@@ -336,13 +336,7 @@ echo ""
 
 # -- Write output file ---------------------------------------------------------
 if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
-    if [ "$INSTALL_TYPE" = "1" ]; then
-        SIGNALTRACE_IMAGE="ghcr.io/veddegre/signaltrace:latest"
-    else
-        SIGNALTRACE_IMAGE="signaltrace"
-    fi
     cat > "$OUTPUT_FILE" << EOF
-SIGNALTRACE_IMAGE="${SIGNALTRACE_IMAGE}"
 SIGNALTRACE_ADMIN_USERNAME="${ADMIN_USERNAME}"
 SIGNALTRACE_PORT="${SIGNALTRACE_PORT}"
 SIGNALTRACE_ADMIN_PASSWORD_HASH='${ADMIN_PASSWORD_HASH}'
@@ -390,7 +384,11 @@ if [ "$DEFER_HASH" = true ]; then
     fi
 
     echo "  Starting container to generate hash..."
-    docker compose up -d 2>/dev/null
+    if [ "$INSTALL_TYPE" = "1" ]; then
+        docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d 2>/dev/null
+    else
+        docker compose up -d 2>/dev/null
+    fi
     sleep 3
 
     ADMIN_PASSWORD_HASH=$(docker exec signaltrace php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT);" 2>/dev/null)
@@ -426,11 +424,16 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
         docker compose build
         echo ""
     fi
+    if [ "$INSTALL_TYPE" = "1" ]; then
+        COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml"
+    else
+        COMPOSE_CMD="docker compose"
+    fi
     if [ "$CONTAINER_WAS_RUNNING" = true ]; then
-        docker compose up -d
+        $COMPOSE_CMD up -d
         echo -e "  ${GREEN}Container restarted.${RESET}"
     else
-        docker compose up -d
+        $COMPOSE_CMD up -d
         echo -e "  ${GREEN}Container started.${RESET}"
     fi
     echo ""
