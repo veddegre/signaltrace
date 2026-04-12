@@ -27,20 +27,21 @@ echo ""
 
 # -- Install type --------------------------------------------------------------
 echo -e "${CYAN}Install type${RESET}"
-echo "  1) Docker (recommended)"
-echo "  2) Manual (Ubuntu + Apache)"
+echo "  1) Docker — pre-built image (fastest, no build step)"
+echo "  2) Docker — build from source"
+echo "  3) Manual (Ubuntu + Apache)"
 echo ""
 read -r -p "  Choice [1]: " INSTALL_TYPE_INPUT
 INSTALL_TYPE="${INSTALL_TYPE_INPUT:-1}"
 echo ""
 
-if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ]; then
-    echo -e "${RED}Invalid choice. Please enter 1 or 2.${RESET}"
+if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ] && [ "$INSTALL_TYPE" != "3" ]; then
+    echo -e "${RED}Invalid choice. Please enter 1, 2, or 3.${RESET}"
     exit 1
 fi
 
 # -- Manual install warning ----------------------------------------------------
-if [ "$INSTALL_TYPE" = "2" ]; then
+if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
     echo -e "${RED}${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
     echo -e "${RED}${BOLD}║                        WARNING                           ║${RESET}"
@@ -68,7 +69,7 @@ if [ "$INSTALL_TYPE" = "2" ]; then
 fi
 
 # -- For manual installs: install packages and clone repo first ---------------
-if [ "$INSTALL_TYPE" = "2" ]; then
+if [ "$INSTALL_TYPE" = "3" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing system packages..."
     echo ""
@@ -246,7 +247,7 @@ echo ""
 
 # -- Docker only: port ---------------------------------------------------------
 CONTAINER_WAS_RUNNING=false
-if [ "$INSTALL_TYPE" = "1" ]; then
+if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     echo -e "${BOLD}── Docker Configuration ─────────────────────────────────────${RESET}"
     echo ""
 
@@ -334,8 +335,14 @@ read -r -p "  Value (leave blank to skip): " SELF_REFERER_DOMAIN
 echo ""
 
 # -- Write output file ---------------------------------------------------------
-if [ "$INSTALL_TYPE" = "1" ]; then
+if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
+    if [ "$INSTALL_TYPE" = "1" ]; then
+        SIGNALTRACE_IMAGE="ghcr.io/veddegre/signaltrace:latest"
+    else
+        SIGNALTRACE_IMAGE="signaltrace"
+    fi
     cat > "$OUTPUT_FILE" << EOF
+SIGNALTRACE_IMAGE="${SIGNALTRACE_IMAGE}"
 SIGNALTRACE_ADMIN_USERNAME="${ADMIN_USERNAME}"
 SIGNALTRACE_PORT="${SIGNALTRACE_PORT}"
 SIGNALTRACE_ADMIN_PASSWORD_HASH='${ADMIN_PASSWORD_HASH}'
@@ -372,9 +379,14 @@ if [ "$DEFER_HASH" = true ]; then
     echo "  Generating password hash via Docker..."
     echo ""
 
-    if ! docker image inspect signaltrace-signaltrace &>/dev/null; then
-        echo "  Building container image first..."
-        docker compose build
+    if [ "$INSTALL_TYPE" = "1" ]; then
+        echo "  Pulling pre-built image to generate hash..."
+        docker pull ghcr.io/veddegre/signaltrace:latest
+    else
+        if ! docker image inspect signaltrace-signaltrace &>/dev/null; then
+            echo "  Building container image first..."
+            docker compose build
+        fi
     fi
 
     echo "  Starting container to generate hash..."
@@ -404,12 +416,22 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${GREEN}${BOLD}$(basename "$OUTPUT_FILE") written successfully.${RESET}"
 echo ""
 
-if [ "$INSTALL_TYPE" = "1" ]; then
+if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
+    if [ "$INSTALL_TYPE" = "1" ] && [ "$CONTAINER_WAS_RUNNING" = false ] && [ "$DEFER_HASH" = false ]; then
+        echo "  Pulling pre-built image..."
+        docker pull ghcr.io/veddegre/signaltrace:latest
+        echo ""
+    elif [ "$INSTALL_TYPE" = "2" ] && [ "$CONTAINER_WAS_RUNNING" = false ] && [ "$DEFER_HASH" = false ]; then
+        echo "  Building image..."
+        docker compose build
+        echo ""
+    fi
     if [ "$CONTAINER_WAS_RUNNING" = true ]; then
         docker compose up -d
         echo -e "  ${GREEN}Container restarted.${RESET}"
     else
-        echo "Next step: docker compose up -d"
+        docker compose up -d
+        echo -e "  ${GREEN}Container started.${RESET}"
     fi
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
