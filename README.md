@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Database-SQLite-lightgrey" alt="SQLite"> 
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"> 
   <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
-  <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker.yml/badge.svg" alt="Docker Build">
+  <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker-image.yml/badge.svg" alt="Docker Build">
 </p>
 
 <p align="center">
