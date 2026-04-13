@@ -76,6 +76,7 @@ function renderAdminPage(
     $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
     $threatFeedWindowHours = (string) (getSetting($pdo, 'threat_feed_window_hours', '168') ?? '168');
     $threatFeedMinConfidence = (string) (getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
+    $threatFeedMinHits = (string) (getSetting($pdo, 'threat_feed_min_hits', '1') ?? '1');
     $dataRetentionDays = (string) (getSetting($pdo, 'data_retention_days', '0') ?? '0');
 
     $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
@@ -988,6 +989,10 @@ function renderAdminPage(
                             <option value="bot" <?= $threatFeedMinConfidence === 'bot' ? 'selected' : '' ?>>bot</option>
                         </select>
 
+                        <label for="threat_feed_min_hits">Minimum hits before adding to feed</label>
+                        <input id="threat_feed_min_hits" type="number" min="1" name="threat_feed_min_hits" value="<?= h($threatFeedMinHits) ?>">
+                        <p class="muted">An IP must be seen at least this many times within the window before appearing in the feed. Set to 1 to include on first hit.</p>
+
                         <p class="muted">
                             Feed URL:
                             <span class="mono"><?= h($threatFeedUrl) ?></span>
@@ -1216,4 +1221,3 @@ function renderAdminPage(
     </html>
     <?php
 }
-
