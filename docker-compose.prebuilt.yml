@@ -1,0 +1,10 @@
+# Use this override with the pre-built image instead of building from source.
+# setup.sh handles this automatically when you select option 1.
+#
+# To use manually:
+#   docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d
+
+services:
+  signaltrace:
+    build: !reset null
+    image: ghcr.io/veddegre/signaltrace:latest
