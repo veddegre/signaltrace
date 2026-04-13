@@ -2,6 +2,25 @@
 
 ---
 
+## [2.3.1] — April 12, 2026
+
+### GitHub Actions & Pre-built Image
+
+A GitHub Actions workflow (`docker.yml`) was added. It builds and pushes the Docker image to `ghcr.io/veddegre/signaltrace` on every push to `main` and on version tags. Pushing `v2.3.1` publishes both `ghcr.io/veddegre/signaltrace:2.3.1` and `ghcr.io/veddegre/signaltrace:latest`.
+
+`docker-compose.prebuilt.yml` was added as a Compose override that nulls out the `build` directive and sets the image to `ghcr.io/veddegre/signaltrace:latest`. Used with:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d
+```
+
+The setup script install menu was reordered and expanded to three options:
+* **Option 1 — Pre-built image:** pulls `ghcr.io/veddegre/signaltrace:latest` and starts the container — no build step required
+* **Option 2 — Build from source:** builds the image locally from the Dockerfile
+* **Option 3 — Manual (Ubuntu + Apache):** full manual install, unchanged from 2.3.0
+
+---
+
 ## [2.3.0] — April 9, 2026
 
 ### Setup & Demo Release
@@ -297,4 +316,3 @@ Table column headers were shifted downward into the first data row due to `posit
 ## [1.0.0] — April 2, 2026
 
 Custom token tracking with redirect support, full request logging, visitor fingerprinting, tracking pixel support, confidence scoring across four labels, bot signature detection, path-based risk detection, behavioral detection (rapid repeat, burst, multi-token scan), ASN-based scoring rules, skip patterns for noise filtering, admin dashboard with filtering and cleanup tools, threat feed at `/feed/ips.txt`, JSON export, GeoIP enrichment via MaxMind, SQLite backend, HTTP Basic Auth admin.
-
