@@ -1,3 +1,5 @@
+# SignalTrace Tracking & Analysis
+
 <p align="center"> 
   <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace — Signal Trace Tracking & Analysis" width="160"> 
 </p> 
@@ -6,7 +8,8 @@
   <img src="https://img.shields.io/badge/PHP-8.1%2B-blue" alt="PHP"> 
   <img src="https://img.shields.io/badge/Database-SQLite-lightgrey" alt="SQLite"> 
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"> 
-  <img src="https://img.shields.io/badge/Status-Active-success" alt="Status"> 
+  <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
+  <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker.yml/badge.svg" alt="Docker Build">
 </p>
 
 <p align="center">
@@ -131,9 +134,11 @@ A 1 vCPU VM with 1 GB RAM and swap enabled is sufficient. Plan for 5–10 GB of 
 
 ## Quick Start with Docker
 
-The fastest way to get SignalTrace running is with Docker Compose.
+Run `setup.sh` for a guided setup — it handles configuration, secret generation, and starting the container for all Docker options.
 
-### 1. Clone and run the setup script
+### Option A — Pre-built image (fastest)
+
+No build step. The script pulls `ghcr.io/veddegre/signaltrace:latest` and starts the container immediately after configuration.
 
 ```bash
 git clone https://github.com/veddegre/signaltrace.git
@@ -142,21 +147,89 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The setup script will ask whether you are doing a Docker or manual install, then walk through all configuration options. For Docker it generates `.env`. For a manual install it writes `includes/config.local.php` directly.
+Select **option 1** when prompted. The script walks through all configuration, writes `.env`, pulls the image, and starts the container.
 
-It will prompt for your admin username, password, host port (Docker only), MaxMind credentials, export API token, and reverse proxy IP. All optional values can be left blank.
+---
 
-If PHP is not installed on the host and you chose Docker, the script will build the container first and generate the bcrypt password hash from inside it automatically.
+### Option B — Build from source
 
-### 2. Start the container
+Builds the image locally from the Dockerfile. Useful if you want to modify the image or pin to a specific commit.
+
+```bash
+git clone https://github.com/veddegre/signaltrace.git
+cd signaltrace
+chmod +x setup.sh
+./setup.sh
+```
+
+Select **option 2** when prompted. The script handles configuration, builds the image, and starts the container.
+
+---
+
+### Without setup.sh
+
+Skip the guided setup and configure `.env` manually:
+
+```bash
+# Get the compose files and env template
+curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/docker-compose.prebuilt.yml -o docker-compose.prebuilt.yml
+curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/.env.example -o .env
+```
+
+Edit `.env` and fill in the values:
+
+| Variable | Required | Description |
+|---|---|---|
+| `SIGNALTRACE_ADMIN_USERNAME` | ✅ | Admin login username |
+| `SIGNALTRACE_ADMIN_PASSWORD_HASH` | ✅ | Bcrypt hash of your admin password |
+| `SIGNALTRACE_PORT` | ✅ | Host port to expose SignalTrace on (e.g. `80`) |
+| `SIGNALTRACE_VISITOR_HASH_SALT` | ✅ | Random salt for visitor fingerprinting |
+| `MAXMIND_ACCOUNT_ID` | Recommended | MaxMind account ID for GeoIP enrichment |
+| `MAXMIND_LICENSE_KEY` | Recommended | MaxMind license key |
+| `SIGNALTRACE_EXPORT_API_TOKEN` | Optional | Token for Splunk/automation export endpoints |
+| `SIGNALTRACE_TRUSTED_PROXY_IP` | Optional | IP of your reverse proxy if running behind one |
+| `AUTH_MAX_FAILURES` | Optional | Failed logins before lockout (default: 5) |
+| `AUTH_LOCKOUT_SECS` | Optional | Lockout duration in seconds (default: 900) |
+| `SELF_REFERER_DOMAIN` | Optional | Your domain — requests from it get a score penalty |
+
+Generate the required secrets:
+
+```bash
+# Bcrypt password hash
+php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT) . PHP_EOL;"
+
+# Visitor hash salt
+openssl rand -hex 64
+
+# Export API token (if using Splunk or automation)
+openssl rand -hex 32
+```
+
+Then start using the pre-built image:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d
+```
+
+Or build from source:
 
 ```bash
 docker compose up -d
 ```
 
-SignalTrace will be available at `http://localhost:PORT/admin` where PORT is the port you selected during setup. On first start the database is initialised automatically. If MaxMind credentials are set, GeoIP databases are downloaded as well.
+---
 
-### 3. Updating
+### Updating
+
+Pre-built image:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d
+```
+
+Build from source:
 
 ```bash
 git pull
@@ -301,6 +374,9 @@ ASN rules let you add manual score penalties for specific networks via the UI.
 
 ```text
 signaltrace/
+├── .github/
+│   └── workflows/
+│       └── docker.yml
 ├── LICENSE
 ├── README.md
 ├── Dockerfile
@@ -387,7 +463,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 
 ## Tech Stack
 
-Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`.
+Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A pre-built Docker image is published to `ghcr.io/veddegre/signaltrace` via GitHub Actions on every push to `main`. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`.
 
 ## Contributing
 
@@ -399,7 +475,7 @@ If SignalTrace is useful to you, starring the repository on GitHub helps others 
 
 ## Maintainer
 
-SignalTrace is developed and maintained by Greg Vedders. You can find more of my technical write-ups, projects, and other writing on my personal blog at [gregvedders.com](https://gregvedders.com). 
+SignalTrace is developed and maintained by Greg Vedders. You can find more of my technical write-ups, projects, and other writing on my personal blog at [gregvedders.com](https://gregvedders.com).
 
 ## Disclaimer
 
@@ -411,6 +487,6 @@ MIT
 
 ## Changelog
 
-See `CHANGELOG.md` for version history.
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 > *Most tools try to hide the noise. SignalTrace makes it visible.*
