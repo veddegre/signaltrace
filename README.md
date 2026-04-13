@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Database-SQLite-lightgrey" alt="SQLite"> 
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"> 
   <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
-  <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker-image.yml/badge.svg" alt="Docker Build">
+  <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker.yml/badge.svg" alt="Docker Build">
 </p>
 
 <p align="center">
@@ -134,12 +134,6 @@ A 1 vCPU VM with 1 GB RAM and swap enabled is sufficient. Plan for 5–10 GB of 
 
 ## Quick Start with Docker
 
-Run `setup.sh` for a guided setup — it handles configuration, secret generation, and starting the container for all Docker options.
-
-### Option A — Pre-built image (fastest)
-
-No build step. The script pulls `ghcr.io/veddegre/signaltrace:latest` and starts the container immediately after configuration.
-
 ```bash
 git clone https://github.com/veddegre/signaltrace.git
 cd signaltrace
@@ -147,22 +141,10 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-Select **option 1** when prompted. The script walks through all configuration, writes `.env`, pulls the image, and starts the container.
-
----
-
-### Option B — Build from source
-
-Builds the image locally from the Dockerfile. Useful if you want to modify the image or pin to a specific commit.
-
-```bash
-git clone https://github.com/veddegre/signaltrace.git
-cd signaltrace
-chmod +x setup.sh
-./setup.sh
-```
-
-Select **option 2** when prompted. The script handles configuration, builds the image, and starts the container.
+The script walks through all configuration and starts the container. When prompted for install type, select:
+* **Option 1** — pulls the pre-built image from `ghcr.io/veddegre/signaltrace:latest`, no build step required
+* **Option 2** — builds the image locally from the Dockerfile, useful if you want to modify the image or pin to a specific commit
+* **Option 3** — full manual install on Ubuntu + Apache, see [Manual Installation](#manual-installation-ubuntu--apache) below
 
 ---
 
