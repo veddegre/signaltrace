@@ -252,9 +252,10 @@ function handleSaveSettings(PDO $pdo): void
 
 function handleSaveThreatFeedSettings(PDO $pdo): void
 {
-    $enabledInput = isset($_POST['threat_feed_enabled']) ? '1' : '0';
-    $windowHoursInput = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
+    $enabledInput       = isset($_POST['threat_feed_enabled']) ? '1' : '0';
+    $windowHoursInput   = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
     $minConfidenceInput = strtolower(trim((string) ($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
+    $minHitsInput       = max(1, (int) ($_POST['threat_feed_min_hits'] ?? 1));
 
     if (!in_array($minConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
         http_response_code(400);
@@ -265,6 +266,7 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
     setSetting($pdo, 'threat_feed_enabled', $enabledInput);
     setSetting($pdo, 'threat_feed_window_hours', (string) $windowHoursInput);
     setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
+    setSetting($pdo, 'threat_feed_min_hits', (string) $minHitsInput);
 
     header('Location: /admin', true, 302);
     exit;
