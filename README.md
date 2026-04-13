@@ -8,7 +8,6 @@
   <img src="https://img.shields.io/badge/PHP-8.1%2B-blue" alt="PHP"> 
   <img src="https://img.shields.io/badge/Database-SQLite-lightgrey" alt="SQLite"> 
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"> 
-  <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
   <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker-image.yml/badge.svg" alt="Docker Build">
 </p>
 
