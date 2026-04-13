@@ -218,6 +218,7 @@ function seedDefaultSettings(PDO $pdo): void
         'threat_feed_enabled'        => '1',
         'threat_feed_window_hours'   => '168',
         'threat_feed_min_confidence' => 'suspicious',
+        'threat_feed_min_hits'       => '1',
         'data_retention_days'        => '0',
         'display_min_score'          => '20',
         'page_size'                  => '50',
@@ -851,8 +852,9 @@ function getThreatFeedIps(PDO $pdo): array
         return [];
     }
 
-    $windowHours = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
+    $windowHours   = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
     $minConfidence = strtolower((string) getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
+    $minHits       = max(1, (int) getSetting($pdo, 'threat_feed_min_hits', '1'));
 
     $allowedLabels = match ($minConfidence) {
         'bot' => ['bot'],
@@ -872,8 +874,10 @@ function getThreatFeedIps(PDO $pdo): array
     // to a link with exclude_from_feed = 0 (or no link at all — unknown tokens
     // are not excluded at the token level).  A LEFT JOIN on links gives NULL
     // for unknown tokens, which we treat as "not excluded".
+    //
+    // The HAVING clause enforces the minimum hit count threshold.
     $sql = "
-        SELECT DISTINCT c.ip
+        SELECT c.ip, COUNT(*) AS hit_count
         FROM clicks c
         LEFT JOIN asn_rules ar
             ON ar.asn = c.ip_asn
@@ -891,12 +895,15 @@ function getThreatFeedIps(PDO $pdo): array
           AND c.confidence_label IN ($placeholders)
           AND ar.id IS NULL
           AND (lk.id IS NULL OR lk.exclude_from_feed = 0)
+        GROUP BY c.ip
+        HAVING hit_count >= ?
         ORDER BY c.ip ASC
     ";
 
     $params = array_merge(
         ['-' . $windowHours . ' hours'],
         $allowedLabels,
+        [$minHits],
     );
 
     $stmt = $pdo->prepare($sql);
@@ -905,7 +912,9 @@ function getThreatFeedIps(PDO $pdo): array
     $ips = [];
     foreach ($stmt->fetchAll() as $row) {
         $ip = trim((string) ($row['ip'] ?? ''));
-        if ($ip === '') {
+        // Only include valid IP addresses — strip any non-IP values that may
+        // have been stored (e.g. 'unknown' from edge cases in getClientIp).
+        if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
             continue;
         }
         $ips[] = $ip;
