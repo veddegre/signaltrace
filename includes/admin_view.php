@@ -79,6 +79,20 @@ function renderAdminPage(
     $threatFeedMinHits = (string) (getSetting($pdo, 'threat_feed_min_hits', '1') ?? '1');
     $dataRetentionDays = (string) (getSetting($pdo, 'data_retention_days', '0') ?? '0');
 
+    $ipOverrides       = getIpOverrides($pdo);
+    $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, 24);
+
+    $editOverrideId = (int) ($_GET['edit_override_id'] ?? 0);
+    $editOverride   = null;
+    if ($editOverrideId > 0) {
+        foreach ($ipOverrides as $candidate) {
+            if ((int) $candidate['id'] === $editOverrideId) {
+                $editOverride = $candidate;
+                break;
+            }
+        }
+    }
+
     $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
         $params = [];
 
@@ -178,6 +192,7 @@ function renderAdminPage(
             <div class="tab" id="tab-settings" onclick="showTab('settings')">Settings</div>
 	    <div class="tab" id="tab-skip" onclick="showTab('skip')">Skip Patterns</div>
             <div class="tab" id="tab-asn" onclick="showTab('asn')">ASN Rules</div>
+            <div class="tab" id="tab-overrides" onclick="showTab('overrides')">IP Overrides</div>
         </div>
 
         <div class="tab-content" id="content-dashboard">
@@ -364,6 +379,45 @@ function renderAdminPage(
                     <?php endforeach; ?>
                 </table>
 	    </div>
+            <?php endif; ?>
+
+            <?php if (!empty($behavioralFlags)): ?>
+            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <tr>
+                        <th>IP</th>
+                        <th>Org</th>
+                        <th>Country</th>
+                        <th>Hits</th>
+                        <th>Burst</th>
+                        <th>Rapid</th>
+                        <th>Multi-token</th>
+                        <th>Lowest Score</th>
+                        <th>First Seen</th>
+                        <th>Last Seen</th>
+                    </tr>
+                    <?php foreach ($behavioralFlags as $flag): ?>
+                        <?php $flagIp = (string) ($flag['ip'] ?? ''); ?>
+                        <tr>
+                            <td class="mono ip-col">
+                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp])) ?>">
+                                    <?= h($flagIp) ?>
+                                </a>
+                            </td>
+                            <td><?= h((string) ($flag['ip_org'] ?? '')) ?></td>
+                            <td><?= h((string) ($flag['ip_country'] ?? '')) ?></td>
+                            <td><?= (int) ($flag['total_hits'] ?? 0) ?></td>
+                            <td><?= (int) ($flag['burst_hits'] ?? 0) > 0 ? '<span class="badge badge-bot">' . (int)$flag['burst_hits'] . '</span>' : '—' ?></td>
+                            <td><?= (int) ($flag['rapid_hits'] ?? 0) > 0 ? '<span class="badge badge-suspicious">' . (int)$flag['rapid_hits'] . '</span>' : '—' ?></td>
+                            <td><?= (int) ($flag['multi_hits'] ?? 0) > 0 ? '<span class="badge badge-suspicious">' . (int)$flag['multi_hits'] . '</span>' : '—' ?></td>
+                            <td><?= h((string) ($flag['lowest_score'] ?? '')) ?></td>
+                            <td><?= h((string) ($flag['first_seen'] ?? '')) ?></td>
+                            <td><?= h((string) ($flag['last_seen'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
             <?php endif; ?>
 
             <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
@@ -587,6 +641,27 @@ function renderAdminPage(
                                             <input type="hidden" name="mode" value="all">
                                             <button type="submit" class="danger-button">Delete All Clicks for Token</button>
                                         </form>
+
+                                        <?php $existingOverride = getIpOverrideByIp($pdo, $rowIp); ?>
+                                        <?php if ($existingOverride === null): ?>
+                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
+                                                <input type="hidden" name="mode" value="block">
+                                                <input type="hidden" name="notes" value="Added from activity feed">
+                                                <button type="submit" class="danger-button">Block IP</button>
+                                            </form>
+                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
+                                                <input type="hidden" name="mode" value="allow">
+                                                <input type="hidden" name="notes" value="Added from activity feed">
+                                                <button type="submit" class="warning-button">Allow IP</button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="badge <?= $existingOverride['mode'] === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                                                IP override: <?= h($existingOverride['mode']) ?>
+                                            </span>
+                                            <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </td>
@@ -884,6 +959,108 @@ function renderAdminPage(
 	        </table>
 	    </div>
 	</div>
+
+        <div class="tab-content" id="content-overrides">
+
+            <?php if ($editOverride !== null): ?>
+            <form method="post" action="/admin/update-ip-override">
+                <h2>Edit IP Override</h2>
+                <input type="hidden" name="id" value="<?= (int) $editOverride['id'] ?>">
+
+                <label for="edit_override_ip">IP Address</label>
+                <input id="edit_override_ip" type="text" name="ip" required value="<?= h((string) $editOverride['ip']) ?>">
+
+                <label for="edit_override_mode">Mode</label>
+                <select id="edit_override_mode" name="mode">
+                    <option value="block" <?= $editOverride['mode'] === 'block' ? 'selected' : '' ?>>Block — always classify as bot (score 0)</option>
+                    <option value="allow" <?= $editOverride['mode'] === 'allow' ? 'selected' : '' ?>>Allow — always classify as human (score 100)</option>
+                </select>
+
+                <label for="edit_override_notes">Notes</label>
+                <input id="edit_override_notes" type="text" name="notes" value="<?= h((string) ($editOverride['notes'] ?? '')) ?>" placeholder="Optional note">
+
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button type="submit">Save Changes</button>
+                    <form method="get" action="/admin" class="inline-action-form">
+                        <input type="hidden" name="tab" value="overrides">
+                        <button type="submit">Cancel</button>
+                    </form>
+                </div>
+            </form>
+            <?php endif; ?>
+
+            <form method="post" action="/admin/create-ip-override">
+                <h2>Add IP Override</h2>
+                <p class="muted">Overrides bypass scoring entirely. Blocked IPs are always classified as bot (score 0). Allowed IPs are always classified as human (score 100). Applies to future requests only.</p>
+
+                <label for="override_ip">IP Address</label>
+                <input id="override_ip" type="text" name="ip" required placeholder="1.2.3.4 or 2001:db8::1">
+
+                <label for="override_mode">Mode</label>
+                <select id="override_mode" name="mode">
+                    <option value="block">Block — always classify as bot (score 0)</option>
+                    <option value="allow">Allow — always classify as human (score 100)</option>
+                </select>
+
+                <label for="override_notes">Notes</label>
+                <input id="override_notes" type="text" name="notes" placeholder="Optional note (e.g. monitoring service, your office IP)">
+
+                <button type="submit">Add Override</button>
+            </form>
+
+            <h2>IP Overrides</h2>
+            <?php if (empty($ipOverrides)): ?>
+                <p class="muted">No IP overrides configured.</p>
+            <?php else: ?>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <tr>
+                        <th>IP</th>
+                        <th>Mode</th>
+                        <th>Notes</th>
+                        <th>Active</th>
+                        <th>Created</th>
+                        <th class="actions-col">Actions</th>
+                    </tr>
+                    <?php foreach ($ipOverrides as $override): ?>
+                        <tr>
+                            <td class="mono"><?= h((string) $override['ip']) ?></td>
+                            <td>
+                                <span class="badge <?= $override['mode'] === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                                    <?= h((string) $override['mode']) ?>
+                                </span>
+                            </td>
+                            <td><?= h((string) ($override['notes'] ?? '')) ?></td>
+                            <td><?= ((int) $override['active'] === 1) ? 'Yes' : 'No' ?></td>
+                            <td><?= h((string) ($override['created_at'] ?? '')) ?></td>
+                            <td class="actions-col">
+                                <form method="get" action="/admin" class="inline-action-form">
+                                    <input type="hidden" name="tab" value="overrides">
+                                    <input type="hidden" name="edit_override_id" value="<?= (int) $override['id'] ?>">
+                                    <button type="submit">Edit</button>
+                                </form>
+                                <?php if ((int) $override['active'] === 1): ?>
+                                    <form method="post" action="/admin/deactivate-ip-override" class="inline-action-form">
+                                        <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
+                                        <button type="submit">Deactivate</button>
+                                    </form>
+                                <?php else: ?>
+                                    <form method="post" action="/admin/activate-ip-override" class="inline-action-form">
+                                        <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
+                                        <button type="submit">Activate</button>
+                                    </form>
+                                <?php endif; ?>
+                                <form method="post" action="/admin/delete-ip-override" class="inline-action-form" onsubmit="return confirm('Delete this IP override?');">
+                                    <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
+                                    <button type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
 
         <div class="tab-content" id="content-settings">
             <div class="two-column-settings">
