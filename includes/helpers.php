@@ -650,6 +650,7 @@ function fireWebhookAlert(PDO $pdo, array $requestData, array $triggerReasons): 
     $score = (int) ($requestData['confidence_score'] ?? 0);
     $org   = (string) ($requestData['ip_org'] ?? '');
     $asn   = (string) ($requestData['ip_asn'] ?? '');
+    $country = (string) ($requestData['ip_country'] ?? '');
     $time  = date('Y-m-d H:i:s T');
 
     // SECURITY: Truncate and strip control characters from the UA before
@@ -658,41 +659,71 @@ function fireWebhookAlert(PDO $pdo, array $requestData, array $triggerReasons): 
     $rawUa = (string) ($requestData['user_agent'] ?? '');
     $ua    = mb_substr(preg_replace('/[\x00-\x1f\x7f]/', '', $rawUa), 0, 300);
 
-    $isSlack = str_contains($url, 'hooks.slack.com') || str_contains($url, 'discord.com/api/webhooks');
+    $triggers = implode(', ', $triggerReasons);
 
-    if ($isSlack) {
-        $payload = [
-            'text'        => '🚨 *SignalTrace Alert*',
-            'attachments' => [[
-                'color'  => '#e53e3e',
-                'fields' => [
-                    ['title' => 'IP',       'value' => $ip,    'short' => true],
-                    ['title' => 'Token',    'value' => $token, 'short' => true],
-                    ['title' => 'Label',    'value' => $label, 'short' => true],
-                    ['title' => 'Score',    'value' => (string) $score, 'short' => true],
-                    ['title' => 'Triggers', 'value' => implode(', ', $triggerReasons), 'short' => false],
-                    ['title' => 'Org/ASN',  'value' => "$org (AS$asn)", 'short' => true],
-                    ['title' => 'UA',       'value' => $ua,    'short' => false],
-                    ['title' => 'Time',     'value' => $time,  'short' => true],
-                ],
-            ]],
+    // Custom template takes priority over auto-detection.
+    $template = trim((string) getSetting($pdo, 'webhook_template', ''));
+
+    if ($template !== '') {
+        // Replace placeholders with sanitized values.
+        $replacements = [
+            '{{ip}}'       => $ip,
+            '{{token}}'    => $token,
+            '{{label}}'    => $label,
+            '{{score}}'    => (string) $score,
+            '{{org}}'      => $org,
+            '{{asn}}'      => $asn,
+            '{{country}}'  => $country,
+            '{{ua}}'       => $ua,
+            '{{time}}'     => $time,
+            '{{triggers}}' => $triggers,
         ];
+        $json = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        // Validate the result is still JSON before sending.
+        if (json_decode($json) === null) {
+            error_log('SignalTrace: webhook template produced invalid JSON — skipping.');
+            return;
+        }
     } else {
-        $payload = [
-            'event'    => 'signaltrace_alert',
-            'ip'       => $ip,
-            'token'    => $token,
-            'label'    => $label,
-            'score'    => $score,
-            'triggers' => $triggerReasons,
-            'org'      => $org,
-            'asn'      => $asn,
-            'ua'       => $ua,
-            'time'     => $time,
-        ];
-    }
+        $isSlack = str_contains($url, 'hooks.slack.com') || str_contains($url, 'discord.com/api/webhooks');
 
-    $json = json_encode($payload);
+        if ($isSlack) {
+            $payload = [
+                'text'        => '🚨 *SignalTrace Alert*',
+                'attachments' => [[
+                    'color'  => '#e53e3e',
+                    'fields' => [
+                        ['title' => 'IP',       'value' => $ip,      'short' => true],
+                        ['title' => 'Token',    'value' => $token,   'short' => true],
+                        ['title' => 'Label',    'value' => $label,   'short' => true],
+                        ['title' => 'Score',    'value' => (string) $score, 'short' => true],
+                        ['title' => 'Triggers', 'value' => $triggers,'short' => false],
+                        ['title' => 'Org/ASN',  'value' => "$org (AS$asn)", 'short' => true],
+                        ['title' => 'Country',  'value' => $country, 'short' => true],
+                        ['title' => 'UA',       'value' => $ua,      'short' => false],
+                        ['title' => 'Time',     'value' => $time,    'short' => true],
+                    ],
+                ]],
+            ];
+        } else {
+            $payload = [
+                'event'    => 'signaltrace_alert',
+                'ip'       => $ip,
+                'token'    => $token,
+                'label'    => $label,
+                'score'    => $score,
+                'triggers' => $triggerReasons,
+                'org'      => $org,
+                'asn'      => $asn,
+                'country'  => $country,
+                'ua'       => $ua,
+                'time'     => $time,
+            ];
+        }
+
+        $json = json_encode($payload);
+    }
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
