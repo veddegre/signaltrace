@@ -214,6 +214,7 @@ function handleSaveSettings(PDO $pdo): void
     $pageSizeInput           = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
     $autoRefreshInput        = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
     $webhookUrlInput         = trim((string) ($_POST['webhook_url']         ?? ''));
+    $webhookTemplateInput    = trim((string) ($_POST['webhook_template']    ?? ''));
     $exportMinConfidenceInput = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
     $exportWindowHoursInput  = max(1, (int) ($_POST['export_window_hours'] ?? 168));
     $exportMinScoreInput     = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
@@ -256,6 +257,28 @@ function handleSaveSettings(PDO $pdo): void
         exit;
     }
 
+    if ($webhookTemplateInput !== '') {
+        // Validate template produces valid JSON by substituting dummy values.
+        $dummyReplacements = [
+            '{{ip}}'       => '1.2.3.4',
+            '{{token}}'    => '/test',
+            '{{label}}'    => 'bot',
+            '{{score}}'    => '0',
+            '{{org}}'      => 'Test Org',
+            '{{asn}}'      => '12345',
+            '{{country}}'  => 'US',
+            '{{ua}}'       => 'test/1.0',
+            '{{time}}'     => date('Y-m-d H:i:s T'),
+            '{{triggers}}' => 'bot_classification',
+        ];
+        $testJson = str_replace(array_keys($dummyReplacements), array_values($dummyReplacements), $webhookTemplateInput);
+        if (json_decode($testJson) === null) {
+            http_response_code(400);
+            echo 'Webhook template does not produce valid JSON. Check your template syntax.';
+            exit;
+        }
+    }
+
     if (!in_array($exportMinConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
         http_response_code(400);
         echo 'Invalid export minimum confidence value.';
@@ -272,6 +295,7 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'page_size',            (string) $pageSizeInput);
     setSetting($pdo, 'auto_refresh_secs',    (string) $autoRefreshInput);
     setSetting($pdo, 'webhook_url',          $webhookUrlInput);
+    setSetting($pdo, 'webhook_template',     $webhookTemplateInput);
     setSetting($pdo, 'export_min_confidence', $exportMinConfidenceInput);
     setSetting($pdo, 'export_window_hours',  (string) $exportWindowHoursInput);
     setSetting($pdo, 'export_min_score',     (string) $exportMinScoreInput);
