@@ -845,7 +845,11 @@ function getRecentClicksAdvancedFilteredPaged(
     return [$stmt->fetchAll(), $totalCount];
 }
 
-function getThreatFeedIps(PDO $pdo): array
+/**
+ * Shared query for threat feed — returns all qualifying rows with IP and hit count.
+ * Callers filter by address family.
+ */
+function getThreatFeedRows(PDO $pdo): array
 {
     $enabled = getSetting($pdo, 'threat_feed_enabled', '1');
     if ($enabled !== '1') {
@@ -857,25 +861,14 @@ function getThreatFeedIps(PDO $pdo): array
     $minHits       = max(1, (int) getSetting($pdo, 'threat_feed_min_hits', '1'));
 
     $allowedLabels = match ($minConfidence) {
-        'bot' => ['bot'],
+        'bot'          => ['bot'],
         'likely-human' => ['likely-human', 'suspicious', 'bot'],
-        'human' => ['human', 'likely-human', 'suspicious', 'bot'],
-        default => ['suspicious', 'bot'],
+        'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
+        default        => ['suspicious', 'bot'],
     };
 
     $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
 
-    // An IP is excluded from the feed if:
-    //   (a) its ASN has exclude_from_feed = 1  (existing ASN-level rule), OR
-    //   (b) every click it made within the window was on a token with
-    //       exclude_from_feed = 1  (token-level rule).
-    //
-    // We implement (b) by requiring that at least one qualifying click joined
-    // to a link with exclude_from_feed = 0 (or no link at all — unknown tokens
-    // are not excluded at the token level).  A LEFT JOIN on links gives NULL
-    // for unknown tokens, which we treat as "not excluded".
-    //
-    // The HAVING clause enforces the minimum hit count threshold.
     $sql = "
         SELECT c.ip, COUNT(*) AS hit_count
         FROM clicks c
@@ -908,19 +901,77 @@ function getThreatFeedIps(PDO $pdo): array
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
+    return $stmt->fetchAll();
+}
 
-    $ips = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $ip = trim((string) ($row['ip'] ?? ''));
-        // Only include valid IP addresses — strip any non-IP values that may
-        // have been stored (e.g. 'unknown' from edge cases in getClientIp).
-        if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
-            continue;
-        }
-        $ips[] = $ip;
+/**
+ * Normalize an IPv6 address to its canonical compressed form.
+ * Returns null if the input is not a valid IPv6 address.
+ */
+function normalizeIpv6(string $ip): ?string
+{
+    $packed = @inet_pton($ip);
+    if ($packed === false || strlen($packed) !== 16) {
+        return null;
     }
+    return inet_ntop($packed) ?: null;
+}
 
+/**
+ * Returns deduplicated, validated IPv4 addresses from the threat feed.
+ * Backwards-compatible replacement for getThreatFeedIps().
+ */
+function getThreatFeedIpv4(PDO $pdo): array
+{
+    $ips = [];
+    foreach (getThreatFeedRows($pdo) as $row) {
+        $ip = trim((string) ($row['ip'] ?? ''));
+        if ($ip === '') continue;
+        // Must be a valid IP and must be IPv4 (packed length = 4 bytes)
+        $packed = @inet_pton($ip);
+        if ($packed === false || strlen($packed) !== 4) continue;
+        $ips[] = inet_ntop($packed); // normalize representation
+    }
     return array_values(array_unique($ips));
+}
+
+/**
+ * Returns deduplicated, normalized IPv6 addresses from the threat feed.
+ */
+function getThreatFeedIpv6(PDO $pdo): array
+{
+    $ips = [];
+    foreach (getThreatFeedRows($pdo) as $row) {
+        $ip = trim((string) ($row['ip'] ?? ''));
+        if ($ip === '') continue;
+        $normalized = normalizeIpv6($ip);
+        if ($normalized === null) continue;
+        $ips[] = $normalized;
+    }
+    return array_values(array_unique($ips));
+}
+
+/**
+ * Returns count of IPs currently in the threat feed (IPv4 + IPv6).
+ * Used for the feed preview in the admin UI.
+ */
+function getThreatFeedCount(PDO $pdo): array
+{
+    $v4 = getThreatFeedIpv4($pdo);
+    $v6 = getThreatFeedIpv6($pdo);
+    return [
+        'ipv4'  => count($v4),
+        'ipv6'  => count($v6),
+        'total' => count($v4) + count($v6),
+    ];
+}
+
+/**
+ * Legacy alias — keeps existing callers working.
+ */
+function getThreatFeedIps(PDO $pdo): array
+{
+    return getThreatFeedIpv4($pdo);
 }
 
 /**
