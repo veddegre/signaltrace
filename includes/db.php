@@ -120,6 +120,17 @@ function initializeDatabase(PDO $pdo): void
         )
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS country_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            country_code TEXT NOT NULL UNIQUE,
+            label TEXT,
+            penalty INTEGER NOT NULL DEFAULT 10,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+    ");
+
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
@@ -181,6 +192,8 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_asn_rules_active ON asn_rules(active)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ip_overrides_ip ON ip_overrides(ip)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ip_overrides_active ON ip_overrides(active)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_code ON country_rules(country_code)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_active ON country_rules(active)");
 
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
@@ -194,7 +207,7 @@ function initializeDatabase(PDO $pdo): void
 function ensureColumn(PDO $pdo, string $table, string $column, string $definition): void
 {
     // Whitelist of tables this function is permitted to alter.
-    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules', 'ip_overrides'];
+    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules', 'ip_overrides', 'country_rules'];
 
     // Whitelist of column name characters: alphanumeric and underscore only.
     if (!in_array($table, $allowedTables, true)) {
@@ -1357,4 +1370,90 @@ function getBehaviorallyFlaggedIps(PDO $pdo, int $windowHours = 24): array
     ");
     $stmt->execute([':cutoff' => $cutoffMs]);
     return $stmt->fetchAll();
+}
+
+/* ======================================================
+   COUNTRY RULES
+   ====================================================== */
+
+function getCountryRules(PDO $pdo): array
+{
+    return $pdo->query("
+        SELECT id, country_code, label, penalty, active, created_at
+        FROM country_rules
+        ORDER BY country_code ASC
+    ")->fetchAll();
+}
+
+function getActiveCountryPenaltyMap(PDO $pdo): array
+{
+    $rows = $pdo->query("
+        SELECT country_code, penalty
+        FROM country_rules
+        WHERE active = 1
+    ")->fetchAll();
+
+    $map = [];
+    foreach ($rows as $row) {
+        $map[strtoupper((string) $row['country_code'])] = (int) $row['penalty'];
+    }
+    return $map;
+}
+
+function getCountryRuleByCode(PDO $pdo, string $code): ?array
+{
+    $stmt = $pdo->prepare("
+        SELECT id, country_code, label, penalty, active, created_at
+        FROM country_rules
+        WHERE country_code = :code
+        LIMIT 1
+    ");
+    $stmt->execute([':code' => strtoupper($code)]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function createCountryRule(PDO $pdo, string $code, string $label, int $penalty): bool
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO country_rules (country_code, label, penalty, active, created_at)
+        VALUES (:code, :label, :penalty, 1, :created_at)
+    ");
+    return $stmt->execute([
+        ':code'       => strtoupper($code),
+        ':label'      => $label,
+        ':penalty'    => $penalty,
+        ':created_at' => date('c'),
+    ]);
+}
+
+function updateCountryRule(PDO $pdo, int $id, string $code, string $label, int $penalty): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE country_rules
+        SET country_code = :code,
+            label        = :label,
+            penalty      = :penalty
+        WHERE id = :id
+    ");
+    return $stmt->execute([
+        ':id'      => $id,
+        ':code'    => strtoupper($code),
+        ':label'   => $label,
+        ':penalty' => $penalty,
+    ]);
+}
+
+function setCountryRuleActive(PDO $pdo, int $id, bool $active): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE country_rules SET active = :active WHERE id = :id
+    ");
+    return $stmt->execute([':active' => $active ? 1 : 0, ':id' => $id]);
+}
+
+function deleteCountryRule(PDO $pdo, int $id): bool
+{
+    $stmt = $pdo->prepare("DELETE FROM country_rules WHERE id = :id");
+    return $stmt->execute([':id' => $id]);
 }
