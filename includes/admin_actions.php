@@ -122,6 +122,31 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleDeleteIpClicks($pdo);
             return true;
 
+        case '/admin/create-ip-override':
+            requireAdminAuth();
+            handleCreateIpOverride($pdo);
+            return true;
+
+        case '/admin/update-ip-override':
+            requireAdminAuth();
+            handleUpdateIpOverride($pdo);
+            return true;
+
+        case '/admin/activate-ip-override':
+            requireAdminAuth();
+            handleToggleIpOverride($pdo, true);
+            return true;
+
+        case '/admin/deactivate-ip-override':
+            requireAdminAuth();
+            handleToggleIpOverride($pdo, false);
+            return true;
+
+        case '/admin/delete-ip-override':
+            requireAdminAuth();
+            handleDeleteIpOverride($pdo);
+            return true;
+
         default:
             return false;
     }
@@ -252,10 +277,9 @@ function handleSaveSettings(PDO $pdo): void
 
 function handleSaveThreatFeedSettings(PDO $pdo): void
 {
-    $enabledInput       = isset($_POST['threat_feed_enabled']) ? '1' : '0';
-    $windowHoursInput   = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
+    $enabledInput = isset($_POST['threat_feed_enabled']) ? '1' : '0';
+    $windowHoursInput = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
     $minConfidenceInput = strtolower(trim((string) ($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
-    $minHitsInput       = max(1, (int) ($_POST['threat_feed_min_hits'] ?? 1));
 
     if (!in_array($minConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
         http_response_code(400);
@@ -266,7 +290,6 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
     setSetting($pdo, 'threat_feed_enabled', $enabledInput);
     setSetting($pdo, 'threat_feed_window_hours', (string) $windowHoursInput);
     setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
-    setSetting($pdo, 'threat_feed_min_hits', (string) $minHitsInput);
 
     header('Location: /admin', true, 302);
     exit;
@@ -634,5 +657,86 @@ function handleDeleteIpClicks(PDO $pdo): void
     }
 
     header('Location: /admin?ip=' . urlencode($ip), true, 302);
+    exit;
+}
+
+/* ======================================================
+   IP OVERRIDE HANDLERS
+   ====================================================== */
+
+function handleCreateIpOverride(PDO $pdo): void
+{
+    $ip    = trim((string) ($_POST['ip']    ?? ''));
+    $mode  = trim((string) ($_POST['mode']  ?? 'block'));
+    $notes = trim((string) ($_POST['notes'] ?? ''));
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo 'Invalid IP address.';
+        exit;
+    }
+
+    if (!in_array($mode, ['allow', 'block'], true)) {
+        http_response_code(400);
+        echo 'Invalid mode.';
+        exit;
+    }
+
+    createIpOverride($pdo, $ip, $mode, $notes);
+    header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleUpdateIpOverride(PDO $pdo): void
+{
+    $id    = (int) ($_POST['id']    ?? 0);
+    $ip    = trim((string) ($_POST['ip']    ?? ''));
+    $mode  = trim((string) ($_POST['mode']  ?? 'block'));
+    $notes = trim((string) ($_POST['notes'] ?? ''));
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid id.';
+        exit;
+    }
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo 'Invalid IP address.';
+        exit;
+    }
+
+    if (!in_array($mode, ['allow', 'block'], true)) {
+        http_response_code(400);
+        echo 'Invalid mode.';
+        exit;
+    }
+
+    updateIpOverride($pdo, $id, $ip, $mode, $notes);
+    header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleToggleIpOverride(PDO $pdo, bool $active): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    setIpOverrideActive($pdo, $id, $active);
+    header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleDeleteIpOverride(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    deleteIpOverride($pdo, $id);
+    header('Location: /admin?tab=overrides', true, 302);
     exit;
 }
