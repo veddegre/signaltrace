@@ -122,6 +122,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleDeleteIpClicks($pdo);
             return true;
 
+        case '/admin/delete-filtered-clicks':
+            requireAdminAuth();
+            handleDeleteFilteredClicks($pdo);
+            return true;
+
         case '/admin/create-ip-override':
             requireAdminAuth();
             handleCreateIpOverride($pdo);
@@ -738,5 +743,58 @@ function handleDeleteIpOverride(PDO $pdo): void
     }
     deleteIpOverride($pdo, $id);
     header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleDeleteFilteredClicks(PDO $pdo): void
+{
+    $tokenFilter   = trim((string) ($_POST['token']     ?? ''));
+    $ipFilter      = trim((string) ($_POST['ip']        ?? ''));
+    $visitorFilter = trim((string) ($_POST['visitor']   ?? ''));
+    $knownOnly     = isset($_POST['known']) && $_POST['known'] === '1';
+    $dateFrom      = trim((string) ($_POST['date_from'] ?? ''));
+    $dateTo        = trim((string) ($_POST['date_to']   ?? ''));
+
+    // Require at least one filter — refuse to delete everything with no filter
+    if ($tokenFilter === '' && $ipFilter === '' && $visitorFilter === ''
+        && !$knownOnly && $dateFrom === '' && $dateTo === '') {
+        http_response_code(400);
+        echo 'At least one filter is required for bulk delete.';
+        exit;
+    }
+
+    $where  = ['1=1'];
+    $params = [];
+
+    if ($tokenFilter !== '') {
+        $where[]  = 'token LIKE :token';
+        $params[':token'] = '%' . $tokenFilter . '%';
+    }
+    if ($ipFilter !== '') {
+        $where[]  = 'ip = :ip';
+        $params[':ip'] = $ipFilter;
+    }
+    if ($visitorFilter !== '') {
+        $where[]  = 'visitor_hash = :visitor';
+        $params[':visitor'] = $visitorFilter;
+    }
+    if ($knownOnly) {
+        $where[] = 'link_id IS NOT NULL';
+    }
+    if ($dateFrom !== '') {
+        $where[]  = 'clicked_at >= :date_from';
+        $params[':date_from'] = $dateFrom;
+    }
+    if ($dateTo !== '') {
+        $where[]  = 'clicked_at <= :date_to';
+        $params[':date_to'] = $dateTo . ' 23:59:59';
+    }
+
+    $sql  = 'DELETE FROM clicks WHERE ' . implode(' AND ', $where);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    // Redirect back to dashboard with filters cleared
+    header('Location: /admin', true, 302);
     exit;
 }
