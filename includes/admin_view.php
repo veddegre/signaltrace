@@ -190,10 +190,10 @@ function renderAdminPage(
         <div class="tabs">
             <div class="tab" id="tab-dashboard" onclick="showTab('dashboard')">Dashboard</div>
             <div class="tab" id="tab-links" onclick="showTab('links')">Tokens</div>
-            <div class="tab" id="tab-settings" onclick="showTab('settings')">Settings</div>
 	    <div class="tab" id="tab-skip" onclick="showTab('skip')">Skip Patterns</div>
             <div class="tab" id="tab-asn" onclick="showTab('asn')">ASN Rules</div>
             <div class="tab" id="tab-overrides" onclick="showTab('overrides')">IP Overrides</div>
+            <div class="tab" id="tab-settings" onclick="showTab('settings')">Settings</div>
         </div>
 
         <div class="tab-content" id="content-dashboard">
@@ -348,6 +348,26 @@ function renderAdminPage(
                     class="danger-button"
                     onclick="return confirm('Delete ALL clicks for this IP?');">
                 Delete All Clicks for IP
+            </button>
+        </div>
+    </form>
+<?php endif; ?>
+
+<?php if ($hasActiveFilter): ?>
+    <form method="post" action="/admin/delete-filtered-clicks" class="inline-form">
+        <h2>Bulk Delete</h2>
+        <p class="muted">Delete all <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter.</p>
+        <?php if ($tokenFilter   !== ''): ?><input type="hidden" name="token"     value="<?= h($tokenFilter) ?>"><?php endif; ?>
+        <?php if ($ipFilter      !== ''): ?><input type="hidden" name="ip"        value="<?= h($ipFilter) ?>"><?php endif; ?>
+        <?php if ($visitorFilter !== ''): ?><input type="hidden" name="visitor"   value="<?= h($visitorFilter) ?>"><?php endif; ?>
+        <?php if ($knownOnly):            ?><input type="hidden" name="known"     value="1"><?php endif; ?>
+        <?php if ($dateFrom      !== ''): ?><input type="hidden" name="date_from" value="<?= h($dateFrom) ?>"><?php endif; ?>
+        <?php if ($dateTo        !== ''): ?><input type="hidden" name="date_to"   value="<?= h($dateTo) ?>"><?php endif; ?>
+        <div class="filter-actions" style="margin-left: 0;">
+            <button type="submit"
+                    class="danger-button"
+                    onclick="return confirm('Delete ALL <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter? This cannot be undone.');">
+                Delete All Matching Clicks
             </button>
         </div>
     </form>
