@@ -24,3 +24,9 @@ if (
     http_response_code(500);
     exit('SignalTrace is not configured. Required config values are missing.');
 }
+
+// Demo mode — set in config.local.php. When true the demo banner is shown
+// and certain auth thresholds are relaxed for public access.
+if (!defined('DEMO_MODE')) {
+    define('DEMO_MODE', false);
+}
