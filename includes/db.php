@@ -881,7 +881,7 @@ function getThreatFeedRows(PDO $pdo): array
         WHERE c.ip IS NOT NULL
           AND c.ip <> ''
           AND c.event_type = 'click'
-          AND c.clicked_at >= datetime('now', ?)
+          AND c.clicked_at_unix_ms >= (strftime('%s', 'now') - ? * 3600) * 1000
           AND c.confidence_label IS NOT NULL
           AND c.confidence_label <> ''
           AND c.confidence_score IS NOT NULL
@@ -894,7 +894,7 @@ function getThreatFeedRows(PDO $pdo): array
     ";
 
     $params = array_merge(
-        ['-' . $windowHours . ' hours'],
+        [$windowHours],
         $allowedLabels,
         [$minHits],
     );
