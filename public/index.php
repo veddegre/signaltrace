@@ -190,6 +190,7 @@ $reserved = [
     '/admin/delete-click',
     '/admin/delete-token-clicks',
     '/admin/delete-ip-clicks',
+    '/admin/delete-filtered-clicks',
     '/admin/create-asn-rule',
     '/admin/update-asn-rule',
     '/admin/activate-asn-rule',
