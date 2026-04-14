@@ -236,6 +236,7 @@ function seedDefaultSettings(PDO $pdo): void
         'display_min_score'          => '20',
         'page_size'                  => '50',
         'webhook_url'                => '',
+        'webhook_template'           => '',
         'auto_refresh_secs'          => '0',
         'export_min_confidence'      => 'suspicious',
         'export_window_hours'        => '168',
