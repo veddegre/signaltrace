@@ -676,18 +676,22 @@ function fireWebhookAlert(PDO $pdo, array $requestData, array $triggerReasons): 
     $template = trim((string) getSetting($pdo, 'webhook_template', ''));
 
     if ($template !== '') {
-        // Replace placeholders with sanitized values.
+        // JSON-encode each value before substitution so a malicious request
+        // value (e.g. a UA containing quotes or backslashes) cannot break the
+        // JSON structure of the template. json_encode adds surrounding quotes
+        // so we strip them for string values the template already quotes.
+        $esc = fn(string $v): string => trim((string) json_encode($v), '"');
         $replacements = [
-            '{{ip}}'       => $ip,
-            '{{token}}'    => $token,
-            '{{label}}'    => $label,
+            '{{ip}}'       => $esc($ip),
+            '{{token}}'    => $esc($token),
+            '{{label}}'    => $esc($label),
             '{{score}}'    => (string) $score,
-            '{{org}}'      => $org,
-            '{{asn}}'      => $asn,
-            '{{country}}'  => $country,
-            '{{ua}}'       => $ua,
-            '{{time}}'     => $time,
-            '{{triggers}}' => $triggers,
+            '{{org}}'      => $esc($org),
+            '{{asn}}'      => $esc($asn),
+            '{{country}}'  => $esc($country),
+            '{{ua}}'       => $esc($ua),
+            '{{time}}'     => $esc($time),
+            '{{triggers}}' => $esc($triggers),
         ];
         $json = str_replace(array_keys($replacements), array_values($replacements), $template);
 
