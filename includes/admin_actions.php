@@ -2,6 +2,33 @@
 
 declare(strict_types=1);
 
+/**
+ * Build a redirect URL back to /admin preserving any filter params
+ * that were passed through the form as hidden fields.
+ * Optionally append a tab name.
+ */
+function adminRedirectUrl(string $tab = ''): string
+{
+    $params = [];
+
+    $token   = trim((string) ($_POST['_filter_token']   ?? ''));
+    $ip      = trim((string) ($_POST['_filter_ip']      ?? ''));
+    $visitor = trim((string) ($_POST['_filter_visitor']  ?? ''));
+    $known   = trim((string) ($_POST['_filter_known']   ?? ''));
+    $from    = trim((string) ($_POST['_filter_date_from'] ?? ''));
+    $to      = trim((string) ($_POST['_filter_date_to']   ?? ''));
+
+    if ($tab !== '')     $params['tab']       = $tab;
+    if ($token !== '')   $params['token']     = $token;
+    if ($ip !== '')      $params['ip']        = $ip;
+    if ($visitor !== '') $params['visitor']   = $visitor;
+    if ($known === '1')  $params['known']     = '1';
+    if ($from !== '')    $params['date_from'] = $from;
+    if ($to !== '')      $params['date_to']   = $to;
+
+    return '/admin' . (!empty($params) ? '?' . http_build_query($params) : '');
+}
+
 function handleAdminActions(PDO $pdo, string $path): bool
 {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -492,11 +519,7 @@ function handleAddTokenToSkip(PDO $pdo): void
 
     createSkipPattern($pdo, 'exact', $token);
 
-    if ($redirectToken !== '') {
-        header('Location: /admin?token=' . urlencode($redirectToken), true, 302);
-    } else {
-        header('Location: /admin', true, 302);
-    }
+    header('Location: ' . adminRedirectUrl(), true, 302);
     exit;
 }
 
@@ -543,7 +566,7 @@ function handleDeleteClick(PDO $pdo): void
     $stmt = $pdo->prepare("DELETE FROM clicks WHERE id = :id");
     $stmt->execute([':id' => $id]);
 
-    header('Location: /admin', true, 302);
+    header('Location: ' . adminRedirectUrl(), true, 302);
     exit;
 }
 
@@ -579,7 +602,7 @@ function handleDeleteTokenClicks(PDO $pdo): void
         $stmt->execute([':token' => $token]);
     }
 
-    header('Location: /admin?token=' . urlencode($token), true, 302);
+    header('Location: ' . adminRedirectUrl(), true, 302);
     exit;
 }
 
@@ -710,7 +733,7 @@ function handleDeleteIpClicks(PDO $pdo): void
         $stmt->execute([':ip' => $ip]);
     }
 
-    header('Location: /admin?ip=' . urlencode($ip), true, 302);
+    header('Location: ' . adminRedirectUrl(), true, 302);
     exit;
 }
 
@@ -737,7 +760,17 @@ function handleCreateIpOverride(PDO $pdo): void
     }
 
     createIpOverride($pdo, $ip, $mode, $notes);
-    header('Location: /admin?tab=overrides', true, 302);
+
+    // If filter params are present this was triggered from the activity feed — go back there.
+    // Otherwise go to the overrides tab.
+    $hasFilters = ($_POST['_filter_token'] ?? '') !== ''
+        || ($_POST['_filter_ip'] ?? '') !== ''
+        || ($_POST['_filter_visitor'] ?? '') !== ''
+        || ($_POST['_filter_known'] ?? '') === '1'
+        || ($_POST['_filter_date_from'] ?? '') !== ''
+        || ($_POST['_filter_date_to'] ?? '') !== '';
+
+    header('Location: ' . ($hasFilters ? adminRedirectUrl() : '/admin?tab=overrides'), true, 302);
     exit;
 }
 
