@@ -39,7 +39,7 @@ define('AUTH_LOCKOUT_SECS', 900);
 // Example:  define('TRUSTED_PROXY_IP', '10.0.0.1');
 define('TRUSTED_PROXY_IP', '');
 
-/* Export API token (for Splunk / automation) ------------------- */
+/* Export API token (for Splunk / automation) ---------------------------- */
 
 // When set, this token can be used to authenticate export requests
 // without HTTP Basic credentials — useful for Splunk scripted inputs,
@@ -56,8 +56,15 @@ define('TRUSTED_PROXY_IP', '');
 // Leave blank to require admin Basic Auth for all export access.
 define('EXPORT_API_TOKEN', '');
 
+/* Self-referrer domain penalty ----------------------------------------- */
 
 // If set, requests arriving with this domain as the Referer on the root path
 // receive a small score penalty.  Use your own domain.
 // Example:  define('SELF_REFERER_DOMAIN', 'yourdomain.example');
 define('SELF_REFERER_DOMAIN', '');
+
+/* Demo mode ------------------------------------------------------------ */
+
+// Set to true on the live demo instance.
+// Enables the demo banner. Never set to true in production.
+define('DEMO_MODE', false);
