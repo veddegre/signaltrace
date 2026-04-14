@@ -889,14 +889,13 @@ function getThreatFeedRows(PDO $pdo): array
           AND ar.id IS NULL
           AND (lk.id IS NULL OR lk.exclude_from_feed = 0)
         GROUP BY c.ip
-        HAVING hit_count >= ?
+        HAVING COUNT(*) >= {$minHits}
         ORDER BY c.ip ASC
     ";
 
     $params = array_merge(
         [$windowHours],
         $allowedLabels,
-        [$minHits],
     );
 
     $stmt = $pdo->prepare($sql);
