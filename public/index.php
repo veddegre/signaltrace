@@ -25,6 +25,9 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
    ============================================================ */
 if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
     session_start();
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        require_once __DIR__ . '/../includes/demo-banner.php';
+    }
 }
 
 /* ============================================================
@@ -238,3 +241,4 @@ if (!in_array($path, $reserved, true)) {
    ============================================================ */
 http_response_code(404);
 echo 'Not found';
+
