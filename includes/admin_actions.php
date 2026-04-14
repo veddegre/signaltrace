@@ -152,6 +152,31 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleDeleteIpOverride($pdo);
             return true;
 
+        case '/admin/create-country-rule':
+            requireAdminAuth();
+            handleCreateCountryRule($pdo);
+            return true;
+
+        case '/admin/update-country-rule':
+            requireAdminAuth();
+            handleUpdateCountryRule($pdo);
+            return true;
+
+        case '/admin/activate-country-rule':
+            requireAdminAuth();
+            handleToggleCountryRule($pdo, true);
+            return true;
+
+        case '/admin/deactivate-country-rule':
+            requireAdminAuth();
+            handleToggleCountryRule($pdo, false);
+            return true;
+
+        case '/admin/delete-country-rule':
+            requireAdminAuth();
+            handleDeleteCountryRule($pdo);
+            return true;
+
         default:
             return false;
     }
@@ -820,5 +845,74 @@ function handleDeleteFilteredClicks(PDO $pdo): void
 
     // Redirect back to dashboard with filters cleared
     header('Location: /admin', true, 302);
+    exit;
+}
+
+/* ======================================================
+   COUNTRY RULE HANDLERS
+   ====================================================== */
+
+function handleCreateCountryRule(PDO $pdo): void
+{
+    $code    = strtoupper(trim((string) ($_POST['country_code'] ?? '')));
+    $label   = trim((string) ($_POST['label']   ?? ''));
+    $penalty = max(1, min(100, (int) ($_POST['penalty'] ?? 10)));
+
+    if ($code === '' || !preg_match('/^[A-Z]{2}$/', $code)) {
+        http_response_code(400);
+        echo 'Country code must be a 2-letter ISO code (e.g. CN, RU).';
+        exit;
+    }
+
+    createCountryRule($pdo, $code, $label, $penalty);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+function handleUpdateCountryRule(PDO $pdo): void
+{
+    $id      = (int) ($_POST['id'] ?? 0);
+    $code    = strtoupper(trim((string) ($_POST['country_code'] ?? '')));
+    $label   = trim((string) ($_POST['label']   ?? ''));
+    $penalty = max(1, min(100, (int) ($_POST['penalty'] ?? 10)));
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid id.';
+        exit;
+    }
+
+    if ($code === '' || !preg_match('/^[A-Z]{2}$/', $code)) {
+        http_response_code(400);
+        echo 'Country code must be a 2-letter ISO code (e.g. CN, RU).';
+        exit;
+    }
+
+    updateCountryRule($pdo, $id, $code, $label, $penalty);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+function handleToggleCountryRule(PDO $pdo, bool $active): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    setCountryRuleActive($pdo, $id, $active);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+function handleDeleteCountryRule(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    deleteCountryRule($pdo, $id);
+    header('Location: /admin?tab=countries', true, 302);
     exit;
 }
