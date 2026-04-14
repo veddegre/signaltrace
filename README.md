@@ -46,6 +46,12 @@ A live instance is running at [trysignaltrace.com/admin](https://trysignaltrace.
 
 *Note: The demo resets every 60 minutes. All data is sample/live traffic only — no real credentials or sensitive data are present.*
 
+### Running your own demo instance
+
+Set `define('DEMO_MODE', true);` in `includes/config.local.php` to enable the demo banner. The banner is included in the repository at `includes/demo-banner.php` and is inert unless `DEMO_MODE` is explicitly enabled — it has no effect on standard installs.
+
+When `DEMO_MODE` is true, the banner displays at the top of every admin page. If a `data/.last_reset` file exists containing a Unix timestamp, a live countdown to the next reset is shown. If the file does not exist the banner degrades gracefully and shows static text. The reset mechanism itself is not included in the repository and is left to the operator to implement.
+
 ## Why SignalTrace
 
 Most tracking tools tell you *that* something hit an endpoint. SignalTrace tells you *what kind of thing* hit it, how confident the assessment is, and why — with enough detail to act on immediately or pipe into a SIEM.
@@ -424,6 +430,7 @@ signaltrace/
 │   ├── config.local.php.example
 │   ├── config.php
 │   ├── db.php
+│   ├── demo-banner.php
 │   ├── helpers.php
 │   └── router.php
 ├── public/
