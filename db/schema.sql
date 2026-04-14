@@ -17,13 +17,13 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Tokens (Links)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS links (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    token            TEXT    NOT NULL UNIQUE,
-    destination      TEXT    NOT NULL,
-    description      TEXT,
-    active           INTEGER NOT NULL DEFAULT 1,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    token             TEXT    NOT NULL UNIQUE,
+    destination       TEXT    NOT NULL,
+    description       TEXT,
+    active            INTEGER NOT NULL DEFAULT 1,
     exclude_from_feed INTEGER NOT NULL DEFAULT 0,
-    created_at       TEXT    NOT NULL
+    created_at        TEXT    NOT NULL
 );
 
 -- ============================================================
@@ -94,13 +94,37 @@ CREATE TABLE IF NOT EXISTS skip_patterns (
 -- ASN Rules
 -- ============================================================
 CREATE TABLE IF NOT EXISTS asn_rules (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    asn              TEXT    NOT NULL UNIQUE,
-    label            TEXT,
-    penalty          INTEGER NOT NULL DEFAULT 10,
-    active           INTEGER NOT NULL DEFAULT 1,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    asn               TEXT    NOT NULL UNIQUE,
+    label             TEXT,
+    penalty           INTEGER NOT NULL DEFAULT 10,
+    active            INTEGER NOT NULL DEFAULT 1,
     exclude_from_feed INTEGER NOT NULL DEFAULT 0,
-    created_at       TEXT    NOT NULL
+    created_at        TEXT    NOT NULL
+);
+
+-- ============================================================
+-- IP Overrides
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ip_overrides (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip         TEXT    NOT NULL UNIQUE,
+    mode       TEXT    NOT NULL DEFAULT 'block',  -- block | allow
+    notes      TEXT,
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT    NOT NULL
+);
+
+-- ============================================================
+-- Country Rules
+-- ============================================================
+CREATE TABLE IF NOT EXISTS country_rules (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    country_code TEXT    NOT NULL UNIQUE,
+    label        TEXT,
+    penalty      INTEGER NOT NULL DEFAULT 10,
+    active       INTEGER NOT NULL DEFAULT 1,
+    created_at   TEXT    NOT NULL
 );
 
 -- ============================================================
@@ -134,6 +158,14 @@ CREATE INDEX IF NOT EXISTS idx_skip_patterns_active    ON skip_patterns(active);
 -- asn_rules
 CREATE INDEX IF NOT EXISTS idx_asn_rules_active        ON asn_rules(active);
 
+-- ip_overrides
+CREATE INDEX IF NOT EXISTS idx_ip_overrides_ip         ON ip_overrides(ip);
+CREATE INDEX IF NOT EXISTS idx_ip_overrides_active     ON ip_overrides(active);
+
+-- country_rules
+CREATE INDEX IF NOT EXISTS idx_country_rules_code      ON country_rules(country_code);
+CREATE INDEX IF NOT EXISTS idx_country_rules_active    ON country_rules(active);
+
 -- auth_failures
 CREATE INDEX IF NOT EXISTS idx_auth_failures_ip        ON auth_failures(ip);
 CREATE INDEX IF NOT EXISTS idx_auth_failures_at        ON auth_failures(failed_at);
@@ -145,23 +177,25 @@ CREATE INDEX IF NOT EXISTS idx_links_token             ON links(token);
 -- Default Settings
 -- ============================================================
 INSERT OR IGNORE INTO settings (key, value) VALUES
-    ('app_name',                 'SignalTrace - Tracking & Analysis'),
-    ('base_url',                 ''),
-    ('default_redirect_url',     'https://example.com/'),
-    ('unknown_path_behavior',    'redirect'),
-    ('pixel_enabled',            '1'),
-    ('noise_filter_enabled',     '1'),
-    ('threat_feed_enabled',      '1'),
-    ('threat_feed_window_hours', '168'),
+    ('app_name',                  'SignalTrace - Tracking & Analysis'),
+    ('base_url',                  ''),
+    ('default_redirect_url',      'https://example.com/'),
+    ('unknown_path_behavior',     'redirect'),
+    ('pixel_enabled',             '1'),
+    ('noise_filter_enabled',      '1'),
+    ('threat_feed_enabled',       '1'),
+    ('threat_feed_window_hours',  '168'),
     ('threat_feed_min_confidence','suspicious'),
-    ('data_retention_days',      '0'),
-    ('display_min_score',        '20'),
-    ('page_size',                '50'),
-    ('webhook_url',              ''),
-    ('auto_refresh_secs',        '0'),
-    ('export_min_confidence',    'suspicious'),
-    ('export_window_hours',      '168'),
-    ('export_min_score',         '0');
+    ('threat_feed_min_hits',      '1'),
+    ('data_retention_days',       '0'),
+    ('display_min_score',         '20'),
+    ('page_size',                 '50'),
+    ('webhook_url',               ''),
+    ('webhook_template',          ''),
+    ('auto_refresh_secs',         '0'),
+    ('export_min_confidence',     'suspicious'),
+    ('export_window_hours',       '168'),
+    ('export_min_score',          '0');
 
 -- ============================================================
 -- Default Skip Patterns
