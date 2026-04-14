@@ -652,19 +652,33 @@ function renderAdminPage(
 
                                     <div class="detail-box" style="grid-column: 1 / -1;">
                                         <strong>Actions</strong>
+                                        <?php
+                                        // Hidden filter fields included in every action form so the
+                                        // handler can redirect back to the current filtered view.
+                                        $filterHiddens = '';
+                                        if ($tokenFilter   !== '') $filterHiddens .= '<input type="hidden" name="_filter_token"     value="' . h($tokenFilter)   . '">';
+                                        if ($ipFilter      !== '') $filterHiddens .= '<input type="hidden" name="_filter_ip"        value="' . h($ipFilter)      . '">';
+                                        if ($visitorFilter !== '') $filterHiddens .= '<input type="hidden" name="_filter_visitor"   value="' . h($visitorFilter) . '">';
+                                        if ($knownOnly)            $filterHiddens .= '<input type="hidden" name="_filter_known"     value="1">';
+                                        if ($dateFrom      !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
+                                        if ($dateTo        !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
+                                        ?>
+
                                         <form method="post" action="/admin/delete-click" class="inline-action-form" onsubmit="return confirm('Delete this click?');">
+                                            <?= $filterHiddens ?>
                                             <input type="hidden" name="id" value="<?= h((string) ($c['id'] ?? '')) ?>">
                                             <button type="submit" class="danger-button">Delete This Click</button>
                                         </form>
 
                                         <form method="post" action="/admin/add-token-to-skip" class="inline-action-form" onsubmit="return confirm('Add this token/path to skip patterns?');">
+                                            <?= $filterHiddens ?>
                                             <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                            <input type="hidden" name="redirect_token" value="<?= h($rowToken) ?>">
                                             <button type="submit" class="warning-button">Skip Exact Token</button>
                                         </form>
 
                                         <?php if (empty($c['link_id'])): ?>
                                             <form method="post" action="/admin/delete-token-clicks" class="inline-action-form" onsubmit="return confirm('Delete unknown-only clicks for this token/path?');">
+                                                <?= $filterHiddens ?>
                                                 <input type="hidden" name="token" value="<?= h($rowToken) ?>">
                                                 <input type="hidden" name="mode" value="unknown_only">
                                                 <button type="submit" class="warning-button">Delete Unknown Token Hits</button>
@@ -672,6 +686,7 @@ function renderAdminPage(
                                         <?php endif; ?>
 
                                         <form method="post" action="/admin/delete-token-clicks" class="inline-action-form" onsubmit="return confirm('Delete ALL clicks for this token/path?');">
+                                            <?= $filterHiddens ?>
                                             <input type="hidden" name="token" value="<?= h($rowToken) ?>">
                                             <input type="hidden" name="mode" value="all">
                                             <button type="submit" class="danger-button">Delete All Clicks for Token</button>
@@ -680,12 +695,14 @@ function renderAdminPage(
                                         <?php $existingOverrideMode = $ipOverrideMap[$rowIp] ?? null; ?>
                                         <?php if ($existingOverrideMode === null): ?>
                                             <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                                <?= $filterHiddens ?>
                                                 <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
                                                 <input type="hidden" name="mode" value="block">
                                                 <input type="hidden" name="notes" value="Added from activity feed">
                                                 <button type="submit" class="danger-button">Block IP</button>
                                             </form>
                                             <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                                <?= $filterHiddens ?>
                                                 <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
                                                 <input type="hidden" name="mode" value="allow">
                                                 <input type="hidden" name="notes" value="Added from activity feed">
