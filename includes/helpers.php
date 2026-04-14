@@ -745,27 +745,20 @@ function fireWebhookAlert(PDO $pdo, array $requestData, array $triggerReasons): 
 function maybeFireAlert(PDO $pdo, array $requestData): void
 {
     $webhookUrl = getSetting($pdo, 'webhook_url', '');
-    error_log('SignalTrace webhook: url=' . ($webhookUrl === '' ? 'EMPTY' : 'SET'));
     if ($webhookUrl === '') {
         return;
     }
 
     $label = (string) ($requestData['confidence_label'] ?? '');
-    error_log('SignalTrace webhook: label=' . $label);
     if ($label !== 'bot') {
         return;
     }
 
-    $ip = (string) ($requestData['ip'] ?? '');
-    $should = shouldSendAlert($pdo, $ip);
-    error_log('SignalTrace webhook: ip=' . $ip . ' shouldSend=' . ($should ? 'yes' : 'no'));
-    if (!$should) {
+    if (!shouldSendAlert($pdo, (string) ($requestData['ip'] ?? ''))) {
         return;
     }
 
-    error_log('SignalTrace webhook: firing');
     fireWebhookAlert($pdo, $requestData, ['bot_classification']);
-    error_log('SignalTrace webhook: fired');
 }
 
 function shouldSendAlert(PDO $pdo, string $ip): bool
