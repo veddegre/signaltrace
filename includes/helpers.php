@@ -483,6 +483,17 @@ function calculateConfidence(PDO $pdo, array $requestData): array
         if ($distinctTokens >= 3) { $score -= 35; $reasons[] = 'multi_token_scan'; }
     }
 
+    /* === COUNTRY PENALTY === */
+    $country = strtoupper((string) ($requestData['ip_country'] ?? ''));
+    if ($country !== '') {
+        $countryPenaltyMap = getActiveCountryPenaltyMap($pdo);
+        if (isset($countryPenaltyMap[$country])) {
+            $penalty = $countryPenaltyMap[$country];
+            $score  -= $penalty;
+            $reasons[] = 'country_penalty:' . $country;
+        }
+    }
+
     /* === FINALIZE === */
     $score = max(0, min(100, $score));
     if ($score >= 75)     { $label = 'human'; }
