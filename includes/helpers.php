@@ -774,23 +774,30 @@ function shouldSendAlert(PDO $pdo, string $ip): bool
         return false;
     }
 
-    $nowMs  = (int) round(microtime(true) * 1000);
-    $cutoff = $nowMs - (5 * 60 * 1000);
+    // Get the most recent click ID for this IP so we can exclude it.
+    // We want to know if there were any OTHER bot hits in the last 5 minutes —
+    // not counting the click we just stored.
+    $cutoff = (int) round(microtime(true) * 1000) - (5 * 60 * 1000);
+
+    $latest = $pdo->prepare("
+        SELECT id FROM clicks
+        WHERE ip = :ip AND confidence_label = 'bot'
+        ORDER BY id DESC LIMIT 1
+    ");
+    $latest->execute([':ip' => $ip]);
+    $latestId = (int) ($latest->fetchColumn() ?: 0);
 
     $stmt = $pdo->prepare("
         SELECT COUNT(*) FROM clicks
         WHERE ip = :ip
+          AND id != :latest_id
           AND clicked_at_unix_ms >= :cutoff
-          AND clicked_at_unix_ms < :now
           AND confidence_label = 'bot'
     ");
-    // Only alert if this is the first bot hit from this IP in the last 5 min.
-    // Exclude the current millisecond so the click we just stored doesn't
-    // count against itself.
     $stmt->execute([
-        ':ip'     => $ip,
-        ':cutoff' => $cutoff,
-        ':now'    => $nowMs,
+        ':ip'        => $ip,
+        ':latest_id' => $latestId,
+        ':cutoff'    => $cutoff,
     ]);
 
     return (int) $stmt->fetchColumn() === 0;
