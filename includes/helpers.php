@@ -547,6 +547,28 @@ function collectRequestData(string $path, PDO $pdo): array
         $data['ip_country'] = $geo['ip_country'];
     }
 
+    // Check for an active IP override — if one exists, skip scoring entirely
+    // and apply the pinned classification instead.
+    if (!empty($data['ip'])) {
+        $override = getIpOverrideByIp($pdo, $data['ip']);
+        if ($override && (int) $override['active'] === 1) {
+            $mode = (string) $override['mode'];
+            if ($mode === 'allow') {
+                return array_merge($data, [
+                    'confidence_score'  => 100,
+                    'confidence_label'  => 'human',
+                    'confidence_reason' => 'ip_override:allow',
+                ]);
+            } else {
+                return array_merge($data, [
+                    'confidence_score'  => 0,
+                    'confidence_label'  => 'bot',
+                    'confidence_reason' => 'ip_override:block',
+                ]);
+            }
+        }
+    }
+
     return array_merge($data, calculateConfidence($pdo, $data));
 }
 
