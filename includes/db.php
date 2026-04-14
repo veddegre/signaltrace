@@ -908,7 +908,17 @@ function getThreatFeedRows(PDO $pdo): array
           AND (lk.id IS NULL OR lk.exclude_from_feed = 0)
         GROUP BY c.ip
         HAVING COUNT(*) >= {$minHits}
-        ORDER BY c.ip ASC
+
+        UNION
+
+        SELECT ip, 0 AS hit_count
+        FROM ip_overrides
+        WHERE active = 1
+          AND mode = 'block'
+          AND ip IS NOT NULL
+          AND ip <> ''
+
+        ORDER BY ip ASC
     ";
 
     $params = array_merge(
