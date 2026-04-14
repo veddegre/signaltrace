@@ -83,6 +83,7 @@ function renderAdminPage(
     $ipOverrides       = getIpOverrides($pdo);
     $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, 24);
     $ipOverrideMap     = getActiveIpOverrideMap($pdo);
+    $countryRules      = getCountryRules($pdo);
 
     $editOverrideId = (int) ($_GET['edit_override_id'] ?? 0);
     $editOverride   = null;
@@ -90,6 +91,17 @@ function renderAdminPage(
         foreach ($ipOverrides as $candidate) {
             if ((int) $candidate['id'] === $editOverrideId) {
                 $editOverride = $candidate;
+                break;
+            }
+        }
+    }
+
+    $editCountryId   = (int) ($_GET['edit_country_id'] ?? 0);
+    $editCountryRule = null;
+    if ($editCountryId > 0) {
+        foreach ($countryRules as $candidate) {
+            if ((int) $candidate['id'] === $editCountryId) {
+                $editCountryRule = $candidate;
                 break;
             }
         }
@@ -193,6 +205,7 @@ function renderAdminPage(
             <div class="tab" id="tab-links" onclick="showTab('links')">Tokens</div>
 	    <div class="tab" id="tab-skip" onclick="showTab('skip')">Skip Patterns</div>
             <div class="tab" id="tab-asn" onclick="showTab('asn')">ASN Rules</div>
+            <div class="tab" id="tab-countries" onclick="showTab('countries')">Country Rules</div>
             <div class="tab" id="tab-overrides" onclick="showTab('overrides')">IP Overrides</div>
             <div class="tab" id="tab-settings" onclick="showTab('settings')">Settings</div>
         </div>
@@ -981,6 +994,98 @@ function renderAdminPage(
 	        </table>
 	    </div>
 	</div>
+
+        <div class="tab-content" id="content-countries">
+
+            <?php if ($editCountryRule !== null): ?>
+            <form method="post" action="/admin/update-country-rule">
+                <h2>Edit Country Rule</h2>
+                <input type="hidden" name="id" value="<?= (int) $editCountryRule['id'] ?>">
+
+                <label for="edit_country_code">Country Code</label>
+                <input id="edit_country_code" type="text" name="country_code" required maxlength="2" style="text-transform:uppercase;" value="<?= h((string) $editCountryRule['country_code']) ?>">
+
+                <label for="edit_country_label">Label (optional)</label>
+                <input id="edit_country_label" type="text" name="label" value="<?= h((string) ($editCountryRule['label'] ?? '')) ?>" placeholder="e.g. High-risk region">
+
+                <label for="edit_country_penalty">Score Penalty (1–100)</label>
+                <input id="edit_country_penalty" type="number" name="penalty" min="1" max="100" value="<?= (int) $editCountryRule['penalty'] ?>">
+
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button type="submit">Save Changes</button>
+                    <form method="get" action="/admin" class="inline-action-form">
+                        <input type="hidden" name="tab" value="countries">
+                        <button type="submit">Cancel</button>
+                    </form>
+                </div>
+            </form>
+            <?php endif; ?>
+
+            <form method="post" action="/admin/create-country-rule">
+                <h2>Add Country Rule</h2>
+                <p class="muted">Applies a score penalty to all requests from the specified country. Use 2-letter ISO country codes (e.g. CN, RU, KP). Only affects scoring — does not exclude IPs from the threat feed.</p>
+
+                <label for="country_code">Country Code</label>
+                <input id="country_code" type="text" name="country_code" required maxlength="2" style="text-transform:uppercase; width: 80px;" placeholder="CN">
+
+                <label for="country_label">Label (optional)</label>
+                <input id="country_label" type="text" name="label" placeholder="e.g. High-risk region">
+
+                <label for="country_penalty">Score Penalty (1–100)</label>
+                <input id="country_penalty" type="number" name="penalty" min="1" max="100" value="15">
+
+                <button type="submit">Add Country Rule</button>
+            </form>
+
+            <h2>Country Rules</h2>
+            <?php if (empty($countryRules)): ?>
+                <p class="muted">No country rules configured.</p>
+            <?php else: ?>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <tr>
+                        <th>Code</th>
+                        <th>Label</th>
+                        <th>Penalty</th>
+                        <th>Active</th>
+                        <th>Created</th>
+                        <th class="actions-col">Actions</th>
+                    </tr>
+                    <?php foreach ($countryRules as $rule): ?>
+                        <tr>
+                            <td class="mono"><?= h((string) $rule['country_code']) ?></td>
+                            <td><?= h((string) ($rule['label'] ?? '')) ?></td>
+                            <td>-<?= (int) $rule['penalty'] ?></td>
+                            <td><?= ((int) $rule['active'] === 1) ? 'Yes' : 'No' ?></td>
+                            <td><?= h((string) ($rule['created_at'] ?? '')) ?></td>
+                            <td class="actions-col">
+                                <form method="get" action="/admin" class="inline-action-form">
+                                    <input type="hidden" name="tab" value="countries">
+                                    <input type="hidden" name="edit_country_id" value="<?= (int) $rule['id'] ?>">
+                                    <button type="submit">Edit</button>
+                                </form>
+                                <?php if ((int) $rule['active'] === 1): ?>
+                                    <form method="post" action="/admin/deactivate-country-rule" class="inline-action-form">
+                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+                                        <button type="submit">Deactivate</button>
+                                    </form>
+                                <?php else: ?>
+                                    <form method="post" action="/admin/activate-country-rule" class="inline-action-form">
+                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+                                        <button type="submit">Activate</button>
+                                    </form>
+                                <?php endif; ?>
+                                <form method="post" action="/admin/delete-country-rule" class="inline-action-form" onsubmit="return confirm('Delete this country rule?');">
+                                    <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+                                    <button type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
 
         <div class="tab-content" id="content-overrides">
 
