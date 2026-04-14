@@ -128,9 +128,13 @@ if ($path === '/health') {
 /* ============================================================
    THREAT FEED
    ============================================================ */
-if ($path === '/feed/ips.txt') {
+$feedPaths = [
+    '/feed/ips.txt', '/feed/ips.nginx', '/feed/ips.iptables', '/feed/ips.cidr',
+    '/feed/ipv6.txt', '/feed/ipv6.nginx', '/feed/ipv6.iptables', '/feed/ipv6.cidr',
+];
+if (in_array($path, $feedPaths, true)) {
     requireAdminAuth();
-    handleThreatFeed($pdo, $settings);
+    handleThreatFeed($pdo, $settings, $path);
 }
 
 /* ============================================================
@@ -200,6 +204,13 @@ $reserved = [
     '/favicon.png',
     '/signaltrace_transparent.png',
     '/feed/ips.txt',
+    '/feed/ips.nginx',
+    '/feed/ips.iptables',
+    '/feed/ips.cidr',
+    '/feed/ipv6.txt',
+    '/feed/ipv6.nginx',
+    '/feed/ipv6.iptables',
+    '/feed/ipv6.cidr',
     '/export/json',
     '/export/csv',
 ];
@@ -216,4 +227,3 @@ if (!in_array($path, $reserved, true)) {
    ============================================================ */
 http_response_code(404);
 echo 'Not found';
-
