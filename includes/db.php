@@ -109,6 +109,17 @@ function initializeDatabase(PDO $pdo): void
         )
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ip_overrides (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL UNIQUE,
+            mode TEXT NOT NULL DEFAULT 'block',
+            notes TEXT,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+    ");
+
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
@@ -168,6 +179,8 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_skip_patterns_type ON skip_patterns(type)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_skip_patterns_active ON skip_patterns(active)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_asn_rules_active ON asn_rules(active)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ip_overrides_ip ON ip_overrides(ip)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ip_overrides_active ON ip_overrides(active)");
 
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
@@ -181,7 +194,7 @@ function initializeDatabase(PDO $pdo): void
 function ensureColumn(PDO $pdo, string $table, string $column, string $definition): void
 {
     // Whitelist of tables this function is permitted to alter.
-    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules'];
+    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules', 'ip_overrides'];
 
     // Whitelist of column name characters: alphanumeric and underscore only.
     if (!in_array($table, $allowedTables, true)) {
@@ -1201,4 +1214,131 @@ function deleteAsnRule(PDO $pdo, int $id): bool
 {
     $stmt = $pdo->prepare("DELETE FROM asn_rules WHERE id = :id");
     return $stmt->execute([':id' => $id]);
+}
+
+/* ======================================================
+   IP OVERRIDES
+   ====================================================== */
+
+function getIpOverrides(PDO $pdo): array
+{
+    return $pdo->query("
+        SELECT id, ip, mode, notes, active, created_at
+        FROM ip_overrides
+        ORDER BY ip ASC
+    ")->fetchAll();
+}
+
+function getActiveIpOverrideMap(PDO $pdo): array
+{
+    $rows = $pdo->query("
+        SELECT ip, mode
+        FROM ip_overrides
+        WHERE active = 1
+    ")->fetchAll();
+
+    $map = [];
+    foreach ($rows as $row) {
+        $map[(string) $row['ip']] = (string) $row['mode'];
+    }
+    return $map;
+}
+
+function getIpOverrideByIp(PDO $pdo, string $ip): ?array
+{
+    $stmt = $pdo->prepare("
+        SELECT id, ip, mode, notes, active, created_at
+        FROM ip_overrides
+        WHERE ip = :ip
+        LIMIT 1
+    ");
+    $stmt->execute([':ip' => $ip]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function createIpOverride(PDO $pdo, string $ip, string $mode, string $notes = ''): bool
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO ip_overrides (ip, mode, notes, active, created_at)
+        VALUES (:ip, :mode, :notes, 1, :created_at)
+    ");
+    return $stmt->execute([
+        ':ip'         => $ip,
+        ':mode'       => $mode,
+        ':notes'      => $notes,
+        ':created_at' => date('c'),
+    ]);
+}
+
+function updateIpOverride(PDO $pdo, int $id, string $ip, string $mode, string $notes): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE ip_overrides
+        SET ip    = :ip,
+            mode  = :mode,
+            notes = :notes
+        WHERE id = :id
+    ");
+    return $stmt->execute([
+        ':id'    => $id,
+        ':ip'    => $ip,
+        ':mode'  => $mode,
+        ':notes' => $notes,
+    ]);
+}
+
+function setIpOverrideActive(PDO $pdo, int $id, bool $active): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE ip_overrides SET active = :active WHERE id = :id
+    ");
+    return $stmt->execute([':active' => $active ? 1 : 0, ':id' => $id]);
+}
+
+function deleteIpOverride(PDO $pdo, int $id): bool
+{
+    $stmt = $pdo->prepare("DELETE FROM ip_overrides WHERE id = :id");
+    return $stmt->execute([':id' => $id]);
+}
+
+/* ======================================================
+   BEHAVIORALLY FLAGGED IPs
+   Returns IPs where confidence_reason contains burst,
+   rapid_repeat, or multi_token signals, with summary data.
+   ====================================================== */
+
+function getBehaviorallyFlaggedIps(PDO $pdo, int $windowHours = 24): array
+{
+    $cutoffMs = (int)(microtime(true) * 1000) - ($windowHours * 3600 * 1000);
+
+    $stmt = $pdo->prepare("
+        SELECT
+            ip,
+            COUNT(*)                                                        AS total_hits,
+            MIN(clicked_at)                                                 AS first_seen,
+            MAX(clicked_at)                                                 AS last_seen,
+            MAX(ip_org)                                                     AS ip_org,
+            MAX(ip_country)                                                 AS ip_country,
+            MIN(confidence_score)                                           AS lowest_score,
+            MAX(confidence_label)                                           AS worst_label,
+            GROUP_CONCAT(DISTINCT confidence_reason)                        AS all_reasons,
+            SUM(CASE WHEN confidence_reason LIKE '%burst%'        THEN 1 ELSE 0 END) AS burst_hits,
+            SUM(CASE WHEN confidence_reason LIKE '%rapid_repeat%' THEN 1 ELSE 0 END) AS rapid_hits,
+            SUM(CASE WHEN confidence_reason LIKE '%multi_token%'  THEN 1 ELSE 0 END) AS multi_hits
+        FROM clicks
+        WHERE clicked_at_unix_ms >= :cutoff
+          AND (
+              confidence_reason LIKE '%burst%'
+              OR confidence_reason LIKE '%rapid_repeat%'
+              OR confidence_reason LIKE '%multi_token%'
+          )
+          AND ip IS NOT NULL
+          AND ip <> ''
+        GROUP BY ip
+        ORDER BY total_hits DESC
+        LIMIT 50
+    ");
+    $stmt->execute([':cutoff' => $cutoffMs]);
+    return $stmt->fetchAll();
 }
