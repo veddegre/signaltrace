@@ -29,6 +29,7 @@ function renderAdminPage(
 
     $autoRefreshSecs  = max(0, (int) getSetting($pdo, 'auto_refresh_secs', '0'));
     $webhookUrl       = (string) getSetting($pdo, 'webhook_url', '');
+    $webhookTemplate  = (string) getSetting($pdo, 'webhook_template', '');
     $pageSizeSetting  = (string) getSetting($pdo, 'page_size', '50');
     $exportMinConf    = (string) getSetting($pdo, 'export_min_confidence', 'suspicious');
     $exportWinHours   = (string) getSetting($pdo, 'export_window_hours', '168');
@@ -1130,7 +1131,14 @@ function renderAdminPage(
 
 		   <label for="webhook_url">Webhook URL</label>
 		   <input id="webhook_url" type="url" name="webhook_url" value="<?= h($webhookUrl) ?>" placeholder="https://hooks.slack.com/...">
-		   <p class="muted">Fires when a new IP is classified as bot. Slack/Discord URLs auto-detected; others receive generic JSON.</p>
+		   <p class="muted">Fires when a new IP is classified as bot. Slack/Discord URLs auto-detected; others receive generic JSON. Leave template blank to use auto-detection.</p>
+
+		   <label for="webhook_template">Webhook Payload Template (optional)</label>
+		   <textarea id="webhook_template" name="webhook_template" rows="8" style="font-family: var(--font-mono); font-size: 0.8125rem; width: 100%; resize: vertical;" placeholder='{"event": "signaltrace_alert", "ip": "{{ip}}", "label": "{{label}}", "score": {{score}}}'><?= h($webhookTemplate) ?></textarea>
+		   <p class="muted">
+		       JSON template with placeholders. When set, overrides Slack/Discord auto-detection.<br>
+		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
+		   </p>
 
 		   <label for="export_min_confidence">Export Minimum Confidence</label>
 		   <select id="export_min_confidence" name="export_min_confidence">
