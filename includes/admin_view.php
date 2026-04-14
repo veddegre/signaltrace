@@ -81,6 +81,7 @@ function renderAdminPage(
 
     $ipOverrides       = getIpOverrides($pdo);
     $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, 24);
+    $ipOverrideMap     = getActiveIpOverrideMap($pdo);
 
     $editOverrideId = (int) ($_GET['edit_override_id'] ?? 0);
     $editOverride   = null;
@@ -642,8 +643,8 @@ function renderAdminPage(
                                             <button type="submit" class="danger-button">Delete All Clicks for Token</button>
                                         </form>
 
-                                        <?php $existingOverride = getIpOverrideByIp($pdo, $rowIp); ?>
-                                        <?php if ($existingOverride === null): ?>
+                                        <?php $existingOverrideMode = $ipOverrideMap[$rowIp] ?? null; ?>
+                                        <?php if ($existingOverrideMode === null): ?>
                                             <form method="post" action="/admin/create-ip-override" class="inline-action-form">
                                                 <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
                                                 <input type="hidden" name="mode" value="block">
@@ -657,8 +658,8 @@ function renderAdminPage(
                                                 <button type="submit" class="warning-button">Allow IP</button>
                                             </form>
                                         <?php else: ?>
-                                            <span class="badge <?= $existingOverride['mode'] === 'block' ? 'badge-bot' : 'badge-human' ?>">
-                                                IP override: <?= h($existingOverride['mode']) ?>
+                                            <span class="badge <?= $existingOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                                                IP override: <?= h($existingOverrideMode) ?>
                                             </span>
                                             <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
                                         <?php endif; ?>
