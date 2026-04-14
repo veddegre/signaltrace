@@ -993,25 +993,64 @@ function renderAdminPage(
                         <input id="threat_feed_min_hits" type="number" min="1" name="threat_feed_min_hits" value="<?= h($threatFeedMinHits) ?>">
                         <p class="muted">An IP must be seen at least this many times within the window before appearing in the feed. Set to 1 to include on first hit.</p>
 
-                        <p class="muted">
-                            Feed URL:
-                            <span class="mono"><?= h($threatFeedUrl) ?></span>
-			</p>
-
-			<div class="utility-links">
-			    <button type="button" class="button-link" onclick="copyText('<?= h($threatFeedUrl) ?>')">
-			        Copy Feed URL
-			    </button>
-
-			    <?php if ($baseUrl !== ''): ?>
-			        <a class="button-link" href="<?= h($threatFeedUrl) ?>" target="_blank" rel="noopener">
-			            Open Feed
-			        </a>
-			    <?php endif; ?>
-			</div>
-
                         <button type="submit">Save Threat Feed Settings</button>
                     </form>
+
+                    <?php
+                    $feedCount = getThreatFeedCount($pdo);
+                    ?>
+                    <div style="margin-top: 1rem; padding: 0.875rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius);">
+                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.6rem;">
+                            Feed Preview
+                        </strong>
+                        <p class="muted" style="margin-bottom: 0.75rem;">
+                            Currently <strong><?= (int) $feedCount['ipv4'] ?></strong> IPv4
+                            and <strong><?= (int) $feedCount['ipv6'] ?></strong> IPv6
+                            addresses in the feed
+                            (<?= (int) $feedCount['total'] ?> total).
+                        </p>
+
+                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.5rem;">IPv4 Feeds</strong>
+                        <?php
+                        $ipv4Feeds = [
+                            'Plain text'    => '/feed/ips.txt',
+                            'Nginx deny'    => '/feed/ips.nginx',
+                            'iptables'      => '/feed/ips.iptables',
+                            'CIDR (/32)'    => '/feed/ips.cidr',
+                        ];
+                        $ipv6Feeds = [
+                            'Plain text'    => '/feed/ipv6.txt',
+                            'Nginx deny'    => '/feed/ipv6.nginx',
+                            'ip6tables'     => '/feed/ipv6.iptables',
+                            'CIDR (/128)'   => '/feed/ipv6.cidr',
+                        ];
+                        foreach ($ipv4Feeds as $label => $feedPath):
+                            $fullUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . $feedPath;
+                        ?>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 90px;"><?= h($label) ?></span>
+                            <span class="mono" style="font-size: 0.75rem;"><?= h($fullUrl) ?></span>
+                            <button type="button" class="copy-button" onclick="copyText('<?= h($fullUrl) ?>')">Copy</button>
+                            <?php if ($baseUrl !== ''): ?>
+                                <a class="copy-button" href="<?= h($fullUrl) ?>" target="_blank" rel="noopener">Open</a>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+
+                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-top: 0.75rem; margin-bottom: 0.5rem;">IPv6 Feeds</strong>
+                        <?php foreach ($ipv6Feeds as $label => $feedPath):
+                            $fullUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . $feedPath;
+                        ?>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 90px;"><?= h($label) ?></span>
+                            <span class="mono" style="font-size: 0.75rem;"><?= h($fullUrl) ?></span>
+                            <button type="button" class="copy-button" onclick="copyText('<?= h($fullUrl) ?>')">Copy</button>
+                            <?php if ($baseUrl !== ''): ?>
+                                <a class="copy-button" href="<?= h($fullUrl) ?>" target="_blank" rel="noopener">Open</a>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
 
                     <form method="post" action="/admin/save-retention-settings">
                         <h2>Data Retention</h2>
