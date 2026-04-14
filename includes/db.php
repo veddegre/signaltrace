@@ -891,6 +891,10 @@ function getThreatFeedRows(PDO $pdo): array
            AND ar.exclude_from_feed = 1
         LEFT JOIN links lk
             ON lk.id = c.link_id
+        LEFT JOIN ip_overrides io
+            ON io.ip = c.ip
+           AND io.active = 1
+           AND io.mode = 'allow'
         WHERE c.ip IS NOT NULL
           AND c.ip <> ''
           AND c.event_type = 'click'
@@ -900,6 +904,7 @@ function getThreatFeedRows(PDO $pdo): array
           AND c.confidence_score IS NOT NULL
           AND c.confidence_label IN ($placeholders)
           AND ar.id IS NULL
+          AND io.id IS NULL
           AND (lk.id IS NULL OR lk.exclude_from_feed = 0)
         GROUP BY c.ip
         HAVING COUNT(*) >= {$minHits}
