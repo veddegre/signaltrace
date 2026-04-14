@@ -283,9 +283,29 @@ sudo certbot renew --dry-run
 
 ## Threat Feed
 
-The threat feed is available at `/feed/ips.txt` and requires admin authentication. It outputs a deduplicated list of IPs classified at or above your configured confidence threshold, suitable for consumption by firewalls, block lists, SIEM enrichment pipelines, or temporary deny lists.
+The threat feed requires admin authentication and outputs deduplicated IPs classified at or above your configured confidence threshold. IPv4 and IPv6 are served as separate feeds to avoid confusing tools that expect one address family.
 
-Behaviour is configured in the Settings tab: time window, minimum confidence threshold. Individual tokens and ASN rules can each be flagged to suppress their hits from feed output, so you never accidentally block infrastructure you own.
+**IPv4 feeds:**
+
+| Endpoint | Format |
+|---|---|
+| `/feed/ips.txt` | One IP per line |
+| `/feed/ips.nginx` | `deny 1.2.3.4;` blocks |
+| `/feed/ips.iptables` | iptables-restore compatible filter block |
+| `/feed/ips.cidr` | CIDR notation with `/32` suffix |
+
+**IPv6 feeds:**
+
+| Endpoint | Format |
+|---|---|
+| `/feed/ipv6.txt` | One IP per line (normalized) |
+| `/feed/ipv6.nginx` | `deny 2001:db8::1;` blocks |
+| `/feed/ipv6.iptables` | ip6tables-restore compatible filter block |
+| `/feed/ipv6.cidr` | CIDR notation with `/128` suffix |
+
+All feed URLs and a live count of IPs currently in the feed are shown in the Settings tab.
+
+Feed behaviour is configured in Settings: time window, minimum confidence threshold, minimum hit count before an IP appears. Individual tokens and ASN rules can each be flagged to suppress their hits from feed output. Allowed IP overrides are also excluded. Blocked IP overrides always appear regardless of threshold or hit count.
 
 ## SIEM and Splunk Integration
 
@@ -338,18 +358,26 @@ Behavioral signals layer on top: rapid repeat requests, burst activity, and mult
 
 Paths associated with common probes carry their own penalties. High-risk paths like `.env`, `_environment`, `.aws/credentials`, `.git`, and webshell patterns knock 40 points off. Medium-risk paths like `wp-admin`, `phpinfo`, `phpmyadmin`, Laravel debug tools, and Spring Boot actuator endpoints knock off 25.
 
-ASN rules let you add manual score penalties for specific networks via the UI.
+**ASN rules** let you add manual score penalties for specific networks via the UI, with an option to exclude the ASN from feed output entirely.
+
+**Country rules** let you add score penalties by 2-letter ISO country code. They affect scoring only and do not suppress IPs from the feed.
+
+**IP overrides** bypass scoring entirely. A blocked IP is always classified as bot (score 0) and always appears in the threat feed. An allowed IP is always classified as human (score 100) and is excluded from the threat feed.
 
 ## Features at a Glance
 
 * **Tracking:** custom tokens with redirect, full request logging, visitor fingerprinting, tracking pixel, GeoIP enrichment.
-* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel, date range filtering, classification badges with scores, dark mode, mobile layout.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel, date range filtering, classification badges with scores, bulk delete by filter, filter state preserved across row actions, dark mode, mobile layout.
 * **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, pixel URL generation.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
+* **Country rules:** per-country score penalties by ISO code, affects scoring only.
+* **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
+* **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals in the last 24 hours.
 * **Skip patterns:** exact, contains, and prefix matching to suppress known noise. Add directly from the activity feed.
-* **Cleanup tools:** delete by token, by IP, or selectively remove unknown-token hits.
+* **Threat feed:** eight endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, and CIDR formats. Minimum hit count threshold. Feed preview count in Settings.
+* **Cleanup tools:** delete by token, by IP, by current filter, or selectively remove unknown-token hits.
 * **Data retention:** configurable retention window with manual trigger and automatic probabilistic cleanup.
-* **Webhook alerts:** fires on bot classification, deduplicates per IP per 5 minutes, auto-detects Slack/Discord format.
+* **Webhook alerts:** fires on bot classification, deduplicates per IP per 5 minutes, supports custom JSON payload templates with `{{placeholder}}` syntax, auto-detects Slack/Discord format when no template is set.
 
 ## Project Structure
 
@@ -362,7 +390,7 @@ signaltrace/
 ├── README.md
 ├── Dockerfile
 ├── docker-compose.yml
-├── docker-compose.override.yml.example
+├── docker-compose.prebuilt.yml
 ├── .env.example
 ├── setup.sh
 ├── composer.json
@@ -437,10 +465,13 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 - [ ] Verify only `public/` is web-accessible
 - [ ] Configure skip patterns to suppress known noise
 - [ ] Add ASN rules for infrastructure you own or trust
+- [ ] Add country rules for high-noise regions if applicable
+- [ ] Add IP overrides to permanently block known bad actors or allow your own monitoring IPs
 - [ ] Set feed exclusions on tokens and ASNs that should never appear in your blocklist
-- [ ] Tune the threat feed confidence threshold and time window
+- [ ] Tune the threat feed confidence threshold, time window, and minimum hit count
 - [ ] Set `EXPORT_API_TOKEN` and configure your SIEM integration if applicable
 - [ ] Add a weekly `geoipupdate` cron job
+- [ ] Configure a webhook URL for real-time bot alerts
 
 ## Tech Stack
 
