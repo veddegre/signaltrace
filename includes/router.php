@@ -232,6 +232,95 @@ function handleExportByCountry(PDO $pdo): void
     exit;
 }
 
+function handleExportStatsExtended(PDO $pdo): void
+{
+    $f = parseExportFilters();
+
+    $stats = exportStatsExtended(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($stats, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportByToken(PDO $pdo): void
+{
+    $f           = parseExportFilters();
+    $limit       = max(1, min(100, (int) ($_GET['limit'] ?? 5)));
+    $labelFilter = trim((string) ($_GET['label'] ?? ''));
+
+    $rows = exportByToken(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $limit,
+        $labelFilter !== '' ? $labelFilter : null,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportByOrg(PDO $pdo): void
+{
+    $f     = parseExportFilters();
+    $limit = max(1, min(100, (int) ($_GET['limit'] ?? 5)));
+
+    $rows = exportByOrg(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $limit,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportBySignal(PDO $pdo): void
+{
+    $f     = parseExportFilters();
+    $limit = max(1, min(100, (int) ($_GET['limit'] ?? 8)));
+
+    $rows = exportBySignal(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $limit,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportOverTime(PDO $pdo): void
+{
+    $fromMs = isset($_GET['from']) && $_GET['from'] !== '' ? (int) $_GET['from'] : null;
+    $toMs   = isset($_GET['to'])   && $_GET['to']   !== '' ? (int) $_GET['to']   : null;
+
+    $rows = exportOverTime($pdo, $fromMs, $toMs);
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
+    exit;
+}
+
 /* ======================================================
    ADMIN PAGE
    ====================================================== */
