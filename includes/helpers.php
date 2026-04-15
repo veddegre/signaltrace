@@ -754,18 +754,34 @@ function fireWebhookAlert(PDO $pdo, array $requestData, array $triggerReasons): 
 }
 
 /**
- * Called after scoring. Fires webhook if this request is classified as bot.
+ * Called after scoring. Fires the threat webhook if the request meets the
+ * configured classification threshold. Skips if a known token webhook fires
+ * instead (known tokens use the token webhook, not the threat webhook).
  * Deduplicates: will not alert more than once per IP per 5 minutes.
  */
 function maybeFireAlert(PDO $pdo, array $requestData): void
 {
+    // If this is a known token hit, the token webhook handles it instead.
+    if (!empty($requestData['link_id'])) {
+        return;
+    }
+
     $webhookUrl = getSetting($pdo, 'webhook_url', '');
     if ($webhookUrl === '') {
         return;
     }
 
-    $label = (string) ($requestData['confidence_label'] ?? '');
-    if ($label !== 'bot') {
+    $label     = (string) ($requestData['confidence_label'] ?? '');
+    $threshold = strtolower((string) getSetting($pdo, 'webhook_threshold', 'bot'));
+
+    $allowedLabels = match ($threshold) {
+        'suspicious'   => ['bot', 'suspicious'],
+        'likely-human' => ['bot', 'suspicious', 'likely-human'],
+        'human'        => ['bot', 'suspicious', 'likely-human', 'human'],
+        default        => ['bot'],
+    };
+
+    if (!in_array($label, $allowedLabels, true)) {
         return;
     }
 
@@ -773,7 +789,7 @@ function maybeFireAlert(PDO $pdo, array $requestData): void
         return;
     }
 
-    fireWebhookAlert($pdo, $requestData, ['bot_classification']);
+    fireWebhookAlert($pdo, $requestData, [$label . '_classification']);
 }
 
 function shouldSendAlert(PDO $pdo, string $ip): bool
@@ -782,31 +798,200 @@ function shouldSendAlert(PDO $pdo, string $ip): bool
         return false;
     }
 
-    // Get the most recent click ID for this IP so we can exclude it.
-    // We want to know if there were any OTHER bot hits in the last 5 minutes —
-    // not counting the click we just stored.
-    $cutoff = (int) round(microtime(true) * 1000) - (5 * 60 * 1000);
+    $threshold = strtolower((string) getSetting($pdo, 'webhook_threshold', 'bot'));
+
+    $allowedLabels = match ($threshold) {
+        'suspicious'   => ['bot', 'suspicious'],
+        'likely-human' => ['bot', 'suspicious', 'likely-human'],
+        'human'        => ['bot', 'suspicious', 'likely-human', 'human'],
+        default        => ['bot'],
+    };
+
+    $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
+    $cutoff       = (int) round(microtime(true) * 1000) - (5 * 60 * 1000);
 
     $latest = $pdo->prepare("
         SELECT id FROM clicks
-        WHERE ip = :ip AND confidence_label = 'bot'
+        WHERE ip = ?
+          AND confidence_label IN ($placeholders)
         ORDER BY id DESC LIMIT 1
     ");
-    $latest->execute([':ip' => $ip]);
+    $latest->execute(array_merge([$ip], $allowedLabels));
     $latestId = (int) ($latest->fetchColumn() ?: 0);
 
     $stmt = $pdo->prepare("
         SELECT COUNT(*) FROM clicks
-        WHERE ip = :ip
+        WHERE ip = ?
+          AND id != ?
+          AND clicked_at_unix_ms >= ?
+          AND confidence_label IN ($placeholders)
+    ");
+    $stmt->execute(array_merge([$ip, $latestId, $cutoff], $allowedLabels));
+
+    return (int) $stmt->fetchColumn() === 0;
+}
+
+/**
+ * Called after scoring for known token hits.
+ * Fires the token webhook if configured.
+ * Deduplicates per visitor_hash + token per 5 minutes.
+ */
+function maybeFireTokenAlert(PDO $pdo, array $requestData): void
+{
+    // Only fires for known tokens.
+    if (empty($requestData['link_id'])) {
+        return;
+    }
+
+    $webhookUrl = getSetting($pdo, 'token_webhook_url', '');
+    if ($webhookUrl === '' || !isSafeRedirectUrl($webhookUrl)) {
+        return;
+    }
+
+    $visitorHash = (string) ($requestData['visitor_hash'] ?? '');
+    $token       = (string) ($requestData['token'] ?? '');
+
+    if (!shouldSendTokenAlert($pdo, $token, $visitorHash)) {
+        return;
+    }
+
+    fireTokenWebhookAlert($pdo, $requestData);
+}
+
+function shouldSendTokenAlert(PDO $pdo, string $token, string $visitorHash): bool
+{
+    if ($token === '') {
+        return false;
+    }
+
+    $cutoff = (int) round(microtime(true) * 1000) - (5 * 60 * 1000);
+
+    // Get the most recent click ID for this token+visitor so we can exclude it.
+    $latest = $pdo->prepare("
+        SELECT id FROM clicks
+        WHERE token = :token
+          AND visitor_hash = :visitor
+          AND link_id IS NOT NULL
+        ORDER BY id DESC LIMIT 1
+    ");
+    $latest->execute([':token' => $token, ':visitor' => $visitorHash]);
+    $latestId = (int) ($latest->fetchColumn() ?: 0);
+
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM clicks
+        WHERE token = :token
+          AND visitor_hash = :visitor
+          AND link_id IS NOT NULL
           AND id != :latest_id
           AND clicked_at_unix_ms >= :cutoff
-          AND confidence_label = 'bot'
     ");
     $stmt->execute([
-        ':ip'        => $ip,
+        ':token'     => $token,
+        ':visitor'   => $visitorHash,
         ':latest_id' => $latestId,
         ':cutoff'    => $cutoff,
     ]);
 
     return (int) $stmt->fetchColumn() === 0;
+}
+
+function fireTokenWebhookAlert(PDO $pdo, array $requestData): void
+{
+    $url = getSetting($pdo, 'token_webhook_url', '');
+    if ($url === '' || !isSafeRedirectUrl($url)) {
+        return;
+    }
+
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    if ($host !== '' && isPrivateOrLoopbackHost($host)) {
+        error_log('SignalTrace: token webhook URL blocked — resolves to private/loopback address: ' . $url);
+        return;
+    }
+
+    $ip      = (string) ($requestData['ip']               ?? '');
+    $token   = (string) ($requestData['request_uri']      ?? '');
+    $label   = (string) ($requestData['confidence_label'] ?? '');
+    $score   = (int)    ($requestData['confidence_score'] ?? 0);
+    $org     = (string) ($requestData['ip_org']           ?? '');
+    $asn     = (string) ($requestData['ip_asn']           ?? '');
+    $country = (string) ($requestData['ip_country']       ?? '');
+    $time    = date('Y-m-d H:i:s T');
+
+    $rawUa = (string) ($requestData['user_agent'] ?? '');
+    $ua    = mb_substr(preg_replace('/[\x00-\x1f\x7f]/', '', $rawUa), 0, 300);
+
+    $reasons  = (string) ($requestData['confidence_reason'] ?? '');
+    $template = trim((string) getSetting($pdo, 'token_webhook_template', ''));
+
+    if ($template !== '') {
+        $esc = fn(string $v): string => trim((string) json_encode($v), '"');
+        $replacements = [
+            '{{ip}}'       => $esc($ip),
+            '{{token}}'    => $esc($token),
+            '{{label}}'    => $esc($label),
+            '{{score}}'    => (string) $score,
+            '{{org}}'      => $esc($org),
+            '{{asn}}'      => $esc($asn),
+            '{{country}}'  => $esc($country),
+            '{{ua}}'       => $esc($ua),
+            '{{time}}'     => $esc($time),
+            '{{triggers}}' => $esc($reasons),
+        ];
+        $json = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        if (json_decode($json) === null) {
+            error_log('SignalTrace: token webhook template produced invalid JSON — skipping.');
+            return;
+        }
+    } else {
+        $isSlack = str_contains($url, 'hooks.slack.com') || str_contains($url, 'discord.com/api/webhooks');
+
+        if ($isSlack) {
+            $payload = [
+                'text'        => '🔔 *SignalTrace Token Hit*',
+                'attachments' => [[
+                    'color'  => '#4f78f1',
+                    'fields' => [
+                        ['title' => 'IP',           'value' => $ip,              'short' => true],
+                        ['title' => 'Token',        'value' => $token,           'short' => true],
+                        ['title' => 'Label',        'value' => $label,           'short' => true],
+                        ['title' => 'Score',        'value' => (string) $score,  'short' => true],
+                        ['title' => 'Org/ASN',      'value' => "$org (AS$asn)",  'short' => true],
+                        ['title' => 'Country',      'value' => $country,         'short' => true],
+                        ['title' => 'Signals',      'value' => $reasons,         'short' => false],
+                        ['title' => 'UA',           'value' => $ua,              'short' => false],
+                        ['title' => 'Time',         'value' => $time,            'short' => true],
+                    ],
+                ]],
+            ];
+        } else {
+            $payload = [
+                'event'    => 'signaltrace_token_hit',
+                'ip'       => $ip,
+                'token'    => $token,
+                'label'    => $label,
+                'score'    => $score,
+                'triggers' => $reasons,
+                'org'      => $org,
+                'asn'      => $asn,
+                'country'  => $country,
+                'ua'       => $ua,
+                'time'     => $time,
+            ];
+        }
+
+        $json = json_encode($payload);
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST              => true,
+        CURLOPT_POSTFIELDS        => $json,
+        CURLOPT_HTTPHEADER        => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_TIMEOUT_MS        => 2000,
+        CURLOPT_CONNECTTIMEOUT_MS => 1500,
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
 }
