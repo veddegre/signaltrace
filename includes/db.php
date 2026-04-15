@@ -143,7 +143,8 @@ function initializeDatabase(PDO $pdo): void
     }
 
     $linksColumnDefinitions = [
-        'exclude_from_feed' => 'INTEGER NOT NULL DEFAULT 0',
+        'exclude_from_feed'       => 'INTEGER NOT NULL DEFAULT 0',
+        'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -496,39 +497,42 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false): bool
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO links (token, destination, description, active, exclude_from_feed, created_at)
-        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :created_at)
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :include_in_token_webhook, :created_at)
     ");
 
     return $stmt->execute([
-        ':token' => $token,
-        ':destination' => $destination,
-        ':description' => $description,
-        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
-        ':created_at' => date('c'),
+        ':token'                   => $token,
+        ':destination'             => $destination,
+        ':description'             => $description,
+        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
+        ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
+        ':created_at'              => date('c'),
     ]);
 }
 
-function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
-        SET token             = :token,
-            destination       = :destination,
-            description       = :description,
-            exclude_from_feed = :exclude_from_feed
+        SET token                    = :token,
+            destination              = :destination,
+            description              = :description,
+            exclude_from_feed        = :exclude_from_feed,
+            include_in_token_webhook = :include_in_token_webhook
         WHERE id = :id
     ");
 
     return $stmt->execute([
-        ':id'               => $id,
-        ':token'            => $token,
-        ':destination'      => $destination,
-        ':description'      => $description,
-        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
+        ':id'                      => $id,
+        ':token'                   => $token,
+        ':destination'             => $destination,
+        ':description'             => $description,
+        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
+        ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
     ]);
 }
 
