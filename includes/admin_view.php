@@ -467,8 +467,18 @@ function renderAdminPage(
             <?php endif; ?>
 
             <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
+            <?php
+            $summaryAsn     = (string) ($ipSummary['ip_asn'] ?? '');
+            $summaryAsnRule = $summaryAsn !== '' ? getAsnRuleByAsn($pdo, $summaryAsn) : null;
+            ?>
             <div class="ip-summary">
                 <strong>IP Summary: <?= h($ipFilter) ?></strong>
+                <div style="display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle;">
+                    <button type="button" class="copy-button" onclick="copyText('<?= h($ipFilter) ?>')" title="Copy IP">Copy</button>
+                    <a class="copy-button" href="https://www.virustotal.com/gui/ip-address/<?= h($ipFilter) ?>" target="_blank" rel="noopener" title="Open in VirusTotal">VT</a>
+                    <a class="copy-button" href="https://www.abuseipdb.com/check/<?= h($ipFilter) ?>" target="_blank" rel="noopener" title="Check AbuseIPDB">Abuse</a>
+                    <a class="copy-button" href="https://ipinfo.io/<?= h($ipFilter) ?>" target="_blank" rel="noopener" title="View IPInfo">Info</a>
+                </div>
                 <div class="details-grid" style="margin-top: 8px;">
                     <div>
                         <div><span class="mono">First seen:</span> <?= h((string) ($ipSummary['first_seen'] ?? '—')) ?></div>
@@ -484,11 +494,20 @@ function renderAdminPage(
                     </div>
                     <div>
                         <div><span class="mono">Org:</span>     <?= h((string) ($ipSummary['ip_org']     ?? '—')) ?></div>
-                        <div><span class="mono">ASN:</span>     <?= h((string) ($ipSummary['ip_asn']     ?? '—')) ?></div>
+                        <div>
+                            <span class="mono">ASN:</span> <?= h($summaryAsn) ?>
+                            <?php if ($summaryAsn !== '' && $summaryAsnRule === null): ?>
+                                <form method="post" action="/admin/create-asn-rule" class="inline-action-form" style="display:inline-block;">
+                                    <input type="hidden" name="asn" value="<?= h($summaryAsn) ?>">
+                                    <input type="hidden" name="label" value="<?= h((string) ($ipSummary['ip_org'] ?? '')) ?>">
+                                    <input type="hidden" name="penalty" value="10">
+                                    <button type="submit" class="copy-button">Add ASN Rule</button>
+                                </form>
+                            <?php elseif ($summaryAsnRule !== null): ?>
+                                <span class="badge badge-suspicious">ASN rule active — penalty <?= (int) $summaryAsnRule['penalty'] ?></span>
+                            <?php endif; ?>
+                        </div>
                         <div><span class="mono">Country:</span> <?= h((string) ($ipSummary['ip_country'] ?? '—')) ?></div>
-                        <?php if (!empty($ipSummary['asn_rule'])): ?>
-                            <div><span class="badge badge-suspicious">ASN rule active — penalty <?= (int) $ipSummary['asn_rule']['penalty'] ?></span></div>
-                        <?php endif; ?>
                     </div>
                 </div>
                 <?php
