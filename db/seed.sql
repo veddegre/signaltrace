@@ -7,11 +7,11 @@ PRAGMA foreign_keys = ON;
 -- ============================================================
 -- Sample Tokens
 -- ============================================================
-INSERT OR IGNORE INTO links (token, destination, description, active, exclude_from_feed, created_at) VALUES
-    ('/payroll',     'https://example.com/login',    'Payroll portal simulation', 1, 0, datetime('now')),
-    ('/invoice',     'https://example.com/invoice',  'Invoice access link',       1, 0, datetime('now')),
-    ('/benefits',    'https://example.com/benefits', 'Benefits portal',           1, 0, datetime('now')),
-    ('/hello.world', 'https://example.com',          'Test token',                1, 0, datetime('now'));
+INSERT OR IGNORE INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at) VALUES
+    ('/payroll',     'https://example.com/login',    'Payroll portal simulation', 1, 0, 1, datetime('now')),
+    ('/invoice',     'https://example.com/invoice',  'Invoice access link',       1, 0, 1, datetime('now')),
+    ('/benefits',    'https://example.com/benefits', 'Benefits portal',           1, 0, 0, datetime('now')),
+    ('/hello.world', 'https://example.com',          'Test token',                1, 0, 0, datetime('now'));
 
 -- ============================================================
 -- Sample Clicks
