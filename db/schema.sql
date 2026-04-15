@@ -17,13 +17,14 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Tokens (Links)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS links (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    token             TEXT    NOT NULL UNIQUE,
-    destination       TEXT    NOT NULL,
-    description       TEXT,
-    active            INTEGER NOT NULL DEFAULT 1,
-    exclude_from_feed INTEGER NOT NULL DEFAULT 0,
-    created_at        TEXT    NOT NULL
+    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+    token                     TEXT    NOT NULL UNIQUE,
+    destination               TEXT    NOT NULL,
+    description               TEXT,
+    active                    INTEGER NOT NULL DEFAULT 1,
+    exclude_from_feed         INTEGER NOT NULL DEFAULT 0,
+    include_in_token_webhook  INTEGER NOT NULL DEFAULT 0,
+    created_at                TEXT    NOT NULL
 );
 
 -- ============================================================
@@ -192,6 +193,9 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('page_size',                 '50'),
     ('webhook_url',               ''),
     ('webhook_template',          ''),
+    ('webhook_threshold',         'bot'),
+    ('token_webhook_url',         ''),
+    ('token_webhook_template',    ''),
     ('auto_refresh_secs',         '0'),
     ('export_min_confidence',     'suspicious'),
     ('export_window_hours',       '168'),
