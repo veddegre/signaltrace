@@ -216,6 +216,7 @@ function handleUpdateLink(PDO $pdo): void
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+    $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
 
     if ($id <= 0) {
         http_response_code(400);
@@ -244,7 +245,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -446,6 +447,7 @@ function handleCreateLink(PDO $pdo): void
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+    $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -467,7 +469,7 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook);
         header('Location: /admin', true, 302);
         exit;
     } catch (Throwable $e) {
