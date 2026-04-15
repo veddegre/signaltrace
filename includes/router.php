@@ -96,9 +96,6 @@ function handleThreatFeed(PDO $pdo, array $settings, string $path): void
         exit;
     }
 
-    // Determine address family and format from path
-    // IPv4: /feed/ips.txt  /feed/ips.nginx  /feed/ips.iptables  /feed/ips.cidr
-    // IPv6: /feed/ipv6.txt /feed/ipv6.nginx /feed/ipv6.iptables /feed/ipv6.cidr
     if (str_starts_with($path, '/feed/ipv6.')) {
         $family = 'ipv6';
         $ext    = substr($path, strlen('/feed/ipv6.'));
@@ -120,34 +117,53 @@ function handleThreatFeed(PDO $pdo, array $settings, string $path): void
 }
 
 /* ======================================================
+   SHARED FILTER PARSER
+   Parses the common export/aggregation filter params from
+   $_GET and returns them in a consistent structure.
+   ====================================================== */
+function parseExportFilters(): array
+{
+    $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
+    $dateTo   = trim((string) ($_GET['date_to']   ?? ''));
+
+    // Additional filters used by the full export only
+    $tokenFilter   = trim((string) ($_GET['path']    ?? ''));
+    $ipFilter      = trim((string) ($_GET['ip']      ?? ''));
+    $visitorFilter = trim((string) ($_GET['visitor'] ?? ''));
+    $knownOnly     = isset($_GET['known']) && $_GET['known'] === '1';
+
+    $manualFilters = (
+        $tokenFilter   !== '' ||
+        $ipFilter      !== '' ||
+        $visitorFilter !== '' ||
+        $knownOnly          ||
+        $dateFrom      !== '' ||
+        $dateTo        !== ''
+    );
+
+    return compact(
+        'tokenFilter', 'ipFilter', 'visitorFilter',
+        'knownOnly', 'dateFrom', 'dateTo', 'manualFilters'
+    );
+}
+
+/* ======================================================
    EXPORTS — filter-aware, settings-aware
    /export/json  and  /export/csv
    ====================================================== */
 function handleExport(PDO $pdo, string $format): void
 {
-    // NOTE: ?token= is reserved for the auth API key in requireExportAuth().
-    // Export filter parameters use distinct names to avoid collision.
-    $tokenFilter   = trim((string) ($_GET['path']    ?? ''));
-    $ipFilter      = trim((string) ($_GET['ip']      ?? ''));
-    $visitorFilter = trim((string) ($_GET['visitor'] ?? ''));
-    $knownOnly     = isset($_GET['known']) && $_GET['known'] === '1';
-    $dateFrom      = trim((string) ($_GET['date_from'] ?? ''));
-    $dateTo        = trim((string) ($_GET['date_to']   ?? ''));
-
-    // Manual filters present means bypass export settings and use exactly what
-    // the admin filtered. No filters means use the configured threshold + window.
-    $manualFilters = ($tokenFilter !== '' || $ipFilter !== '' || $visitorFilter !== ''
-        || $knownOnly || $dateFrom !== '' || $dateTo !== '');
+    $f = parseExportFilters();
 
     $rows = exportClicks(
         $pdo,
-        $manualFilters,
-        $tokenFilter   !== '' ? $tokenFilter   : null,
-        $ipFilter      !== '' ? $ipFilter      : null,
-        $visitorFilter !== '' ? $visitorFilter : null,
-        $knownOnly,
-        $dateFrom !== '' ? $dateFrom : null,
-        $dateTo   !== '' ? $dateTo   : null,
+        $f['manualFilters'],
+        $f['tokenFilter']   !== '' ? $f['tokenFilter']   : null,
+        $f['ipFilter']      !== '' ? $f['ipFilter']      : null,
+        $f['visitorFilter'] !== '' ? $f['visitorFilter'] : null,
+        $f['knownOnly'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
     );
 
     if ($format === 'csv') {
@@ -160,14 +176,10 @@ function handleExport(PDO $pdo, string $format): void
         }
 
         $out = fopen('php://output', 'w');
-
-        // Header row from first result's keys.
         fputcsv($out, array_keys($rows[0]));
-
         foreach ($rows as $row) {
             fputcsv($out, $row);
         }
-
         fclose($out);
     } else {
         header('Content-Type: application/json');
@@ -175,6 +187,67 @@ function handleExport(PDO $pdo, string $format): void
         echo json_encode($rows, JSON_PRETTY_PRINT);
     }
 
+    exit;
+}
+
+/* ======================================================
+   AGGREGATION ENDPOINTS (for Grafana / no-transform)
+   /export/stats      — single-row summary object
+   /export/by-ip      — top IPs [{ip, ip_org, ip_country, hits}]
+   /export/by-country — top countries [{country, hits}]
+   ====================================================== */
+function handleExportStats(PDO $pdo): void
+{
+    $f = parseExportFilters();
+
+    $stats = exportStats(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($stats, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportByIp(PDO $pdo): void
+{
+    $f     = parseExportFilters();
+    $limit = max(1, min(500, (int) ($_GET['limit'] ?? 20)));
+
+    $rows = exportByIp(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $limit,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportByCountry(PDO $pdo): void
+{
+    $f     = parseExportFilters();
+    $limit = max(1, min(500, (int) ($_GET['limit'] ?? 20)));
+
+    $rows = exportByCountry(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $limit,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
     exit;
 }
 
@@ -218,8 +291,6 @@ function handleAdminPage(PDO $pdo, array $settings): void
     );
 
     $totalPages  = $pageSize > 0 ? max(1, (int) ceil($totalCount / $pageSize)) : 1;
-    // Clamp current page now that we know the total — prevents wasteful
-    // large-offset queries on subsequent requests.
     $currentPage = min($currentPage, $totalPages);
 
     $links       = getAllLinks($pdo);
@@ -234,7 +305,6 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $showTopTokens = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1';
     $showAll       = isset($_GET['show_all'])        && $_GET['show_all']        === '1';
 
-    // Per-IP summary when filtering by a single exact IP
     $ipSummary = null;
     if ($ipFilter !== '' && !str_contains($ipFilter, '%')) {
         $ipSummary = getIpSummary($pdo, $ipFilter);
