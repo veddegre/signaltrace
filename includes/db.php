@@ -1851,3 +1851,51 @@ function exportOverTime(
     $stmt->execute([':from_ms' => $fromMs, ':to_ms' => $toMs]);
     return $stmt->fetchAll();
 }
+
+/**
+ * Behavioral signal hits only — burst_activity, rapid_repeat,
+ * fast_repeat, multi_token_scan. Server-side filtered so Grafana
+ * needs no transformations.
+ */
+function exportBehavioralSignals(
+    PDO $pdo,
+    bool $manualFilters = false,
+    ?string $dateFrom = null,
+    ?string $dateTo = null,
+): array {
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+
+    $sql = "
+        SELECT confidence_reason
+        FROM clicks c
+        WHERE c.confidence_reason IS NOT NULL
+          AND c.confidence_reason <> ''
+          $where
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $behavioral = ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'];
+    $counts     = array_fill_keys($behavioral, 0);
+
+    foreach ($rows as $reasonStr) {
+        $signals = array_map('trim', explode(',', $reasonStr));
+        foreach ($signals as $signal) {
+            if (isset($counts[$signal])) {
+                $counts[$signal]++;
+            }
+        }
+    }
+
+    // Sort descending, exclude zeros
+    arsort($counts);
+    $result = [];
+    foreach ($counts as $signal => $hits) {
+        if ($hits > 0) {
+            $result[] = ['signal' => $signal, 'hits' => $hits];
+        }
+    }
+    return $result;
+}
