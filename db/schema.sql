@@ -188,7 +188,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('threat_feed_min_confidence','suspicious'),
     ('threat_feed_min_hits',      '1'),
     ('data_retention_days',       '0'),
-    ('display_min_score',         '20'),
+    ('display_min_score',         '0'),
     ('page_size',                 '50'),
     ('webhook_url',               ''),
     ('webhook_template',          ''),
