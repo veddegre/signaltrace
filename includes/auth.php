@@ -40,6 +40,12 @@ function requireAdminAuth(): void
     }
 
     clearAuthFailures($pdo, $ip);
+    
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+   
+$_SESSION['admin_authenticated'] = true;
 }
 
 function isAuthLockedOut(PDO $pdo, string $ip): bool
