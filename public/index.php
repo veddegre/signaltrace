@@ -33,7 +33,7 @@ if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
 /* ============================================================
    SECURITY HEADERS
    ============================================================ */
-$dataRoutes = ['/export/json', '/export/csv', '/export/stats', '/export/stats/extended', '/export/by-ip', '/export/by-country', '/export/by-token', '/export/by-org', '/export/by-signal', '/export/over-time', '/feed/ips.txt', '/health'];
+$dataRoutes = ['/export/json', '/export/csv', '/export/stats', '/export/stats/extended', '/export/by-ip', '/export/by-country', '/export/by-token', '/export/by-org', '/export/by-signal', '/export/behavioral-signals', '/export/over-time', '/feed/ips.txt', '/health'];
 
 header('X-Content-Type-Options: nosniff');
 
@@ -191,6 +191,11 @@ if ($path === '/export/by-signal') {
     handleExportBySignal($pdo);
 }
 
+if ($path === '/export/behavioral-signals') {
+    requireExportAuth();
+    handleExportBehavioralSignals($pdo);
+}
+
 if ($path === '/export/over-time') {
     requireExportAuth();
     handleExportOverTime($pdo);
@@ -277,6 +282,7 @@ $reserved = [
     '/export/by-token',
     '/export/by-org',
     '/export/by-signal',
+    '/export/behavioral-signals',
     '/export/over-time',
 ];
 
