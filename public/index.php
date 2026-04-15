@@ -33,7 +33,15 @@ if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
 /* ============================================================
    SECURITY HEADERS
    ============================================================ */
-$dataRoutes = ['/export/json', '/export/csv', '/feed/ips.txt', '/health'];
+$dataRoutes = [
+    '/export/json',
+    '/export/csv',
+    '/export/stats',
+    '/export/by-ip',
+    '/export/by-country',
+    '/feed/ips.txt',
+    '/health',
+];
 
 header('X-Content-Type-Options: nosniff');
 
@@ -154,6 +162,24 @@ if ($path === '/export/csv') {
 }
 
 /* ============================================================
+   AGGREGATION ENDPOINTS (Grafana / no-transform)
+   ============================================================ */
+if ($path === '/export/stats') {
+    requireExportAuth();
+    handleExportStats($pdo);
+}
+
+if ($path === '/export/by-ip') {
+    requireExportAuth();
+    handleExportByIp($pdo);
+}
+
+if ($path === '/export/by-country') {
+    requireExportAuth();
+    handleExportByCountry($pdo);
+}
+
+/* ============================================================
    ADMIN ACTIONS (POST)
    ============================================================ */
 if (handleAdminActions($pdo, $path)) {
@@ -227,6 +253,9 @@ $reserved = [
     '/feed/ipv6.cidr',
     '/export/json',
     '/export/csv',
+    '/export/stats',
+    '/export/by-ip',
+    '/export/by-country',
 ];
 
 /* ============================================================
@@ -241,4 +270,3 @@ if (!in_array($path, $reserved, true)) {
    ============================================================ */
 http_response_code(404);
 echo 'Not found';
-
