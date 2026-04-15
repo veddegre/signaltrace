@@ -9,7 +9,6 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/admin_view.php';
 require_once __DIR__ . '/../includes/admin_actions.php';
