@@ -1314,14 +1314,37 @@ function renderAdminPage(
 		   <input id="auto_refresh_secs" type="number" min="0" name="auto_refresh_secs" value="<?= h((string) $autoRefreshSecs) ?>">
 		   <p class="muted">Reload the dashboard after this many seconds. Set to 0 to disable.</p>
 
-		   <label for="webhook_url">Webhook URL</label>
+		   <label for="webhook_url">Threat Webhook URL</label>
 		   <input id="webhook_url" type="url" name="webhook_url" value="<?= h($webhookUrl) ?>" placeholder="https://hooks.slack.com/...">
-		   <p class="muted">Fires when a new IP is classified as bot. Slack/Discord URLs auto-detected; others receive generic JSON. Leave template blank to use auto-detection.</p>
+		   <p class="muted">Fires when an unknown-path hit meets the threshold below. Slack/Discord URLs auto-detected; others receive generic JSON.</p>
 
-		   <label for="webhook_template">Webhook Payload Template (optional)</label>
+		   <label for="webhook_threshold">Threat Webhook Threshold</label>
+		   <select id="webhook_threshold" name="webhook_threshold">
+		       <?php $webhookThreshold = (string) getSetting($pdo, 'webhook_threshold', 'bot'); ?>
+		       <option value="bot"          <?= $webhookThreshold === 'bot'          ? 'selected' : '' ?>>bot only</option>
+		       <option value="suspicious"   <?= $webhookThreshold === 'suspicious'   ? 'selected' : '' ?>>suspicious and above</option>
+		       <option value="likely-human" <?= $webhookThreshold === 'likely-human' ? 'selected' : '' ?>>likely-human and above</option>
+		       <option value="human"        <?= $webhookThreshold === 'human'        ? 'selected' : '' ?>>all hits</option>
+		   </select>
+		   <p class="muted">Minimum classification to trigger the threat webhook. Does not apply to known token hits — those use the token webhook below.</p>
+
+		   <label for="webhook_template">Threat Webhook Payload Template (optional)</label>
 		   <textarea id="webhook_template" name="webhook_template" rows="8" style="font-family: var(--font-mono); font-size: 0.8125rem; width: 100%; resize: vertical;" placeholder='{"event": "signaltrace_alert", "ip": "{{ip}}", "label": "{{label}}", "score": {{score}}}'><?= h($webhookTemplate) ?></textarea>
 		   <p class="muted">
 		       JSON template with placeholders. When set, overrides Slack/Discord auto-detection.<br>
+		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
+		   </p>
+
+		   <label for="token_webhook_url">Token Webhook URL</label>
+		   <?php $tokenWebhookUrl = (string) getSetting($pdo, 'token_webhook_url', ''); ?>
+		   <input id="token_webhook_url" type="url" name="token_webhook_url" value="<?= h($tokenWebhookUrl) ?>" placeholder="https://hooks.slack.com/...">
+		   <p class="muted">Fires when any known tracked token is hit, regardless of classification. Deduplicates per visitor per token per 5 minutes. Does not fire for unknown honeypot paths.</p>
+
+		   <label for="token_webhook_template">Token Webhook Payload Template (optional)</label>
+		   <?php $tokenWebhookTemplate = (string) getSetting($pdo, 'token_webhook_template', ''); ?>
+		   <textarea id="token_webhook_template" name="token_webhook_template" rows="8" style="font-family: var(--font-mono); font-size: 0.8125rem; width: 100%; resize: vertical;" placeholder='{"event": "signaltrace_token_hit", "ip": "{{ip}}", "token": "{{token}}", "label": "{{label}}", "score": {{score}}}'><?= h($tokenWebhookTemplate) ?></textarea>
+		   <p class="muted">
+		       Same placeholder syntax as the threat webhook. Leave blank for auto-detected Slack/Discord format or generic JSON.<br>
 		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
 		   </p>
 
