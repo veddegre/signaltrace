@@ -839,6 +839,14 @@ function renderAdminPage(
 	            <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
 	        </div>
 
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="include_in_token_webhook" value="1" <?= ((int) ($editLink['include_in_token_webhook'] ?? 0) === 1) ? 'checked' : '' ?>>
+	                <span>Send token webhook on hit</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">Fire the token webhook URL when this token is hit. Requires a token webhook URL to be configured in Settings.</p>
+	        </div>
+
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 	            <button type="submit">Save Changes</button>
 	            <form method="get" action="/admin" class="inline-action-form">
@@ -867,6 +875,14 @@ function renderAdminPage(
                     <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
                 </div>
 
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="include_in_token_webhook" value="1">
+                        <span>Send token webhook on hit</span>
+                    </label>
+                    <p class="muted" style="margin: 4px 0 0 0;">Fire the token webhook URL when this token is hit. Requires a token webhook URL to be configured in Settings.</p>
+                </div>
+
                 <button type="submit">Create Token</button>
             </form>
 
@@ -881,6 +897,7 @@ function renderAdminPage(
                         <th>Active</th>
 			<th>Clicks</th>
                         <th>Excl. Feed</th>
+                        <th>Token Webhook</th>
                         <th>Path URL</th>
                         <th>Pixel URL</th>
                         <th class="actions-col">Actions</th>
@@ -909,6 +926,14 @@ function renderAdminPage(
 		    <td>
 		        <?php if ((int) ($link['exclude_from_feed'] ?? 0) === 1): ?>
 		            <span class="badge badge-suspicious" title="IPs hitting this token are excluded from the threat feed">Yes</span>
+		        <?php else: ?>
+		            No
+		        <?php endif; ?>
+		    </td>
+
+		    <td>
+		        <?php if ((int) ($link['include_in_token_webhook'] ?? 0) === 1): ?>
+		            <span class="badge badge-human" title="Token webhook fires on hit">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
