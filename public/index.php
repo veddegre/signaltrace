@@ -9,6 +9,7 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/admin_view.php';
 require_once __DIR__ . '/../includes/admin_actions.php';
@@ -32,15 +33,7 @@ if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
 /* ============================================================
    SECURITY HEADERS
    ============================================================ */
-$dataRoutes = [
-    '/export/json',
-    '/export/csv',
-    '/export/stats',
-    '/export/by-ip',
-    '/export/by-country',
-    '/feed/ips.txt',
-    '/health',
-];
+$dataRoutes = ['/export/json', '/export/csv', '/export/stats', '/export/by-ip', '/export/by-country', '/feed/ips.txt', '/health'];
 
 header('X-Content-Type-Options: nosniff');
 
