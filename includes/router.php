@@ -308,6 +308,23 @@ function handleExportBySignal(PDO $pdo): void
     exit;
 }
 
+function handleExportBehavioralSignals(PDO $pdo): void
+{
+    $f = parseExportFilters();
+
+    $rows = exportBehavioralSignals(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($rows, JSON_PRETTY_PRINT);
+    exit;
+}
+
 function handleExportOverTime(PDO $pdo): void
 {
     $fromMs = isset($_GET['from']) && $_GET['from'] !== '' ? (int) $_GET['from'] : null;
