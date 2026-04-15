@@ -33,7 +33,7 @@ if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
 /* ============================================================
    SECURITY HEADERS
    ============================================================ */
-$dataRoutes = ['/export/json', '/export/csv', '/export/stats', '/export/by-ip', '/export/by-country', '/feed/ips.txt', '/health'];
+$dataRoutes = ['/export/json', '/export/csv', '/export/stats', '/export/stats/extended', '/export/by-ip', '/export/by-country', '/export/by-token', '/export/by-org', '/export/by-signal', '/export/over-time', '/feed/ips.txt', '/health'];
 
 header('X-Content-Type-Options: nosniff');
 
@@ -161,6 +161,11 @@ if ($path === '/export/stats') {
     handleExportStats($pdo);
 }
 
+if ($path === '/export/stats/extended') {
+    requireExportAuth();
+    handleExportStatsExtended($pdo);
+}
+
 if ($path === '/export/by-ip') {
     requireExportAuth();
     handleExportByIp($pdo);
@@ -169,6 +174,26 @@ if ($path === '/export/by-ip') {
 if ($path === '/export/by-country') {
     requireExportAuth();
     handleExportByCountry($pdo);
+}
+
+if ($path === '/export/by-token') {
+    requireExportAuth();
+    handleExportByToken($pdo);
+}
+
+if ($path === '/export/by-org') {
+    requireExportAuth();
+    handleExportByOrg($pdo);
+}
+
+if ($path === '/export/by-signal') {
+    requireExportAuth();
+    handleExportBySignal($pdo);
+}
+
+if ($path === '/export/over-time') {
+    requireExportAuth();
+    handleExportOverTime($pdo);
 }
 
 /* ============================================================
@@ -246,8 +271,13 @@ $reserved = [
     '/export/json',
     '/export/csv',
     '/export/stats',
+    '/export/stats/extended',
     '/export/by-ip',
     '/export/by-country',
+    '/export/by-token',
+    '/export/by-org',
+    '/export/by-signal',
+    '/export/over-time',
 ];
 
 /* ============================================================
