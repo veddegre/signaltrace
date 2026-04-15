@@ -848,6 +848,15 @@ function maybeFireTokenAlert(PDO $pdo, array $requestData): void
         return;
     }
 
+    // Check the per-token opt-in flag.
+    $linkId = (int) $requestData['link_id'];
+    $stmt = $pdo->prepare("SELECT include_in_token_webhook FROM links WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $linkId]);
+    $includeInWebhook = (int) ($stmt->fetchColumn() ?: 0);
+    if ($includeInWebhook !== 1) {
+        return;
+    }
+
     $visitorHash = (string) ($requestData['visitor_hash'] ?? '');
     $token       = (string) ($requestData['token'] ?? '');
 
