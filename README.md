@@ -81,8 +81,8 @@ SignalTrace processes every request in real time:
 ### Dashboard
 
 <p align="center"> 
-  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard — dark mode, showing activity feed with behaviorally flagged IPs panel" width="49%"> 
-  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard — light mode" width="49%"> 
+  <img src="docs/images/dashboard-dark.webp?v=2.4.1" alt="SignalTrace dashboard — dark mode, showing activity feed with behaviorally flagged IPs panel" width="49%"> 
+  <img src="docs/images/dashboard-light.webp?v=2.4.1" alt="SignalTrace dashboard — light mode" width="49%"> 
 </p>
 
 <p align="center">
@@ -92,7 +92,7 @@ SignalTrace processes every request in real time:
 ### Event Details
 
 <p align="center"> 
-  <img src="docs/images/details.webp" alt="SignalTrace event details — full request breakdown with scoring signals and actions" width="80%"> 
+  <img src="docs/images/details.webp?v=2.4.1" alt="SignalTrace event details — full request breakdown with scoring signals and actions" width="80%"> 
 </p>
 
 <p align="center">
@@ -102,8 +102,8 @@ SignalTrace processes every request in real time:
 ### Token & Rule Management
 
 <p align="center"> 
-  <img src="docs/images/tokens.webp" alt="SignalTrace token management — create and manage tracked tokens with feed exclusion" width="49%"> 
-  <img src="docs/images/skip.webp" alt="SignalTrace skip patterns — suppress known-noise paths from logging" width="49%"> 
+  <img src="docs/images/tokens.webp?v=2.4.1" alt="SignalTrace token management — create and manage tracked tokens with feed exclusion" width="49%"> 
+  <img src="docs/images/skip.webp?v=2.4.1" alt="SignalTrace skip patterns — suppress known-noise paths from logging" width="49%"> 
 </p>
 
 <p align="center">
@@ -111,8 +111,8 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/asn.webp" alt="SignalTrace ASN rules — apply scoring penalties and feed exclusions by autonomous system" width="49%"> 
-  <img src="docs/images/country.webp" alt="SignalTrace country rules — apply score penalties by country code" width="49%"> 
+  <img src="docs/images/asn.webp?v=2.4.1" alt="SignalTrace ASN rules — apply scoring penalties and feed exclusions by autonomous system" width="49%"> 
+  <img src="docs/images/country.webp?v=2.4.1" alt="SignalTrace country rules — apply score penalties by country code" width="49%"> 
 </p>
 
 <p align="center">
@@ -120,7 +120,7 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/ip.webp" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
+  <img src="docs/images/ip.webp?v=2.4.1" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
 </p>
 
 <p align="center">
@@ -130,8 +130,8 @@ SignalTrace processes every request in real time:
 ### Splunk Dashboards
 
 <p align="center"> 
-  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk Overview dashboard — SOC display with stat panels, events over time, top IPs, detection signals" width="49%"> 
-  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk Event Investigation dashboard — filterable event table with token, IP, country, and signal filters" width="49%"> 
+  <img src="docs/images/splunk.webp?v=2.4.1" alt="SignalTrace Splunk Overview dashboard — SOC display with stat panels, events over time, top IPs, detection signals" width="49%"> 
+  <img src="docs/images/splunk2.webp?v=2.4.1" alt="SignalTrace Splunk Event Investigation dashboard — filterable event table with token, IP, country, and signal filters" width="49%"> 
 </p>
 
 <p align="center">
@@ -141,7 +141,7 @@ SignalTrace processes every request in real time:
 ### Grafana Dashboard
 
 <p align="center"> 
-  <img src="docs/images/grafana.webp" alt="SignalTrace Grafana dashboard — stat panels, confidence label distribution, top source IPs, top countries, and recent events table" width="80%"> 
+  <img src="docs/images/grafana.webp?v=2.4.1" alt="SignalTrace Grafana dashboard — stat panels, confidence label distribution, top source IPs, top countries, and recent events table" width="80%"> 
 </p>
 
 <p align="center">
