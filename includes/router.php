@@ -338,14 +338,6 @@ function handleAdminPage(PDO $pdo, array $settings): void
    ====================================================== */
 function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $skipPatternMap): void
 {
-    if ($path === '/') {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        if (!empty($_SESSION['admin_authenticated'])) {
-            redirectOr404($unknownPathBehavior, $defaultRedirectUrl);
-        }
-    }
     $defaultRedirectUrl  = trim((string) ($settings['default_redirect_url']  ?? 'https://example.com/'));
     $unknownPathBehavior = trim((string) ($settings['unknown_path_behavior'] ?? 'redirect'));
     $noiseFilterEnabled  = ($settings['noise_filter_enabled'] ?? '1') === '1';
@@ -364,6 +356,7 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
 
     if ($link) {
         logClick($pdo, $link, $requestData);
+        maybeFireTokenAlert($pdo, $requestData);
         maybeFireAlert($pdo, $requestData);
         maybeRunAutoCleanup($pdo);
 
