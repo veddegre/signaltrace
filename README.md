@@ -23,7 +23,7 @@ SignalTrace is a self-hosted tracking and analysis platform for honeypot deploym
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
 
-Includes built-in Splunk dashboards and SIEM-ready export endpoints.
+Includes built-in Splunk dashboards, a Grafana dashboard, and SIEM-ready export endpoints.
 
 **Project Website:** [www.trysignaltrace.com](https://www.trysignaltrace.com)
 
@@ -31,9 +31,9 @@ Includes built-in Splunk dashboards and SIEM-ready export endpoints.
 
 ## Demo
 
-A short walkthrough of the dashboard, token workflow, and event investigation:
+A quick look at real-time scoring, behavioral detection, and threat feed generation:
 
-https://github.com/user-attachments/assets/7998998e-3fb9-4f18-a37c-bd5f6cc19df2
+https://github.com/user-attachments/assets/d9f85e24-fdff-4ebf-ba0a-2546e9bb3b12
 
 ---
 
@@ -81,52 +81,71 @@ SignalTrace processes every request in real time:
 ### Dashboard
 
 <p align="center"> 
-  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard — Signal Trace tracking & analysis (dark mode)" width="49%"> 
-  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard — Signal Trace tracking & analysis (light mode)" width="49%"> 
+  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard — dark mode, showing activity feed with behaviorally flagged IPs panel" width="49%"> 
+  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard — light mode" width="49%"> 
 </p>
 
 <p align="center">
-  Live activity view with classification, scoring, token tracking, and investigation workflow in both dark and light themes.
+  Live activity feed with classification badges, scores, and the Behaviorally Flagged IPs panel. Available in dark and light themes.
 </p>
 
-### Core Workflow
+### Event Details
 
 <p align="center"> 
-  <img src="docs/images/tokens.webp" alt="SignalTrace token management — Signal Trace tracking & analysis" width="49%"> 
-  <img src="docs/images/details.webp" alt="SignalTrace event details — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/details.webp" alt="SignalTrace event details — full request breakdown with scoring signals and actions" width="80%"> 
 </p>
 
 <p align="center">
-  Create and manage tracked tokens, then drill directly into individual events with full request, identity, scoring, and header detail.
+  Expand any event to see the full request, identity, scoring signals, headers, and inline actions — including Block IP and Allow IP.
+</p>
+
+### Token & Rule Management
+
+<p align="center"> 
+  <img src="docs/images/tokens.webp" alt="SignalTrace token management — create and manage tracked tokens with feed exclusion" width="49%"> 
+  <img src="docs/images/skip.webp" alt="SignalTrace skip patterns — suppress known-noise paths from logging" width="49%"> 
+</p>
+
+<p align="center">
+  Create and manage tracked tokens with per-token feed exclusion, and configure skip patterns to suppress known-noise paths at the logging stage.
 </p>
 
 <p align="center"> 
-  <img src="docs/images/settings.webp" alt="SignalTrace settings — Signal Trace tracking & analysis" width="49%"> 
-  <img src="docs/images/skip.webp" alt="SignalTrace skip patterns — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/asn.webp" alt="SignalTrace ASN rules — apply scoring penalties and feed exclusions by autonomous system" width="49%"> 
+  <img src="docs/images/country.webp" alt="SignalTrace country rules — apply score penalties by country code" width="49%"> 
 </p>
 
 <p align="center">
-  Tune scoring behavior, retention, threat feed settings, and suppress known-noise paths with configurable skip patterns.
+  Apply ASN-based scoring penalties and feed exclusions for specific networks, and add per-country score penalties by 2-letter ISO code.
 </p>
 
 <p align="center"> 
-  <img src="docs/images/asn.webp" alt="SignalTrace ASN rules — Signal Trace tracking & analysis" width="49%"> 
-  <img src="docs/images/settings2.webp" alt="SignalTrace export and cleanup settings — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/ip.webp" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
 </p>
 
 <p align="center">
-  Apply ASN-based scoring penalties, exclude trusted infrastructure from feed output, and configure exports for downstream tooling.
+  IP overrides bypass scoring entirely — blocked IPs are always classified as bot and always appear in the threat feed; allowed IPs are always classified as human and excluded from the feed.
 </p>
 
 ### Splunk Dashboards
 
 <p align="center"> 
-  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk overview — Signal Trace tracking & analysis" width="49%"> 
-  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk investigation — Signal Trace tracking & analysis" width="49%"> 
+  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk Overview dashboard — SOC display with stat panels, events over time, top IPs, detection signals" width="49%"> 
+  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk Event Investigation dashboard — filterable event table with token, IP, country, and signal filters" width="49%"> 
 </p>
 
 <p align="center">
-  Included Splunk dashboards provide SOC-friendly overview panels and a filterable event investigation view.
+  The Overview dashboard provides a live 24-hour SOC display with stat panels, events over time, top IPs, countries, organisations, tokens, detection signals, and behavioral signal hits. The Event Investigation dashboard offers a filterable event table with token, IP, classification, country, and detection signal filters.
+</p>
+
+### Grafana Dashboard
+
+<p align="center"> 
+  <img src="docs/images/grafana.webp" alt="SignalTrace Grafana dashboard — stat panels, confidence label distribution, top source IPs, top countries, and recent events table" width="80%"> 
+</p>
+
+<p align="center">
+  Pre-built Grafana dashboard using the Infinity datasource. Includes stat panels, confidence label distribution, top source IPs and countries, and a recent events table — all powered by server-side aggregation endpoints with no Grafana transformations required.
 </p>
 
 ## Requirements
@@ -349,8 +368,16 @@ When polled with no filters, the export applies the configured confidence thresh
 A ready-to-use Splunk integration is included under `splunk/signaltrace/`. Copy the folder into your Splunk `etc/apps/` directory and restart Splunk. Configure the scripted input in `bin/signaltrace_fetch.sh` with your SignalTrace URL and API token.
 
 The app includes two Dashboard Studio dashboards:
-* **SignalTrace — Overview:** (`dashboards/signaltrace_overview.json`) Designed for SOC screen display. It has no inputs and always shows the last 24 hours. Panels cover stat cards, events over time, confidence distribution, top IPs, traffic by country, top ASN organisations, top tokens, top bot tokens, top detection signals, and bot traffic by country.
-* **SignalTrace — Event Investigation:** (`dashboards/signaltrace_events.json`) Designed for hands-on investigation. It has a time range picker, token/path text filter, IP filter, and classification dropdown. The table returns up to 200 results.
+* **SignalTrace — Overview:** (`dashboards/signaltrace_overview.json`) Designed for SOC screen display. Always shows the last 24 hours with no inputs. Panels cover stat cards, events over time, confidence distribution, top IPs, traffic by country, top ASN organisations, top tokens, top bot tokens, top detection signals, and behavioral signal hits.
+* **SignalTrace — Event Investigation:** (`dashboards/signaltrace_events.json`) Designed for hands-on investigation. Includes a time range picker, token/path filter, IP filter, classification dropdown, country filter, and detection signal/reason filter. The results table includes confidence reason signals and returns up to 200 results.
+
+### Grafana Dashboard
+
+A pre-built Grafana dashboard is included at `grafana/signaltrace-dashboard.json`. It uses the [Infinity datasource](https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/) and requires no transformations — all aggregation is handled server-side via dedicated endpoints.
+
+Configure your Infinity datasource with a Bearer token and your SignalTrace domain as an allowed host, then import the dashboard JSON. Two variables are prompted on import: the Infinity datasource and your SignalTrace base URL.
+
+See the [Grafana Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Grafana-Integration) for full setup instructions.
 
 ## Detection and Scoring
 
@@ -414,15 +441,18 @@ signaltrace/
 │       ├── dashboard-dark.webp
 │       ├── dashboard-light.webp
 │       ├── details.webp
+│       ├── tokens.webp
+│       ├── skip.webp
+│       ├── asn.webp
+│       ├── country.webp
+│       ├── ip.webp
 │       ├── splunk.webp
 │       ├── splunk2.webp
-│       ├── asn.webp
-│       ├── skip.webp
-│       ├── settings2.webp
-│       ├── settings.webp
-│       ├── tokens.webp
+│       ├── grafana.webp
 │       ├── signaltrace.png
 │       └── signaltrace_transparent.png
+├── grafana/
+│   └── signaltrace-dashboard.json
 ├── includes/
 │   ├── admin_actions.php
 │   ├── admin_view.php
@@ -482,7 +512,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 
 ## Tech Stack
 
-Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A pre-built Docker image is published to `ghcr.io/veddegre/signaltrace` via GitHub Actions on every push to `main`. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`.
+Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A pre-built Docker image is published to `ghcr.io/veddegre/signaltrace` via GitHub Actions on every push to `main`. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`. A pre-built Grafana dashboard using the Infinity datasource is included under `grafana/`.
 
 ## Contributing
 
