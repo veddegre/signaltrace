@@ -35,9 +35,10 @@ function renderAdminPage(
     $exportWinHours   = (string) getSetting($pdo, 'export_window_hours', '168');
     $exportMinScore   = (string) getSetting($pdo, 'export_min_score', '0');
 
-    $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
-    $dateTo   = trim((string) ($_GET['date_to']   ?? ''));
-    $showAll  = isset($_GET['show_all']) && $_GET['show_all'] === '1';
+    $dateFrom        = trim((string) ($_GET['date_from']        ?? ''));
+    $dateTo          = trim((string) ($_GET['date_to']          ?? ''));
+    $showAll         = isset($_GET['show_all'])         && $_GET['show_all']         === '1';
+    $hideBehavioral  = isset($_GET['hide_behavioral'])  && $_GET['hide_behavioral']  === '1';
 
     $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
@@ -130,6 +131,10 @@ function renderAdminPage(
         }
         if ($showAll) {
             $params['show_all'] = '1';
+        }
+
+        if ($hideBehavioral) {
+            $params['hide_behavioral'] = '1';
         }
 
         if ($activeTab !== '') {
@@ -416,8 +421,10 @@ function renderAdminPage(
 	    </div>
             <?php endif; ?>
 
-            <?php if (!empty($behavioralFlags)): ?>
-            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
+            <?php if (!empty($behavioralFlags) && !$hideBehavioral): ?>
+            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span>
+                <a class="copy-button" style="margin-left:8px;font-size:0.75rem;" href="<?= h($buildAdminUrl(['hide_behavioral' => '1'])) ?>">Hide</a>
+            </h2>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -436,7 +443,7 @@ function renderAdminPage(
                         <?php $flagIp = (string) ($flag['ip'] ?? ''); ?>
                         <tr>
                             <td class="mono ip-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp, 'show_all' => '1', 'hide_behavioral' => '1'])) ?>">
                                     <?= h($flagIp) ?>
                                 </a>
                             </td>
@@ -453,6 +460,10 @@ function renderAdminPage(
                     <?php endforeach; ?>
                 </table>
             </div>
+            <?php elseif (!empty($behavioralFlags) && $hideBehavioral): ?>
+            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span>
+                <a class="copy-button" style="margin-left:8px;font-size:0.75rem;" href="<?= h($buildAdminUrl(['hide_behavioral' => null])) ?>">Show (<?= count($behavioralFlags) ?>)</a>
+            </h2>
             <?php endif; ?>
 
             <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
@@ -479,6 +490,39 @@ function renderAdminPage(
                             <div><span class="badge badge-suspicious">ASN rule active — penalty <?= (int) $ipSummary['asn_rule']['penalty'] ?></span></div>
                         <?php endif; ?>
                     </div>
+                </div>
+                <?php
+                $summaryOverrideMode = $ipOverrideMap[$ipFilter] ?? null;
+                $filterHiddensSummary = '';
+                if ($tokenFilter   !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_token"     value="' . h($tokenFilter)   . '">';
+                if ($ipFilter      !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_ip"        value="' . h($ipFilter)      . '">';
+                if ($visitorFilter !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_visitor"   value="' . h($visitorFilter) . '">';
+                if ($knownOnly)            $filterHiddensSummary .= '<input type="hidden" name="_filter_known"     value="1">';
+                if ($dateFrom      !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
+                if ($dateTo        !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
+                ?>
+                <div style="margin-top:10px;">
+                <?php if ($summaryOverrideMode === null): ?>
+                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                        <?= $filterHiddensSummary ?>
+                        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+                        <input type="hidden" name="mode" value="block">
+                        <input type="hidden" name="notes" value="Added from IP summary">
+                        <button type="submit" class="danger-button">Block IP</button>
+                    </form>
+                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                        <?= $filterHiddensSummary ?>
+                        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+                        <input type="hidden" name="mode" value="allow">
+                        <input type="hidden" name="notes" value="Added from IP summary">
+                        <button type="submit" class="warning-button">Allow IP</button>
+                    </form>
+                <?php else: ?>
+                    <span class="badge <?= $summaryOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                        IP override: <?= h($summaryOverrideMode) ?>
+                    </span>
+                    <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
+                <?php endif; ?>
                 </div>
             </div>
             <?php endif; ?>
