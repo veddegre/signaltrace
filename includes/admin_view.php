@@ -1346,14 +1346,6 @@ function renderAdminPage(
 		   </div>
 		   <?php endif; ?>
 
-		   <label for="redirect_rate_limit_count">Redirect Rate Limit (requests)</label>
-		   <input id="redirect_rate_limit_count" type="number" min="0" name="redirect_rate_limit_count" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_count', '10')) ?>">
-		   <p class="muted">Maximum number of redirects allowed from a single IP to the same token within the window below. Applies to known tokens only. Set to 0 to disable.</p>
-
-		   <label for="redirect_rate_limit_window">Redirect Rate Limit Window (seconds)</label>
-		   <input id="redirect_rate_limit_window" type="number" min="0" name="redirect_rate_limit_window" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_window', '60')) ?>">
-		   <p class="muted">Time window in seconds for the rate limit above. Hits are still logged when the limit is exceeded — only the redirect response is blocked (429).</p>
-
                     <button type="submit">Save Settings</button>
                 </form>
 
@@ -1439,6 +1431,25 @@ function renderAdminPage(
                         </div>
                         <?php endforeach; ?>
                     </div>
+
+                    <form method="post" action="/admin/save-rate-limit-settings">
+                        <h2>Redirect Rate Limiting</h2>
+                        <?php if ($isDemo): ?>
+                            <p class="muted demo-lock-note">Not configurable in demo mode.</p>
+                            <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'redirect_rate_limit_count', '10')) ?> requests <span class="demo-lock-note">Not configurable in demo mode</span></div>
+                            <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'redirect_rate_limit_window', '60')) ?> seconds <span class="demo-lock-note">Not configurable in demo mode</span></div>
+                        <?php else: ?>
+                            <label for="redirect_rate_limit_count">Max redirects per IP per token</label>
+                            <input id="redirect_rate_limit_count" type="number" min="0" name="redirect_rate_limit_count" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_count', '10')) ?>">
+                            <p class="muted">Maximum redirects from a single IP to the same token within the window below. Applies to known tokens only. Set to 0 to disable.</p>
+
+                            <label for="redirect_rate_limit_window">Window (seconds)</label>
+                            <input id="redirect_rate_limit_window" type="number" min="0" name="redirect_rate_limit_window" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_window', '60')) ?>">
+                            <p class="muted">Hits are still logged when the limit is exceeded — only the redirect is blocked (429).</p>
+
+                            <button type="submit">Save Rate Limit Settings</button>
+                        <?php endif; ?>
+                    </form>
 
                     <?php if ($isDemo): ?>
                         <div>
