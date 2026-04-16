@@ -1,3 +1,5 @@
+# SignalTrace Tracking & Analysis
+
 <p align="center"> 
   <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace — Signal Trace Tracking & Analysis" width="160"> 
 </p> 
@@ -381,7 +383,7 @@ See the [Grafana Integration wiki page](https://github.com/veddegre/signaltrace/
 
 ## Detection and Scoring
 
-Each request is scored on arrival. The score runs from 0 (definitely a bot) to 100 (definitely human) and resolves to one of four labels: `bot`, `suspicious`, `likely-human`, or `human`. The bands are: human ≥75, likely-human ≥60, suspicious ≥25, bot <25.
+Each request is scored on arrival. The score runs from 0 (definitely a bot) to 100 (definitely human) and resolves to one of four labels: `bot`, `suspicious`, `uncertain`, or `human`. The bands are: human ≥75, uncertain ≥60, suspicious ≥25, bot <25.
 
 Signals that reduce the score include missing `Accept-Language`, `Accept-Encoding`, and `Sec-Fetch` headers; a browser UA with no supporting browser headers (spoofed UA detection); `Accept: */*` which is what HTTP libraries send by default; known automation UA signatures; raw IP in the Host header; exploit-like query strings; and hosting/datacenter IP ranges detected via ASN org name.
 
@@ -409,10 +411,12 @@ Paths associated with common probes carry their own penalties. High-risk paths l
 * **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals in the last 24 hours. Hide/show toggle. Clicking an IP forces show-all and collapses the panel.
 * **Skip patterns:** exact, contains, and prefix matching to suppress known noise. Add directly from the activity feed.
 * **Threat feed:** eight endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, and CIDR formats. Minimum hit count threshold. Feed preview count in Settings.
+* **Redirect rate limiting:** known token redirects are rate limited per IP per token to prevent the honeypot from being used as an HTTP flood origin. Count and window configurable in Settings. Set to 0 to disable.
 * **Cleanup tools:** delete by token, by IP, by current filter, or selectively remove unknown-token hits.
 * **Data retention:** configurable retention window with manual trigger and automatic probabilistic cleanup.
-* **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold (bot, suspicious, likely-human, or all). Deduplicates per IP per 5 minutes. Custom JSON payload templates with `{{placeholder}}` syntax. Auto-detects Slack/Discord format.
+* **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold (bot, suspicious, uncertain, or all). Deduplicates per IP per 5 minutes. Custom JSON payload templates with `{{placeholder}}` syntax. Auto-detects Slack/Discord format.
 * **Token webhook:** fires when a known tracked token is hit, regardless of classification. Per-token opt-in. Deduplicates per visitor per token per 5 minutes. Separate URL and payload template from the threat webhook.
+* **Cloudflare Access:** optional identity layer using Cloudflare Zero Trust. Verifies the JWT injected by Cloudflare before allowing access to the admin panel. Bypassed in demo mode. Requires `firebase/php-jwt`.
 
 ## Project Structure
 
@@ -494,6 +498,8 @@ The `public/` directory is the only thing Apache needs to serve. Everything else
 
 Admin login has rate limiting with a configurable lockout threshold and window. CSRF tokens protect all admin POST forms. Security response headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) are sent on every HTML response. The webhook fires only to validated URLs and blocks private and loopback IP ranges to prevent SSRF. The export API token is compared in constant time.
 
+For deployments that require stronger admin authentication, Cloudflare Access can be added as an optional identity layer using Cloudflare Zero Trust. See the [Cloudflare Access wiki page](https://github.com/veddegre/signaltrace/wiki/Cloudflare-Access) for setup instructions.
+
 ## Production Checklist
 
 - [ ] Enable HTTPS
@@ -512,6 +518,8 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 - [ ] Add a weekly `geoipupdate` cron job
 - [ ] Configure a threat webhook URL and threshold for real-time bot alerts
 - [ ] Configure a token webhook URL for phishing simulation and campaign tracking if needed
+- [ ] Review redirect rate limit settings and adjust for your expected traffic volume
+- [ ] Consider enabling Cloudflare Access for per-user identity and MFA on the admin panel
 
 ## Tech Stack
 
