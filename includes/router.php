@@ -132,10 +132,16 @@ function parseExportFilters(): array
     $dateFrom      = trim((string) ($_GET['date_from'] ?? ''));
     $dateTo        = trim((string) ($_GET['date_to']   ?? ''));
 
+    // Grafana passes time range as Unix ms via ${__from} and ${__to}.
+    // These are handled separately by buildExportWhere using clicked_at_unix_ms
+    // for precision, with confidence threshold still applied.
+    $fromMs = isset($_GET['from']) && $_GET['from'] !== '' ? (int) $_GET['from'] : null;
+    $toMs   = isset($_GET['to'])   && $_GET['to']   !== '' ? (int) $_GET['to']   : null;
+
     $manualFilters = ($tokenFilter !== '' || $ipFilter !== '' || $visitorFilter !== ''
         || $knownOnly || $dateFrom !== '' || $dateTo !== '');
 
-    return compact('tokenFilter', 'ipFilter', 'visitorFilter', 'knownOnly', 'dateFrom', 'dateTo', 'manualFilters');
+    return compact('tokenFilter', 'ipFilter', 'visitorFilter', 'knownOnly', 'dateFrom', 'dateTo', 'manualFilters', 'fromMs', 'toMs');
 }
 
 function handleExport(PDO $pdo, string $format): void
@@ -186,6 +192,27 @@ function handleExportStats(PDO $pdo): void
         $f['manualFilters'],
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $f['fromMs'],
+        $f['toMs'],
+    );
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($stats, JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExportStatsExtended(PDO $pdo): void
+{
+    $f = parseExportFilters();
+
+    $stats = exportStatsExtended(
+        $pdo,
+        $f['manualFilters'],
+        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
+        $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
@@ -205,6 +232,8 @@ function handleExportByIp(PDO $pdo): void
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
         $limit,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
@@ -224,28 +253,13 @@ function handleExportByCountry(PDO $pdo): void
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
         $limit,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
     echo json_encode($rows, JSON_PRETTY_PRINT);
-    exit;
-}
-
-function handleExportStatsExtended(PDO $pdo): void
-{
-    $f = parseExportFilters();
-
-    $stats = exportStatsExtended(
-        $pdo,
-        $f['manualFilters'],
-        $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
-        $f['dateTo']   !== '' ? $f['dateTo']   : null,
-    );
-
-    header('Content-Type: application/json');
-    header('Cache-Control: no-store');
-    echo json_encode($stats, JSON_PRETTY_PRINT);
     exit;
 }
 
@@ -262,6 +276,8 @@ function handleExportByToken(PDO $pdo): void
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
         $limit,
         $labelFilter !== '' ? $labelFilter : null,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
@@ -281,6 +297,8 @@ function handleExportByOrg(PDO $pdo): void
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
         $limit,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
@@ -300,6 +318,8 @@ function handleExportBySignal(PDO $pdo): void
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
         $limit,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
@@ -317,6 +337,8 @@ function handleExportBehavioralSignals(PDO $pdo): void
         $f['manualFilters'],
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     header('Content-Type: application/json');
@@ -462,7 +484,6 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
 
     if ($link) {
         logClick($pdo, $link, $requestData);
-        maybeFireTokenAlert($pdo, $requestData);
         maybeFireAlert($pdo, $requestData);
         maybeRunAutoCleanup($pdo);
 
