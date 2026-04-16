@@ -313,7 +313,7 @@ function handleSaveSettings(PDO $pdo): void
         exit;
     }
 
-    if (!in_array($webhookThresholdInput, ['bot', 'suspicious', 'likely-human', 'human'], true)) {
+    if (!in_array($webhookThresholdInput, ['bot', 'suspicious', 'uncertain', 'human'], true)) {
         http_response_code(400);
         echo 'Invalid webhook threshold value.';
         exit;
@@ -368,7 +368,7 @@ function handleSaveSettings(PDO $pdo): void
         }
     }
 
-    if (!in_array($exportMinConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
+    if (!in_array($exportMinConfidenceInput, ['human', 'uncertain', 'suspicious', 'bot'], true)) {
         http_response_code(400);
         echo 'Invalid export minimum confidence value.';
         exit;
@@ -402,7 +402,7 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
     $windowHoursInput = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
     $minConfidenceInput = strtolower(trim((string) ($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
 
-    if (!in_array($minConfidenceInput, ['human', 'likely-human', 'suspicious', 'bot'], true)) {
+    if (!in_array($minConfidenceInput, ['human', 'uncertain', 'suspicious', 'bot'], true)) {
         http_response_code(400);
         echo 'Invalid minimum confidence value.';
         exit;
