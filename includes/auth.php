@@ -63,6 +63,9 @@ function verifyCfAccessJwt(): void
         }
     }
 
+    // Allow 30 seconds of clock skew between your server and Cloudflare.
+    \Firebase\JWT\JWT::$leeway = 30;
+
     // Attempt to decode the JWT against each of Cloudflare's public keys.
     // Cloudflare rotates keys periodically and may return multiple — we try
     // each one until one succeeds or all fail.
@@ -71,11 +74,16 @@ function verifyCfAccessJwt(): void
 
     foreach ($keys['keys'] as $keyData) {
         try {
+            // Skip keys that aren't RS256 — Cloudflare may include other types.
+            if (($keyData['alg'] ?? '') !== 'RS256' && ($keyData['kty'] ?? '') !== 'RSA') {
+                continue;
+            }
             $jwk = \Firebase\JWT\JWK::parseKey($keyData, 'RS256');
             $decoded = \Firebase\JWT\JWT::decode($jwt, $jwk);
             break;
         } catch (\Throwable $e) {
             $lastError = $e->getMessage();
+            error_log('SignalTrace: CF Access key attempt failed: ' . $lastError);
         }
     }
 
