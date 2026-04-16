@@ -600,6 +600,28 @@ function renderAdminPage(
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php $summaryOverrideMode = $ipOverrideMap[$ipFilter] ?? null; ?>
+                <div style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                    <?php if ($summaryOverrideMode === null): ?>
+                        <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                            <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+                            <input type="hidden" name="mode" value="block">
+                            <input type="hidden" name="notes" value="Added from IP summary">
+                            <button type="submit" class="danger-button">Block IP</button>
+                        </form>
+                        <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                            <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+                            <input type="hidden" name="mode" value="allow">
+                            <input type="hidden" name="notes" value="Added from IP summary">
+                            <button type="submit" class="warning-button">Allow IP</button>
+                        </form>
+                    <?php else: ?>
+                        <span class="badge <?= $summaryOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                            IP override: <?= h($summaryOverrideMode) ?>
+                        </span>
+                        <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
+                    <?php endif; ?>
+                </div>
             </div>
             <?php endif; ?>
 
