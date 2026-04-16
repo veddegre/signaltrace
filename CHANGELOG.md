@@ -2,6 +2,64 @@
 
 ---
 
+## [2.5.0] — April 16, 2026
+
+### Cloudflare Access Integration
+
+The admin panel can now be protected by Cloudflare Zero Trust as an optional first authentication layer. When `CF_ACCESS_ENABLED` is true, SignalTrace verifies the `Cf-Access-Jwt-Assertion` JWT against Cloudflare's published public keys before allowing any request to reach the admin UI. The Basic Auth prompt is bypassed once CF Access verification passes, since Cloudflare Access with MFA already provides strong identity assurance.
+
+CF Access verification is skipped when `CF_ACCESS_ENABLED` is false (the default) or when `DEMO_MODE` is true. Existing installs are completely unaffected unless the three new constants are added to `config.local.php`. See the [Cloudflare Access wiki page](https://github.com/veddegre/signaltrace/wiki/Cloudflare-Access) for full setup instructions.
+
+New constants in `config.local.php`:
+- `CF_ACCESS_ENABLED` — set to `true` to enable verification
+- `CF_ACCESS_AUD` — the AUD token from Zero Trust → Applications → Additional settings → Token
+- `CF_ACCESS_TEAM_DOMAIN` — your team domain from Zero Trust → Settings → Teams tab
+
+Requires `firebase/php-jwt ^6.0` via Composer.
+
+### Redirect Rate Limiting
+
+Known token redirects are now rate limited to prevent SignalTrace from being used as an unwitting HTTP flood origin. When an IP exceeds the configured number of redirects to the same token within the configured window, SignalTrace returns a 429 with a `Retry-After` header instead of redirecting. The click is still logged regardless — rate limiting only affects the redirect response.
+
+New settings:
+- **Redirect Rate Limit** — maximum redirects per IP per token within the window (default: 10). Set to 0 to disable.
+- **Redirect Rate Limit Window** — time window in seconds (default: 60).
+
+Rate limiting applies to known tokens only. Unknown path behavior (redirect or 404) is unaffected.
+
+### Demo Mode Lockdowns
+
+The following settings are now locked when `DEMO_MODE` is true, blocking both the UI and direct POST requests:
+
+- App Name, Base URL, Default Redirect URL
+- Threat Webhook URL and Template
+- Token Webhook URL and Template
+- Redirect Rate Limit settings
+- Data Retention settings
+- Manual Cleanup action
+
+Locked fields render as read-only in the Settings UI with a "Not configurable in demo mode" notice. All other settings remain fully editable.
+
+### `likely-human` Renamed to `uncertain`
+
+The confidence label `likely-human` has been renamed to `uncertain` across the entire codebase. The name more accurately reflects what the 60–74 score band means — the system is not confident either way.
+
+A database migration runs automatically on boot for existing installs:
+```sql
+UPDATE clicks SET confidence_label = 'uncertain' WHERE confidence_label = 'likely-human';
+UPDATE settings SET value = 'uncertain' WHERE key IN ('export_min_confidence', 'threat_feed_min_confidence', 'webhook_threshold') AND value = 'likely-human';
+```
+
+### Grafana Time Range on All Panels
+
+All 16 Grafana dashboard panels now respect the Grafana time range picker. Previously only the Events Over Time panel responded to time range changes — all other panels used the configured export window. All panel URLs now pass `${__from}` and `${__to}` as Unix millisecond timestamps, and `buildExportWhere()` uses `clicked_at_unix_ms` for precise filtering while keeping the confidence threshold applied.
+
+### `setup.sh` Updates
+
+The setup script now prompts for Cloudflare Access configuration (manual installs only), demo mode settings (App Name, Base URL, Default Redirect URL, banner credentials), and correctly writes all prompted values to `config.local.php`. A bug where `SELF_REFERER_DOMAIN` and MaxMind credentials were collected but never written to the config file has been fixed. The Composer step now uses `composer update` instead of `composer install` to handle lock file mismatches on new package additions.
+
+---
+
 ## [2.4.1] — April 15, 2026
 
 ### Grafana Dashboard — Expanded
@@ -32,7 +90,7 @@ Six new server-side aggregation endpoints were added, all sharing the same filte
 
 The webhook system was split into two independent webhooks serving different use cases.
 
-**Threat webhook** (existing, enhanced): fires on unknown-path hits that meet the configured classification threshold. A new **Threat Webhook Threshold** setting was added with options: bot only (default), suspicious and above, likely-human and above, or all hits. The webhook skips known token hits — those are handled by the token webhook instead.
+**Threat webhook** (existing, enhanced): fires on unknown-path hits that meet the configured classification threshold. A new **Threat Webhook Threshold** setting was added with options: bot only (default), suspicious and above, uncertain and above, or all hits. The webhook skips known token hits — those are handled by the token webhook instead.
 
 **Token webhook** (new): fires when a known tracked token is hit, regardless of classification. Useful for phishing simulations and campaign tracking where any interaction — including human — is significant. Configured via **Token Webhook URL** and **Token Webhook Template** in Settings. Uses the same `{{placeholder}}` template syntax as the threat webhook. Auto-detects Slack and Discord format when no template is set. Deduplicates per visitor hash per token per 5 minutes.
 
