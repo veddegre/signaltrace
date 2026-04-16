@@ -28,6 +28,14 @@ function verifyCfAccessJwt(): void
         return;
     }
 
+    // CF Access only applies to the admin panel. Feeds and export endpoints
+    // use their own token-based authentication and must not require a CF
+    // Access session — Splunk, Grafana, and firewalls hit those paths directly.
+    $requestPath = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
+    if (!str_starts_with($requestPath, '/admin')) {
+        return;
+    }
+
     $jwt = $_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'] ?? '';
 
     if ($jwt === '') {
