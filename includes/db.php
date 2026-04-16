@@ -254,6 +254,8 @@ function seedDefaultSettings(PDO $pdo): void
         'export_min_confidence'      => 'suspicious',
         'export_window_hours'        => '168',
         'export_min_score'           => '0',
+        'redirect_rate_limit_count'  => '10',
+        'redirect_rate_limit_window' => '60',
     ];
 
     $stmt = $pdo->prepare("
@@ -1497,6 +1499,39 @@ function deleteCountryRule(PDO $pdo, int $id): bool
 {
     $stmt = $pdo->prepare("DELETE FROM country_rules WHERE id = :id");
     return $stmt->execute([':id' => $id]);
+}
+
+/**
+ * Returns true if the given IP has exceeded the configured redirect rate limit
+ * for the given token within the configured window. Only applies to known tokens
+ * (those with a link_id). Uses the clicks table — no separate table needed.
+ * Returns false when rate limiting is disabled (count or window set to 0).
+ */
+function isRedirectRateLimited(PDO $pdo, string $ip, string $token): bool
+{
+    $count  = (int) getSetting($pdo, 'redirect_rate_limit_count',  '10');
+    $window = (int) getSetting($pdo, 'redirect_rate_limit_window', '60');
+
+    if ($count <= 0 || $window <= 0) {
+        return false;
+    }
+
+    $cutoffMs = (int) round(microtime(true) * 1000) - ($window * 1000);
+
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM clicks
+        WHERE ip = :ip
+          AND token = :token
+          AND link_id IS NOT NULL
+          AND clicked_at_unix_ms >= :cutoff
+    ");
+    $stmt->execute([
+        ':ip'     => $ip,
+        ':token'  => $token,
+        ':cutoff' => $cutoffMs,
+    ]);
+
+    return (int) $stmt->fetchColumn() >= $count;
 }
 
 /**
