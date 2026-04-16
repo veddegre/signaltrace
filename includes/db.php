@@ -143,8 +143,7 @@ function initializeDatabase(PDO $pdo): void
     }
 
     $linksColumnDefinitions = [
-        'exclude_from_feed'       => 'INTEGER NOT NULL DEFAULT 0',
-        'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
+        'exclude_from_feed' => 'INTEGER NOT NULL DEFAULT 0',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -195,11 +194,6 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ip_overrides_active ON ip_overrides(active)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_code ON country_rules(country_code)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_active ON country_rules(active)");
-
-    // Migrate legacy label value — 'likely-human' was renamed to 'uncertain'.
-    $pdo->exec("UPDATE clicks SET confidence_label = 'uncertain' WHERE confidence_label = 'likely-human'");
-    // Migrate legacy settings values
-    $pdo->exec("UPDATE settings SET value = 'uncertain' WHERE key IN ('export_min_confidence', 'threat_feed_min_confidence', 'webhook_threshold') AND value = 'likely-human'");
 
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
@@ -256,9 +250,6 @@ function seedDefaultSettings(PDO $pdo): void
         'page_size'                  => '50',
         'webhook_url'                => '',
         'webhook_template'           => '',
-        'webhook_threshold'          => 'bot',
-        'token_webhook_url'          => '',
-        'token_webhook_template'     => '',
         'auto_refresh_secs'          => '0',
         'export_min_confidence'      => 'suspicious',
         'export_window_hours'        => '168',
@@ -502,42 +493,39 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false): bool
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at)
-        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :include_in_token_webhook, :created_at)
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :created_at)
     ");
 
     return $stmt->execute([
-        ':token'                   => $token,
-        ':destination'             => $destination,
-        ':description'             => $description,
-        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
-        ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
-        ':created_at'              => date('c'),
+        ':token' => $token,
+        ':destination' => $destination,
+        ':description' => $description,
+        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
+        ':created_at' => date('c'),
     ]);
 }
 
-function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
-        SET token                    = :token,
-            destination              = :destination,
-            description              = :description,
-            exclude_from_feed        = :exclude_from_feed,
-            include_in_token_webhook = :include_in_token_webhook
+        SET token             = :token,
+            destination       = :destination,
+            description       = :description,
+            exclude_from_feed = :exclude_from_feed
         WHERE id = :id
     ");
 
     return $stmt->execute([
-        ':id'                      => $id,
-        ':token'                   => $token,
-        ':destination'             => $destination,
-        ':description'             => $description,
-        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
-        ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
+        ':id'               => $id,
+        ':token'            => $token,
+        ':destination'      => $destination,
+        ':description'      => $description,
+        ':exclude_from_feed' => $excludeFromFeed ? 1 : 0,
     ]);
 }
 
@@ -1472,470 +1460,146 @@ function deleteCountryRule(PDO $pdo, int $id): bool
 
 /**
  * ============================================================
- * ADD THESE FUNCTIONS TO THE BOTTOM OF includes/db.php
+ * GRAFANA AGGREGATION ENDPOINTS
  * ============================================================
- *
- * These provide server-side aggregated endpoints for Grafana.
- * They share the same filter logic as exportClicks() so the
- * Grafana token can be scoped identically to the export.
  */
 
-/**
- * Build the shared WHERE clause and params used by all aggregation
- * queries. Mirrors the logic in exportClicks() exactly.
- *
- * Returns [$whereSql, $params] where $whereSql begins with " AND "
- * (safe to append after "WHERE 1=1").
- */
 function buildExportWhere(PDO $pdo, bool $manualFilters, ?string $dateFrom, ?string $dateTo, ?int $fromMs = null, ?int $toMs = null): array
 {
     $where  = '';
     $params = [];
 
     if ($fromMs !== null || $toMs !== null) {
-        // Grafana time range — use unix_ms for precise filtering.
-        // Keep confidence threshold applied so panels respect Settings.
         $minConfidence = strtolower((string) getSetting($pdo, 'export_min_confidence', 'suspicious'));
         $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
 
         $allowedLabels = match ($minConfidence) {
-            'bot'          => ['bot'],
+            'bot'       => ['bot'],
             'uncertain' => ['uncertain', 'suspicious', 'bot'],
-            'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
-            default        => ['suspicious', 'bot'],
+            'human'     => ['human', 'uncertain', 'suspicious', 'bot'],
+            default     => ['suspicious', 'bot'],
         };
 
         $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
 
-        if ($fromMs !== null) {
-            $where   .= " AND c.clicked_at_unix_ms >= ? ";
-            $params[] = $fromMs;
-        }
-        if ($toMs !== null) {
-            $where   .= " AND c.clicked_at_unix_ms <= ? ";
-            $params[] = $toMs;
-        }
+        if ($fromMs !== null) { $where .= " AND c.clicked_at_unix_ms >= ? "; $params[] = $fromMs; }
+        if ($toMs   !== null) { $where .= " AND c.clicked_at_unix_ms <= ? "; $params[] = $toMs; }
 
         $where .= " AND c.confidence_label IN ($placeholders) ";
         $where .= " AND (c.confidence_score IS NULL OR c.confidence_score >= ?) ";
-
         $params = array_merge($params, $allowedLabels, [$minScore]);
 
     } elseif ($manualFilters) {
-        // Manual date filters from the admin dashboard
-        if ($dateFrom !== null && $dateFrom !== '') {
-            $where .= " AND substr(c.clicked_at, 1, 10) >= :dateFrom ";
-            $params[':dateFrom'] = $dateFrom;
-        }
-        if ($dateTo !== null && $dateTo !== '') {
-            $where .= " AND substr(c.clicked_at, 1, 10) <= :dateTo ";
-            $params[':dateTo'] = $dateTo;
-        }
+        if ($dateFrom !== null && $dateFrom !== '') { $where .= " AND substr(c.clicked_at, 1, 10) >= :dateFrom "; $params[':dateFrom'] = $dateFrom; }
+        if ($dateTo   !== null && $dateTo   !== '') { $where .= " AND substr(c.clicked_at, 1, 10) <= :dateTo ";   $params[':dateTo']   = $dateTo; }
     } else {
-        // Use configured export window + confidence threshold
         $minConfidence = strtolower((string) getSetting($pdo, 'export_min_confidence', 'suspicious'));
         $windowHours   = max(1, (int) getSetting($pdo, 'export_window_hours', '168'));
         $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
 
         $allowedLabels = match ($minConfidence) {
-            'bot'          => ['bot'],
+            'bot'       => ['bot'],
             'uncertain' => ['uncertain', 'suspicious', 'bot'],
-            'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
-            default        => ['suspicious', 'bot'],
+            'human'     => ['human', 'uncertain', 'suspicious', 'bot'],
+            default     => ['suspicious', 'bot'],
         };
 
         $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
-
         $where .= " AND c.clicked_at >= datetime('now', ?) ";
         $where .= " AND c.confidence_label IN ($placeholders) ";
         $where .= " AND (c.confidence_score IS NULL OR c.confidence_score >= ?) ";
-
-        $params = array_merge(
-            ['-' . $windowHours . ' hours'],
-            $allowedLabels,
-            [$minScore],
-        );
+        $params = array_merge(['-' . $windowHours . ' hours'], $allowedLabels, [$minScore]);
     }
 
     return [$where, $params];
 }
 
-/**
- * Summary stats for the Grafana stat panels.
- * Returns total, bot_count, suspicious_count, uncertain_count,
- * human_count, unique_ips, avg_confidence_score.
- */
-function exportStats(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    ?int $fromMs = null,
-    ?int $toMs = null,
-): array {
+function exportStats(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
-
-    $sql = "
-        SELECT
-            COUNT(*)                                                              AS total,
-            SUM(CASE WHEN c.confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
-            SUM(CASE WHEN c.confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
-            SUM(CASE WHEN c.confidence_label = 'uncertain' THEN 1 ELSE 0 END) AS uncertain_count,
-            SUM(CASE WHEN c.confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
-            COUNT(DISTINCT c.ip)                                                  AS unique_ips,
-            ROUND(AVG(c.confidence_score), 1)                                     AS avg_confidence_score
-        FROM clicks c
-        WHERE 1=1
-        $where
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $row = $stmt->fetch();
-
-    // Cast everything to the right types so JSON encodes cleanly
-    return [
-        'total'                => (int)   ($row['total']                ?? 0),
-        'bot_count'            => (int)   ($row['bot_count']            ?? 0),
-        'suspicious_count'     => (int)   ($row['suspicious_count']     ?? 0),
-        'uncertain_count'   => (int)   ($row['uncertain_count']   ?? 0),
-        'human_count'          => (int)   ($row['human_count']          ?? 0),
-        'unique_ips'           => (int)   ($row['unique_ips']           ?? 0),
-        'avg_confidence_score' => (float) ($row['avg_confidence_score'] ?? 0.0),
-    ];
+    $sql = "SELECT COUNT(*) AS total, SUM(CASE WHEN c.confidence_label='bot' THEN 1 ELSE 0 END) AS bot_count, SUM(CASE WHEN c.confidence_label='suspicious' THEN 1 ELSE 0 END) AS suspicious_count, SUM(CASE WHEN c.confidence_label='uncertain' THEN 1 ELSE 0 END) AS uncertain_count, SUM(CASE WHEN c.confidence_label='human' THEN 1 ELSE 0 END) AS human_count, COUNT(DISTINCT c.ip) AS unique_ips, ROUND(AVG(c.confidence_score),1) AS avg_confidence_score FROM clicks c WHERE 1=1 $where";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); $row = $stmt->fetch();
+    return ['total'=>(int)($row['total']??0),'bot_count'=>(int)($row['bot_count']??0),'suspicious_count'=>(int)($row['suspicious_count']??0),'uncertain_count'=>(int)($row['uncertain_count']??0),'human_count'=>(int)($row['human_count']??0),'unique_ips'=>(int)($row['unique_ips']??0),'avg_confidence_score'=>(float)($row['avg_confidence_score']??0.0)];
 }
 
-/**
- * Top IPs by hit count, pre-aggregated for Grafana bar chart.
- */
-function exportByIp(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    int $limit = 20,
-): array {
+function exportStatsExtended(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, ?int $fromMs = null, ?int $toMs = null): array
+{
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
+    $sql = "SELECT COUNT(*) AS total, SUM(CASE WHEN c.confidence_label='bot' THEN 1 ELSE 0 END) AS bot_count, SUM(CASE WHEN c.confidence_label='suspicious' THEN 1 ELSE 0 END) AS suspicious_count, SUM(CASE WHEN c.confidence_label='uncertain' THEN 1 ELSE 0 END) AS uncertain_count, SUM(CASE WHEN c.confidence_label='human' THEN 1 ELSE 0 END) AS human_count, COUNT(DISTINCT c.ip) AS unique_ips, COUNT(DISTINCT c.token) AS unique_tokens, ROUND(AVG(c.confidence_score),1) AS avg_confidence_score FROM clicks c WHERE 1=1 $where";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); $row = $stmt->fetch();
+    $total = (int)($row['total']??0); $botCount = (int)($row['bot_count']??0);
+    return ['total'=>$total,'bot_count'=>$botCount,'suspicious_count'=>(int)($row['suspicious_count']??0),'uncertain_count'=>(int)($row['uncertain_count']??0),'human_count'=>(int)($row['human_count']??0),'unique_ips'=>(int)($row['unique_ips']??0),'unique_tokens'=>(int)($row['unique_tokens']??0),'avg_confidence_score'=>(float)($row['avg_confidence_score']??0.0),'bot_pct'=>$total>0?round(($botCount/$total)*100,1):0.0];
+}
+
+function exportByIp(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, int $limit = 20, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
     $params[] = $limit;
-
-    $sql = "
-        SELECT
-            c.ip,
-            MAX(c.ip_org)     AS ip_org,
-            MAX(c.ip_country) AS ip_country,
-            COUNT(*)          AS hits
-        FROM clicks c
-        WHERE c.ip IS NOT NULL
-          AND c.ip <> ''
-          $where
-        GROUP BY c.ip
-        ORDER BY hits DESC
-        LIMIT ?
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+    $sql = "SELECT c.ip, MAX(c.ip_org) AS ip_org, MAX(c.ip_country) AS ip_country, COUNT(*) AS hits FROM clicks c WHERE c.ip IS NOT NULL AND c.ip <> '' $where GROUP BY c.ip ORDER BY hits DESC LIMIT ?";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); return $stmt->fetchAll();
 }
 
-/**
- * Top countries by hit count, pre-aggregated for Grafana bar chart.
- */
-function exportByCountry(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    int $limit = 20,
-): array {
+function exportByCountry(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, int $limit = 20, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
     $params[] = $limit;
-
-    $sql = "
-        SELECT
-            c.ip_country      AS country,
-            COUNT(*)          AS hits
-        FROM clicks c
-        WHERE c.ip_country IS NOT NULL
-          AND c.ip_country <> ''
-          $where
-        GROUP BY c.ip_country
-        ORDER BY hits DESC
-        LIMIT ?
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+    $sql = "SELECT c.ip_country AS country, COUNT(*) AS hits FROM clicks c WHERE c.ip_country IS NOT NULL AND c.ip_country <> '' $where GROUP BY c.ip_country ORDER BY hits DESC LIMIT ?";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); return $stmt->fetchAll();
 }
 
-/**
- * Update exportStats to also return unique_tokens and bot_pct.
- * This is a new wrapper — exportStats() is unchanged for compatibility.
- */
-function exportStatsExtended(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    ?int $fromMs = null,
-    ?int $toMs = null,
-): array {
+function exportByToken(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, int $limit = 5, ?string $labelFilter = null, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
-
-    $sql = "
-        SELECT
-            COUNT(*)                                                              AS total,
-            SUM(CASE WHEN c.confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
-            SUM(CASE WHEN c.confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
-            SUM(CASE WHEN c.confidence_label = 'uncertain' THEN 1 ELSE 0 END) AS uncertain_count,
-            SUM(CASE WHEN c.confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
-            COUNT(DISTINCT c.ip)                                                  AS unique_ips,
-            COUNT(DISTINCT c.token)                                               AS unique_tokens,
-            ROUND(AVG(c.confidence_score), 1)                                     AS avg_confidence_score
-        FROM clicks c
-        WHERE 1=1
-        $where
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $row = $stmt->fetch();
-
-    $total    = (int) ($row['total'] ?? 0);
-    $botCount = (int) ($row['bot_count'] ?? 0);
-    $botPct   = $total > 0 ? round(($botCount / $total) * 100, 1) : 0.0;
-
-    return [
-        'total'                => $total,
-        'bot_count'            => $botCount,
-        'suspicious_count'     => (int)   ($row['suspicious_count']     ?? 0),
-        'uncertain_count'   => (int)   ($row['uncertain_count']   ?? 0),
-        'human_count'          => (int)   ($row['human_count']          ?? 0),
-        'unique_ips'           => (int)   ($row['unique_ips']           ?? 0),
-        'unique_tokens'        => (int)   ($row['unique_tokens']        ?? 0),
-        'avg_confidence_score' => (float) ($row['avg_confidence_score'] ?? 0.0),
-        'bot_pct'              => (float) $botPct,
-    ];
-}
-
-/**
- * Top tokens by hit count.
- */
-function exportByToken(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    int $limit = 5,
-    ?string $labelFilter = null,
-): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
-
-    if ($labelFilter !== null && $labelFilter !== '') {
-        $where   .= " AND c.confidence_label = ? ";
-        $params[] = $labelFilter;
-    }
-
+    if ($labelFilter !== null && $labelFilter !== '') { $where .= " AND c.confidence_label = ? "; $params[] = $labelFilter; }
     $params[] = $limit;
-
-    $sql = "
-        SELECT
-            c.token,
-            COUNT(*) AS hits
-        FROM clicks c
-        WHERE c.token IS NOT NULL
-          AND c.token <> ''
-          $where
-        GROUP BY c.token
-        ORDER BY hits DESC
-        LIMIT ?
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+    $sql = "SELECT c.token, COUNT(*) AS hits FROM clicks c WHERE c.token IS NOT NULL AND c.token <> '' $where GROUP BY c.token ORDER BY hits DESC LIMIT ?";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); return $stmt->fetchAll();
 }
 
-/**
- * Top ASN organisations by hit count.
- */
-function exportByOrg(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    int $limit = 5,
-): array {
+function exportByOrg(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, int $limit = 5, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
     $params[] = $limit;
-
-    $sql = "
-        SELECT
-            c.ip_org  AS org,
-            MAX(c.ip_asn) AS asn,
-            COUNT(*)  AS hits
-        FROM clicks c
-        WHERE c.ip_org IS NOT NULL
-          AND c.ip_org <> ''
-          $where
-        GROUP BY c.ip_org
-        ORDER BY hits DESC
-        LIMIT ?
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+    $sql = "SELECT c.ip_org AS org, MAX(c.ip_asn) AS asn, COUNT(*) AS hits FROM clicks c WHERE c.ip_org IS NOT NULL AND c.ip_org <> '' $where GROUP BY c.ip_org ORDER BY hits DESC LIMIT ?";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); return $stmt->fetchAll();
 }
 
-/**
- * Top detection signals (exploded from comma-separated confidence_reason).
- * Excludes country_penalty and ip_override meta-reasons.
- */
-function exportBySignal(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    int $limit = 8,
-): array {
+function exportBySignal(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, int $limit = 8, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
-
-    // Pull all confidence_reason strings, explode in PHP
-    $sql = "
-        SELECT confidence_reason
-        FROM clicks c
-        WHERE c.confidence_reason IS NOT NULL
-          AND c.confidence_reason <> ''
-          $where
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
+    $sql = "SELECT confidence_reason FROM clicks c WHERE c.confidence_reason IS NOT NULL AND c.confidence_reason <> '' $where";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
     $counts = [];
-    foreach ($rows as $reasonStr) {
-        $signals = array_map('trim', explode(',', $reasonStr));
-        foreach ($signals as $signal) {
-            if ($signal === '') continue;
-            // Exclude meta-reasons
-            if (str_starts_with($signal, 'country_penalty') || str_starts_with($signal, 'ip_override')) continue;
-            $counts[$signal] = ($counts[$signal] ?? 0) + 1;
-        }
-    }
-
-    arsort($counts);
-    $top = array_slice($counts, 0, $limit, true);
-
-    $result = [];
-    foreach ($top as $signal => $count) {
-        $result[] = ['signal' => $signal, 'hits' => $count];
-    }
+    foreach ($rows as $r) { foreach (array_map('trim', explode(',', $r)) as $s) { if ($s===''||str_starts_with($s,'country_penalty')||str_starts_with($s,'ip_override')) continue; $counts[$s]=($counts[$s]??0)+1; } }
+    arsort($counts); $result = [];
+    foreach (array_slice($counts,0,$limit,true) as $s=>$h) { $result[]=['signal'=>$s,'hits'=>$h]; }
     return $result;
 }
 
-/**
- * Events over time bucketed by confidence label.
- * Accepts Unix timestamps (ms) for from/to so Grafana can pass its time range directly.
- * Bucket size adapts to the span automatically.
- */
-function exportOverTime(
-    PDO $pdo,
-    ?int $fromMs = null,
-    ?int $toMs = null,
-): array {
-    $nowMs    = (int) round(microtime(true) * 1000);
-    $fromMs   = $fromMs ?? ($nowMs - 7 * 24 * 3600 * 1000);
-    $toMs     = $toMs   ?? $nowMs;
-    $spanSecs = max(1, (int) (($toMs - $fromMs) / 1000));
-
-    // Adaptive bucket size
-    if ($spanSecs <= 6 * 3600) {
-        $bucketSecs = 900;       // 15 min
-        $format     = '%Y-%m-%d %H:%M';
-    } elseif ($spanSecs <= 48 * 3600) {
-        $bucketSecs = 3600;      // 1 hour
-        $format     = '%Y-%m-%d %H:00';
-    } elseif ($spanSecs <= 14 * 86400) {
-        $bucketSecs = 6 * 3600;  // 6 hours
-        $format     = '%Y-%m-%d %H:00';
-    } else {
-        $bucketSecs = 86400;     // 1 day
-        $format     = '%Y-%m-%d';
-    }
-
-    $fromUnix = (int) ($fromMs / 1000);
-    $toUnix   = (int) ($toMs   / 1000);
-
-    $sql = "
-        SELECT
-            strftime('{$format}',
-                datetime(CAST((clicked_at_unix_ms / 1000 / {$bucketSecs}) AS INTEGER) * {$bucketSecs}, 'unixepoch')
-            )                    AS bucket,
-            confidence_label     AS label,
-            COUNT(*)             AS hits
-        FROM clicks
-        WHERE clicked_at_unix_ms >= :from_ms
-          AND clicked_at_unix_ms <= :to_ms
-          AND confidence_label IS NOT NULL
-          AND confidence_label <> ''
-        GROUP BY bucket, label
-        ORDER BY bucket ASC, label ASC
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':from_ms' => $fromMs, ':to_ms' => $toMs]);
-    return $stmt->fetchAll();
-}
-
-/**
- * Behavioral signal hits only — burst_activity, rapid_repeat,
- * fast_repeat, multi_token_scan. Server-side filtered so Grafana
- * needs no transformations.
- */
-function exportBehavioralSignals(
-    PDO $pdo,
-    bool $manualFilters = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    ?int $fromMs = null,
-    ?int $toMs = null,
-): array {
+function exportBehavioralSignals(PDO $pdo, bool $manualFilters = false, ?string $dateFrom = null, ?string $dateTo = null, ?int $fromMs = null, ?int $toMs = null): array
+{
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
-
-    $sql = "
-        SELECT confidence_reason
-        FROM clicks c
-        WHERE c.confidence_reason IS NOT NULL
-          AND c.confidence_reason <> ''
-          $where
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-    $behavioral = ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'];
-    $counts     = array_fill_keys($behavioral, 0);
-
-    foreach ($rows as $reasonStr) {
-        $signals = array_map('trim', explode(',', $reasonStr));
-        foreach ($signals as $signal) {
-            if (isset($counts[$signal])) {
-                $counts[$signal]++;
-            }
-        }
-    }
-
-    // Sort descending, exclude zeros
-    arsort($counts);
-    $result = [];
-    foreach ($counts as $signal => $hits) {
-        if ($hits > 0) {
-            $result[] = ['signal' => $signal, 'hits' => $hits];
-        }
-    }
+    $sql = "SELECT confidence_reason FROM clicks c WHERE c.confidence_reason IS NOT NULL AND c.confidence_reason <> '' $where";
+    $stmt = $pdo->prepare($sql); $stmt->execute($params); $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $counts = array_fill_keys(['burst_activity','rapid_repeat','fast_repeat','multi_token_scan'], 0);
+    foreach ($rows as $r) { foreach (array_map('trim', explode(',', $r)) as $s) { if (isset($counts[$s])) $counts[$s]++; } }
+    arsort($counts); $result = [];
+    foreach ($counts as $s=>$h) { if ($h>0) $result[]=['signal'=>$s,'hits'=>$h]; }
     return $result;
+}
+
+function exportOverTime(PDO $pdo, ?int $fromMs = null, ?int $toMs = null): array
+{
+    $nowMs = (int) round(microtime(true) * 1000);
+    $fromMs = $fromMs ?? ($nowMs - 7 * 24 * 3600 * 1000);
+    $toMs   = $toMs   ?? $nowMs;
+    $spanSecs = max(1, (int)(($toMs - $fromMs) / 1000));
+
+    if ($spanSecs <= 6*3600)       { $b = 900;      $f = '%Y-%m-%d %H:%M'; }
+    elseif ($spanSecs <= 48*3600)  { $b = 3600;     $f = '%Y-%m-%d %H:00'; }
+    elseif ($spanSecs <= 14*86400) { $b = 6*3600;   $f = '%Y-%m-%d %H:00'; }
+    else                           { $b = 86400;    $f = '%Y-%m-%d'; }
+
+    $sql = "SELECT strftime('{$f}', datetime(CAST((clicked_at_unix_ms/1000/{$b}) AS INTEGER)*{$b},'unixepoch')) AS bucket, confidence_label AS label, COUNT(*) AS hits FROM clicks WHERE clicked_at_unix_ms >= :from_ms AND clicked_at_unix_ms <= :to_ms AND confidence_label IS NOT NULL AND confidence_label <> '' GROUP BY bucket, label ORDER BY bucket ASC, label ASC";
+    $stmt = $pdo->prepare($sql); $stmt->execute([':from_ms'=>$fromMs,':to_ms'=>$toMs]); return $stmt->fetchAll();
 }
