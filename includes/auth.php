@@ -46,8 +46,8 @@ function verifyCfAccessJwt(): void
 
     // Fetch Cloudflare's public keys. Cached in a static variable for the
     // duration of the request so multiple admin sub-requests don't re-fetch.
-    static $keys = null;
-    if ($keys === null) {
+    static $keySet = null;
+    if ($keySet === null) {
         $certsUrl = 'https://' . rtrim($teamDomain, '/') . '/cdn-cgi/access/certs';
         $response = @file_get_contents($certsUrl);
         if ($response === false) {
@@ -55,9 +55,16 @@ function verifyCfAccessJwt(): void
             http_response_code(503);
             exit('Unable to verify identity. Please try again.');
         }
-        $keys = json_decode($response, true);
-        if (!isset($keys['keys']) || !is_array($keys['keys'])) {
+        $jwks = json_decode($response, true);
+        if (!isset($jwks['keys']) || !is_array($jwks['keys'])) {
             error_log('SignalTrace: Unexpected Cloudflare Access key response format.');
+            http_response_code(503);
+            exit('Unable to verify identity. Please try again.');
+        }
+        try {
+            $keySet = \Firebase\JWT\JWK::parseKeySet($jwks);
+        } catch (\Throwable $e) {
+            error_log('SignalTrace: Failed to parse Cloudflare Access public keys: ' . $e->getMessage());
             http_response_code(503);
             exit('Unable to verify identity. Please try again.');
         }
@@ -66,29 +73,10 @@ function verifyCfAccessJwt(): void
     // Allow 30 seconds of clock skew between your server and Cloudflare.
     \Firebase\JWT\JWT::$leeway = 30;
 
-    // Attempt to decode the JWT against each of Cloudflare's public keys.
-    // Cloudflare rotates keys periodically and may return multiple — we try
-    // each one until one succeeds or all fail.
-    $decoded = null;
-    $lastError = '';
-
-    foreach ($keys['keys'] as $keyData) {
-        try {
-            // Skip keys that aren't RS256 — Cloudflare may include other types.
-            if (($keyData['alg'] ?? '') !== 'RS256' && ($keyData['kty'] ?? '') !== 'RSA') {
-                continue;
-            }
-            $jwk = \Firebase\JWT\JWK::parseKey($keyData, 'RS256');
-            $decoded = \Firebase\JWT\JWT::decode($jwt, $jwk);
-            break;
-        } catch (\Throwable $e) {
-            $lastError = $e->getMessage();
-            error_log('SignalTrace: CF Access key attempt failed: ' . $lastError);
-        }
-    }
-
-    if ($decoded === null) {
-        error_log('SignalTrace: CF Access JWT validation failed: ' . $lastError);
+    try {
+        $decoded = \Firebase\JWT\JWT::decode($jwt, $keySet);
+    } catch (\Throwable $e) {
+        error_log('SignalTrace: CF Access JWT validation failed: ' . $e->getMessage());
         http_response_code(403);
         exit('Access denied: invalid or expired Cloudflare Access token.');
     }
