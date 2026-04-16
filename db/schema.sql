@@ -189,7 +189,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('threat_feed_min_confidence','suspicious'),
     ('threat_feed_min_hits',      '1'),
     ('data_retention_days',       '0'),
-    ('display_min_score',         '0'),
+    ('display_min_score',         '20'),
     ('page_size',                 '50'),
     ('webhook_url',               ''),
     ('webhook_template',          ''),
@@ -199,7 +199,9 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('auto_refresh_secs',         '0'),
     ('export_min_confidence',     'suspicious'),
     ('export_window_hours',       '168'),
-    ('export_min_score',          '0');
+    ('export_min_score',          '0'),
+    ('redirect_rate_limit_count', '10'),
+    ('redirect_rate_limit_window','60');
 
 -- ============================================================
 -- Default Skip Patterns
