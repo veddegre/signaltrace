@@ -503,7 +503,7 @@ function renderAdminPage(
 	    </div>
             <?php endif; ?>
 
-            <?php if (!empty($behavioralFlags)): ?>
+            <?php if (!empty($behavioralFlags) && $ipFilter === ''): ?>
             <?php $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1'; ?>
             <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
                 <h2 style="margin:0;">Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
