@@ -196,6 +196,11 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_code ON country_rules(country_code)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_active ON country_rules(active)");
 
+    // Migrate legacy label value — 'likely-human' was renamed to 'uncertain'.
+    $pdo->exec("UPDATE clicks SET confidence_label = 'uncertain' WHERE confidence_label = 'likely-human'");
+    // Migrate legacy settings values
+    $pdo->exec("UPDATE settings SET value = 'uncertain' WHERE key IN ('export_min_confidence', 'threat_feed_min_confidence', 'webhook_threshold') AND value = 'likely-human'");
+
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
 }
@@ -896,8 +901,8 @@ function getThreatFeedRows(PDO $pdo): array
 
     $allowedLabels = match ($minConfidence) {
         'bot'          => ['bot'],
-        'likely-human' => ['likely-human', 'suspicious', 'bot'],
-        'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
+        'uncertain' => ['uncertain', 'suspicious', 'bot'],
+        'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
         default        => ['suspicious', 'bot'],
     };
 
@@ -1058,8 +1063,8 @@ function exportClicks(
 
     $allowedLabels = match ($minConfidence) {
         'bot'          => ['bot'],
-        'likely-human' => ['likely-human', 'suspicious', 'bot'],
-        'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
+        'uncertain' => ['uncertain', 'suspicious', 'bot'],
+        'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
         default        => ['suspicious', 'bot'],
     };
 
@@ -1102,7 +1107,7 @@ function getIpSummary(PDO $pdo, string $ip): array
             MIN(confidence_score)           AS lowest_score,
             SUM(CASE WHEN confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
             SUM(CASE WHEN confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
-            SUM(CASE WHEN confidence_label = 'likely-human' THEN 1 ELSE 0 END) AS likely_human_count,
+            SUM(CASE WHEN confidence_label = 'uncertain' THEN 1 ELSE 0 END) AS uncertain_count,
             SUM(CASE WHEN confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
             MAX(ip_org)                     AS ip_org,
             MAX(ip_asn)                     AS ip_asn,
@@ -1482,12 +1487,41 @@ function deleteCountryRule(PDO $pdo, int $id): bool
  * Returns [$whereSql, $params] where $whereSql begins with " AND "
  * (safe to append after "WHERE 1=1").
  */
-function buildExportWhere(PDO $pdo, bool $manualFilters, ?string $dateFrom, ?string $dateTo): array
+function buildExportWhere(PDO $pdo, bool $manualFilters, ?string $dateFrom, ?string $dateTo, ?int $fromMs = null, ?int $toMs = null): array
 {
     $where  = '';
     $params = [];
 
-    if ($manualFilters) {
+    if ($fromMs !== null || $toMs !== null) {
+        // Grafana time range — use unix_ms for precise filtering.
+        // Keep confidence threshold applied so panels respect Settings.
+        $minConfidence = strtolower((string) getSetting($pdo, 'export_min_confidence', 'suspicious'));
+        $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
+
+        $allowedLabels = match ($minConfidence) {
+            'bot'          => ['bot'],
+            'uncertain' => ['uncertain', 'suspicious', 'bot'],
+            'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
+            default        => ['suspicious', 'bot'],
+        };
+
+        $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
+
+        if ($fromMs !== null) {
+            $where   .= " AND c.clicked_at_unix_ms >= ? ";
+            $params[] = $fromMs;
+        }
+        if ($toMs !== null) {
+            $where   .= " AND c.clicked_at_unix_ms <= ? ";
+            $params[] = $toMs;
+        }
+
+        $where .= " AND c.confidence_label IN ($placeholders) ";
+        $where .= " AND (c.confidence_score IS NULL OR c.confidence_score >= ?) ";
+
+        $params = array_merge($params, $allowedLabels, [$minScore]);
+
+    } elseif ($manualFilters) {
         // Manual date filters from the admin dashboard
         if ($dateFrom !== null && $dateFrom !== '') {
             $where .= " AND substr(c.clicked_at, 1, 10) >= :dateFrom ";
@@ -1505,8 +1539,8 @@ function buildExportWhere(PDO $pdo, bool $manualFilters, ?string $dateFrom, ?str
 
         $allowedLabels = match ($minConfidence) {
             'bot'          => ['bot'],
-            'likely-human' => ['likely-human', 'suspicious', 'bot'],
-            'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
+            'uncertain' => ['uncertain', 'suspicious', 'bot'],
+            'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
             default        => ['suspicious', 'bot'],
         };
 
@@ -1528,7 +1562,7 @@ function buildExportWhere(PDO $pdo, bool $manualFilters, ?string $dateFrom, ?str
 
 /**
  * Summary stats for the Grafana stat panels.
- * Returns total, bot_count, suspicious_count, likely_human_count,
+ * Returns total, bot_count, suspicious_count, uncertain_count,
  * human_count, unique_ips, avg_confidence_score.
  */
 function exportStats(
@@ -1536,15 +1570,17 @@ function exportStats(
     bool $manualFilters = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
+    ?int $fromMs = null,
+    ?int $toMs = null,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
 
     $sql = "
         SELECT
             COUNT(*)                                                              AS total,
             SUM(CASE WHEN c.confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
             SUM(CASE WHEN c.confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
-            SUM(CASE WHEN c.confidence_label = 'likely-human' THEN 1 ELSE 0 END) AS likely_human_count,
+            SUM(CASE WHEN c.confidence_label = 'uncertain' THEN 1 ELSE 0 END) AS uncertain_count,
             SUM(CASE WHEN c.confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
             COUNT(DISTINCT c.ip)                                                  AS unique_ips,
             ROUND(AVG(c.confidence_score), 1)                                     AS avg_confidence_score
@@ -1562,7 +1598,7 @@ function exportStats(
         'total'                => (int)   ($row['total']                ?? 0),
         'bot_count'            => (int)   ($row['bot_count']            ?? 0),
         'suspicious_count'     => (int)   ($row['suspicious_count']     ?? 0),
-        'likely_human_count'   => (int)   ($row['likely_human_count']   ?? 0),
+        'uncertain_count'   => (int)   ($row['uncertain_count']   ?? 0),
         'human_count'          => (int)   ($row['human_count']          ?? 0),
         'unique_ips'           => (int)   ($row['unique_ips']           ?? 0),
         'avg_confidence_score' => (float) ($row['avg_confidence_score'] ?? 0.0),
@@ -1579,7 +1615,7 @@ function exportByIp(
     ?string $dateTo = null,
     int $limit = 20,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
     $params[] = $limit;
 
     $sql = "
@@ -1612,7 +1648,7 @@ function exportByCountry(
     ?string $dateTo = null,
     int $limit = 20,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
     $params[] = $limit;
 
     $sql = "
@@ -1642,15 +1678,17 @@ function exportStatsExtended(
     bool $manualFilters = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
+    ?int $fromMs = null,
+    ?int $toMs = null,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
 
     $sql = "
         SELECT
             COUNT(*)                                                              AS total,
             SUM(CASE WHEN c.confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
             SUM(CASE WHEN c.confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
-            SUM(CASE WHEN c.confidence_label = 'likely-human' THEN 1 ELSE 0 END) AS likely_human_count,
+            SUM(CASE WHEN c.confidence_label = 'uncertain' THEN 1 ELSE 0 END) AS uncertain_count,
             SUM(CASE WHEN c.confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
             COUNT(DISTINCT c.ip)                                                  AS unique_ips,
             COUNT(DISTINCT c.token)                                               AS unique_tokens,
@@ -1672,7 +1710,7 @@ function exportStatsExtended(
         'total'                => $total,
         'bot_count'            => $botCount,
         'suspicious_count'     => (int)   ($row['suspicious_count']     ?? 0),
-        'likely_human_count'   => (int)   ($row['likely_human_count']   ?? 0),
+        'uncertain_count'   => (int)   ($row['uncertain_count']   ?? 0),
         'human_count'          => (int)   ($row['human_count']          ?? 0),
         'unique_ips'           => (int)   ($row['unique_ips']           ?? 0),
         'unique_tokens'        => (int)   ($row['unique_tokens']        ?? 0),
@@ -1692,7 +1730,7 @@ function exportByToken(
     int $limit = 5,
     ?string $labelFilter = null,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
 
     if ($labelFilter !== null && $labelFilter !== '') {
         $where   .= " AND c.confidence_label = ? ";
@@ -1729,7 +1767,7 @@ function exportByOrg(
     ?string $dateTo = null,
     int $limit = 5,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
     $params[] = $limit;
 
     $sql = "
@@ -1762,7 +1800,7 @@ function exportBySignal(
     ?string $dateTo = null,
     int $limit = 8,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
 
     // Pull all confidence_reason strings, explode in PHP
     $sql = "
@@ -1862,8 +1900,10 @@ function exportBehavioralSignals(
     bool $manualFilters = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
+    ?int $fromMs = null,
+    ?int $toMs = null,
 ): array {
-    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo);
+    [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
 
     $sql = "
         SELECT confidence_reason
