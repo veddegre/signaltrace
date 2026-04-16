@@ -1034,7 +1034,48 @@ function exportClicks(
     ?string $dateFrom = null,
     ?string $dateTo = null,
     int $limit = 5000,
+    ?int $fromMs = null,
+    ?int $toMs = null,
 ): array {
+    // Grafana time range — use unix_ms for precise filtering with confidence threshold.
+    if ($fromMs !== null || $toMs !== null) {
+        $minConfidence = strtolower((string) getSetting($pdo, 'export_min_confidence', 'suspicious'));
+        $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
+
+        $allowedLabels = match ($minConfidence) {
+            'bot'       => ['bot'],
+            'uncertain' => ['uncertain', 'suspicious', 'bot'],
+            'human'     => ['human', 'uncertain', 'suspicious', 'bot'],
+            default     => ['suspicious', 'bot'],
+        };
+
+        $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
+
+        $where  = '';
+        $params = [];
+
+        if ($fromMs !== null) { $where .= " AND c.clicked_at_unix_ms >= ? "; $params[] = $fromMs; }
+        if ($toMs   !== null) { $where .= " AND c.clicked_at_unix_ms <= ? "; $params[] = $toMs; }
+
+        $params = array_merge($params, $allowedLabels, [$minScore, $limit]);
+
+        $sql = "
+            SELECT c.*, l.description, l.destination
+            FROM clicks c
+            LEFT JOIN links l ON c.link_id = l.id
+            WHERE 1=1
+              $where
+              AND c.confidence_label IN ($placeholders)
+              AND (c.confidence_score IS NULL OR c.confidence_score >= ?)
+            ORDER BY c.id DESC
+            LIMIT ?
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     if ($manualFilters) {
         // Dashboard filters active — return exactly what they asked for.
         return getRecentClicksAdvancedFiltered(
@@ -1050,10 +1091,10 @@ function exportClicks(
     $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
 
     $allowedLabels = match ($minConfidence) {
-        'bot'          => ['bot'],
+        'bot'       => ['bot'],
         'uncertain' => ['uncertain', 'suspicious', 'bot'],
-        'human'        => ['human', 'uncertain', 'suspicious', 'bot'],
-        default        => ['suspicious', 'bot'],
+        'human'     => ['human', 'uncertain', 'suspicious', 'bot'],
+        default     => ['suspicious', 'bot'],
     };
 
     $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
