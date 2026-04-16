@@ -216,7 +216,6 @@ function handleUpdateLink(PDO $pdo): void
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
-    $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
 
     if ($id <= 0) {
         http_response_code(400);
@@ -245,7 +244,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -257,23 +256,49 @@ function handleUpdateLink(PDO $pdo): void
 
 function handleSaveSettings(PDO $pdo): void
 {
-    $appNameInput            = trim((string) ($_POST['app_name']            ?? 'SignalTrace'));
-    $baseUrlInput            = trim((string) ($_POST['base_url']            ?? ''));
-    $defaultRedirectUrlInput = trim((string) ($_POST['default_redirect_url'] ?? ''));
-    $unknownPathBehaviorInput = trim((string) ($_POST['unknown_path_behavior'] ?? 'redirect'));
-    $pixelEnabledInput       = isset($_POST['pixel_enabled'])       ? '1' : '0';
-    $noiseFilterEnabledInput = isset($_POST['noise_filter_enabled']) ? '1' : '0';
-    $displayMinScoreInput    = trim((string) ($_POST['display_min_score']   ?? '20'));
-    $pageSizeInput           = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
-    $autoRefreshInput        = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
-    $webhookUrlInput         = trim((string) ($_POST['webhook_url']         ?? ''));
-    $webhookTemplateInput    = trim((string) ($_POST['webhook_template']    ?? ''));
-    $webhookThresholdInput   = strtolower(trim((string) ($_POST['webhook_threshold'] ?? 'bot')));
-    $tokenWebhookUrlInput    = trim((string) ($_POST['token_webhook_url']    ?? ''));
-    $tokenWebhookTemplateInput = trim((string) ($_POST['token_webhook_template'] ?? ''));
-    $exportMinConfidenceInput = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
-    $exportWindowHoursInput  = max(1, (int) ($_POST['export_window_hours'] ?? 168));
-    $exportMinScoreInput     = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
+    // In demo mode, certain settings are locked and cannot be changed via POST.
+    // The UI renders them as read-only, but we also block at the action layer
+    // in case someone crafts a request manually.
+    $isDemo = defined('DEMO_MODE') && DEMO_MODE;
+
+    $appNameInput = $isDemo
+        ? (string) getSetting($pdo, 'app_name', 'SignalTrace')
+        : trim((string) ($_POST['app_name'] ?? 'SignalTrace'));
+
+    $baseUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'base_url', '')
+        : trim((string) ($_POST['base_url'] ?? ''));
+
+    $defaultRedirectUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'default_redirect_url', '')
+        : trim((string) ($_POST['default_redirect_url'] ?? ''));
+
+    $webhookUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'webhook_url', '')
+        : trim((string) ($_POST['webhook_url'] ?? ''));
+
+    $webhookTemplateInput = $isDemo
+        ? (string) getSetting($pdo, 'webhook_template', '')
+        : trim((string) ($_POST['webhook_template'] ?? ''));
+
+    $tokenWebhookUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'token_webhook_url', '')
+        : trim((string) ($_POST['token_webhook_url'] ?? ''));
+
+    $tokenWebhookTemplateInput = $isDemo
+        ? (string) getSetting($pdo, 'token_webhook_template', '')
+        : trim((string) ($_POST['token_webhook_template'] ?? ''));
+
+    $unknownPathBehaviorInput  = trim((string) ($_POST['unknown_path_behavior'] ?? 'redirect'));
+    $pixelEnabledInput         = isset($_POST['pixel_enabled'])       ? '1' : '0';
+    $noiseFilterEnabledInput   = isset($_POST['noise_filter_enabled']) ? '1' : '0';
+    $displayMinScoreInput      = trim((string) ($_POST['display_min_score']   ?? '20'));
+    $pageSizeInput             = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
+    $autoRefreshInput          = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
+    $webhookThresholdInput     = strtolower(trim((string) ($_POST['webhook_threshold'] ?? 'bot')));
+    $exportMinConfidenceInput  = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
+    $exportWindowHoursInput    = max(1, (int) ($_POST['export_window_hours'] ?? 168));
+    $exportMinScoreInput       = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
 
     if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
         http_response_code(400);
@@ -313,18 +338,6 @@ function handleSaveSettings(PDO $pdo): void
         exit;
     }
 
-    if (!in_array($webhookThresholdInput, ['bot', 'suspicious', 'uncertain', 'human'], true)) {
-        http_response_code(400);
-        echo 'Invalid webhook threshold value.';
-        exit;
-    }
-
-    if ($tokenWebhookUrlInput !== '' && !isSafeRedirectUrl($tokenWebhookUrlInput)) {
-        http_response_code(400);
-        echo 'Token webhook URL must be blank or a valid http/https URL.';
-        exit;
-    }
-
     if ($webhookTemplateInput !== '') {
         // Validate template produces valid JSON by substituting dummy values.
         $dummyReplacements = [
@@ -345,6 +358,18 @@ function handleSaveSettings(PDO $pdo): void
             echo 'Webhook template does not produce valid JSON. Check your template syntax.';
             exit;
         }
+    }
+
+    if (!in_array($webhookThresholdInput, ['bot', 'suspicious', 'uncertain', 'human'], true)) {
+        http_response_code(400);
+        echo 'Invalid webhook threshold value.';
+        exit;
+    }
+
+    if ($tokenWebhookUrlInput !== '' && !isSafeRedirectUrl($tokenWebhookUrlInput)) {
+        http_response_code(400);
+        echo 'Token webhook URL must be blank or a valid http/https URL.';
+        exit;
     }
 
     if ($tokenWebhookTemplateInput !== '') {
@@ -374,23 +399,23 @@ function handleSaveSettings(PDO $pdo): void
         exit;
     }
 
-    setSetting($pdo, 'app_name',             $appNameInput);
-    setSetting($pdo, 'base_url',             $baseUrlInput);
-    setSetting($pdo, 'default_redirect_url', $defaultRedirectUrlInput);
-    setSetting($pdo, 'unknown_path_behavior', $unknownPathBehaviorInput);
-    setSetting($pdo, 'pixel_enabled',        $pixelEnabledInput);
-    setSetting($pdo, 'noise_filter_enabled', $noiseFilterEnabledInput);
-    setSetting($pdo, 'display_min_score',    $displayMinScoreInput);
-    setSetting($pdo, 'page_size',            (string) $pageSizeInput);
-    setSetting($pdo, 'auto_refresh_secs',    (string) $autoRefreshInput);
-    setSetting($pdo, 'webhook_url',              $webhookUrlInput);
-    setSetting($pdo, 'webhook_template',         $webhookTemplateInput);
-    setSetting($pdo, 'webhook_threshold',        $webhookThresholdInput);
-    setSetting($pdo, 'token_webhook_url',        $tokenWebhookUrlInput);
-    setSetting($pdo, 'token_webhook_template',   $tokenWebhookTemplateInput);
-    setSetting($pdo, 'export_min_confidence', $exportMinConfidenceInput);
-    setSetting($pdo, 'export_window_hours',  (string) $exportWindowHoursInput);
-    setSetting($pdo, 'export_min_score',     (string) $exportMinScoreInput);
+    setSetting($pdo, 'app_name',                $appNameInput);
+    setSetting($pdo, 'base_url',                $baseUrlInput);
+    setSetting($pdo, 'default_redirect_url',    $defaultRedirectUrlInput);
+    setSetting($pdo, 'unknown_path_behavior',   $unknownPathBehaviorInput);
+    setSetting($pdo, 'pixel_enabled',           $pixelEnabledInput);
+    setSetting($pdo, 'noise_filter_enabled',    $noiseFilterEnabledInput);
+    setSetting($pdo, 'display_min_score',       $displayMinScoreInput);
+    setSetting($pdo, 'page_size',               (string) $pageSizeInput);
+    setSetting($pdo, 'auto_refresh_secs',       (string) $autoRefreshInput);
+    setSetting($pdo, 'webhook_url',             $webhookUrlInput);
+    setSetting($pdo, 'webhook_template',        $webhookTemplateInput);
+    setSetting($pdo, 'webhook_threshold',       $webhookThresholdInput);
+    setSetting($pdo, 'token_webhook_url',       $tokenWebhookUrlInput);
+    setSetting($pdo, 'token_webhook_template',  $tokenWebhookTemplateInput);
+    setSetting($pdo, 'export_min_confidence',   $exportMinConfidenceInput);
+    setSetting($pdo, 'export_window_hours',     (string) $exportWindowHoursInput);
+    setSetting($pdo, 'export_min_score',        (string) $exportMinScoreInput);
 
     header('Location: /admin', true, 302);
     exit;
@@ -447,7 +472,6 @@ function handleCreateLink(PDO $pdo): void
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
-    $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -469,7 +493,7 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed);
         header('Location: /admin', true, 302);
         exit;
     } catch (Throwable $e) {
