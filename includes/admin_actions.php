@@ -443,6 +443,11 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
 
 function handleSaveRetentionSettings(PDO $pdo): void
 {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+
     $retentionDaysInput = max(0, (int) ($_POST['data_retention_days'] ?? 0));
 
     setSetting($pdo, 'data_retention_days', (string) $retentionDaysInput);
@@ -453,6 +458,11 @@ function handleSaveRetentionSettings(PDO $pdo): void
 
 function handleRunCleanup(PDO $pdo): void
 {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+
     $days = (int) getSetting($pdo, 'data_retention_days', '0');
 
     if ($days <= 0) {
