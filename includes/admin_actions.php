@@ -54,6 +54,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleSaveRetentionSettings($pdo);
             return true;
 
+        case '/admin/save-rate-limit-settings':
+            requireAdminAuth();
+            handleSaveRateLimitSettings($pdo);
+            return true;
+
         case '/admin/run-cleanup':
             requireAdminAuth();
             handleRunCleanup($pdo);
@@ -299,8 +304,6 @@ function handleSaveSettings(PDO $pdo): void
     $exportMinConfidenceInput  = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
     $exportWindowHoursInput    = max(1, (int) ($_POST['export_window_hours'] ?? 168));
     $exportMinScoreInput       = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
-    $redirectRateLimitCount    = max(0, (int) ($_POST['redirect_rate_limit_count']  ?? 10));
-    $redirectRateLimitWindow   = max(0, (int) ($_POST['redirect_rate_limit_window'] ?? 60));
 
     if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
         http_response_code(400);
@@ -418,8 +421,6 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'export_min_confidence',   $exportMinConfidenceInput);
     setSetting($pdo, 'export_window_hours',     (string) $exportWindowHoursInput);
     setSetting($pdo, 'export_min_score',        (string) $exportMinScoreInput);
-    setSetting($pdo, 'redirect_rate_limit_count',  (string) $redirectRateLimitCount);
-    setSetting($pdo, 'redirect_rate_limit_window', (string) $redirectRateLimitWindow);
 
     header('Location: /admin', true, 302);
     exit;
@@ -455,6 +456,23 @@ function handleSaveRetentionSettings(PDO $pdo): void
     $retentionDaysInput = max(0, (int) ($_POST['data_retention_days'] ?? 0));
 
     setSetting($pdo, 'data_retention_days', (string) $retentionDaysInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleSaveRateLimitSettings(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+
+    $count  = max(0, (int) ($_POST['redirect_rate_limit_count']  ?? 10));
+    $window = max(0, (int) ($_POST['redirect_rate_limit_window'] ?? 60));
+
+    setSetting($pdo, 'redirect_rate_limit_count',  (string) $count);
+    setSetting($pdo, 'redirect_rate_limit_window', (string) $window);
 
     header('Location: /admin', true, 302);
     exit;
