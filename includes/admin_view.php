@@ -66,8 +66,8 @@ function signalLabel(string $signal): ?string
 }
 
 /**
- * Renders a confidence_reason string as a styled list of signals
- * with friendly labels and raw names shown in muted text.
+ * Renders a confidence_reason string as compact signal tags.
+ * Friendly label is shown; raw signal name appears as a tooltip on hover.
  */
 function renderSignalReasons(string $reasons): string
 {
@@ -79,17 +79,27 @@ function renderSignalReasons(string $reasons): string
     foreach ($signals as $signal) {
         if ($signal === '') continue;
         $label = signalLabel($signal);
-        if ($label !== null) {
-            $parts[] = '<span class="signal-label">'
-                . h($label)
-                . ' <span class="signal-raw">(' . h($signal) . ')</span>'
-                . '</span>';
+
+        // Determine tag style based on signal type
+        if (in_array($signal, ['get_request', 'browser_ua', 'sec_fetch_navigate', 'accept_language_present', 'referer_present'], true)) {
+            $class = 'signal-tag signal-tag--positive';
+        } elseif (in_array($signal, ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'], true)) {
+            $class = 'signal-tag signal-tag--behavioral';
+        } elseif (str_starts_with($signal, 'path:') || str_starts_with($signal, 'country_penalty:') || str_starts_with($signal, 'asn_rule:') || str_starts_with($signal, 'ip_override:')) {
+            $class = 'signal-tag signal-tag--rule';
         } else {
-            $parts[] = '<span class="signal-label signal-unknown">' . h($signal) . '</span>';
+            $class = 'signal-tag signal-tag--negative';
         }
+
+        $display = $label ?? $signal;
+        $title   = $label !== null ? h($signal) : '';
+
+        $parts[] = '<span class="' . $class . '"'
+            . ($title !== '' ? ' title="' . $title . '"' : '')
+            . '>' . h($display) . '</span>';
     }
 
-    return implode('', $parts);
+    return '<div class="signal-tag-list">' . implode('', $parts) . '</div>';
 }
 
 function renderAdminPage(
@@ -763,7 +773,7 @@ function renderAdminPage(
                         }
                         ?>
 					<div><span class="mono">Classification:</span> <?= h((string) ($c['confidence_label'] ?? '')) ?> (<?= h((string) ($c['confidence_score'] ?? '')) ?>)</div>
-                                        <div><span class="mono">Reason:</span> <div class="signal-list"><?= renderSignalReasons((string) ($c['confidence_reason'] ?? '')) ?></div></div>
+                                        <div><span class="mono">Reason:</span> <?= renderSignalReasons((string) ($c['confidence_reason'] ?? '')) ?></div>
                                         <div><span class="mono">First for token:</span> <?= !empty($c['first_for_token']) ? 'Yes' : 'No' ?></div>
                                         <div><span class="mono">Prior events for token:</span> <?= h((string) ($c['prior_events_for_token'] ?? '0')) ?></div>
                                     </div>
