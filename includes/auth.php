@@ -116,6 +116,17 @@ function requireAdminAuth(): void
     // No-op when CF_ACCESS_ENABLED is false or DEMO_MODE is true.
     verifyCfAccessJwt();
 
+    // If CF Access is enabled and verification passed, skip Basic Auth entirely.
+    // CF Access with MFA already provides strong identity assurance.
+    if (defined('CF_ACCESS_ENABLED') && CF_ACCESS_ENABLED
+        && !(defined('DEMO_MODE') && DEMO_MODE)) {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        $_SESSION['admin_authenticated'] = true;
+        return;
+    }
+
     $pdo = db();
     // SECURITY: Use getClientIp() so the lockout IP matches the IP recorded
     // everywhere else — important when behind a trusted proxy.
