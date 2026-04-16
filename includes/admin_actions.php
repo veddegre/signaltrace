@@ -299,6 +299,8 @@ function handleSaveSettings(PDO $pdo): void
     $exportMinConfidenceInput  = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
     $exportWindowHoursInput    = max(1, (int) ($_POST['export_window_hours'] ?? 168));
     $exportMinScoreInput       = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
+    $redirectRateLimitCount    = max(0, (int) ($_POST['redirect_rate_limit_count']  ?? 10));
+    $redirectRateLimitWindow   = max(0, (int) ($_POST['redirect_rate_limit_window'] ?? 60));
 
     if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
         http_response_code(400);
@@ -416,6 +418,8 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'export_min_confidence',   $exportMinConfidenceInput);
     setSetting($pdo, 'export_window_hours',     (string) $exportWindowHoursInput);
     setSetting($pdo, 'export_min_score',        (string) $exportMinScoreInput);
+    setSetting($pdo, 'redirect_rate_limit_count',  (string) $redirectRateLimitCount);
+    setSetting($pdo, 'redirect_rate_limit_window', (string) $redirectRateLimitWindow);
 
     header('Location: /admin', true, 302);
     exit;
