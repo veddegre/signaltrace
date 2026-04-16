@@ -1,798 +1,250 @@
 {
-  "title": "SignalTrace Overview \u2014 Infinity",
+  "title": "SignalTrace Overview",
   "uid": "signaltrace-infinity",
   "schemaVersion": 38,
-  "version": 12,
+  "version": 11,
   "refresh": "1m",
-  "time": {
-    "from": "now-168h",
-    "to": "now"
-  },
-  "tags": [
-    "signaltrace",
-    "security"
-  ],
+  "time": { "from": "now-168h", "to": "now" },
+  "tags": ["signaltrace", "security"],
   "panels": [
     {
       "id": 1,
       "title": "Total Events",
       "type": "stat",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/^total$/",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "blue"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/stats",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "total",
-              "text": "total",
-              "type": "number"
-            },
-            {
-              "selector": "bot_count",
-              "text": "bot_count",
-              "type": "number"
-            },
-            {
-              "selector": "suspicious_count",
-              "text": "suspicious_count",
-              "type": "number"
-            },
-            {
-              "selector": "likely_human_count",
-              "text": "likely_human_count",
-              "type": "number"
-            },
-            {
-              "selector": "human_count",
-              "text": "human_count",
-              "type": "number"
-            },
-            {
-              "selector": "unique_ips",
-              "text": "unique_ips",
-              "type": "number"
-            },
-            {
-              "selector": "avg_confidence_score",
-              "text": "avg_confidence_score",
-              "type": "number"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^total$/", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#4f78f1" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"total","text":"total","type":"number"},{"selector":"bot_count","text":"bot_count","type":"number"},{"selector":"suspicious_count","text":"suspicious_count","type":"number"},{"selector":"likely_human_count","text":"likely_human_count","type":"number"},{"selector":"human_count","text":"human_count","type":"number"},{"selector":"unique_ips","text":"unique_ips","type":"number"},{"selector":"unique_tokens","text":"unique_tokens","type":"number"},{"selector":"avg_confidence_score","text":"avg_confidence_score","type":"number"},{"selector":"bot_pct","text":"bot_pct","type":"number"}], "format": "table" }],
       "transformations": []
     },
     {
       "id": 2,
       "title": "Bot Events",
       "type": "stat",
-      "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/^bot_count$/",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/stats",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "total",
-              "text": "total",
-              "type": "number"
-            },
-            {
-              "selector": "bot_count",
-              "text": "bot_count",
-              "type": "number"
-            },
-            {
-              "selector": "suspicious_count",
-              "text": "suspicious_count",
-              "type": "number"
-            },
-            {
-              "selector": "likely_human_count",
-              "text": "likely_human_count",
-              "type": "number"
-            },
-            {
-              "selector": "human_count",
-              "text": "human_count",
-              "type": "number"
-            },
-            {
-              "selector": "unique_ips",
-              "text": "unique_ips",
-              "type": "number"
-            },
-            {
-              "selector": "avg_confidence_score",
-              "text": "avg_confidence_score",
-              "type": "number"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^bot_count$/", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#ef4444" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"total","text":"total","type":"number"},{"selector":"bot_count","text":"bot_count","type":"number"},{"selector":"bot_pct","text":"bot_pct","type":"number"},{"selector":"unique_ips","text":"unique_ips","type":"number"},{"selector":"unique_tokens","text":"unique_tokens","type":"number"},{"selector":"avg_confidence_score","text":"avg_confidence_score","type":"number"}], "format": "table" }],
       "transformations": []
     },
     {
       "id": 3,
-      "title": "Unique IPs",
+      "title": "Bot %",
       "type": "stat",
-      "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/^unique_ips$/",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "green"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/stats",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "total",
-              "text": "total",
-              "type": "number"
-            },
-            {
-              "selector": "bot_count",
-              "text": "bot_count",
-              "type": "number"
-            },
-            {
-              "selector": "suspicious_count",
-              "text": "suspicious_count",
-              "type": "number"
-            },
-            {
-              "selector": "likely_human_count",
-              "text": "likely_human_count",
-              "type": "number"
-            },
-            {
-              "selector": "human_count",
-              "text": "human_count",
-              "type": "number"
-            },
-            {
-              "selector": "unique_ips",
-              "text": "unique_ips",
-              "type": "number"
-            },
-            {
-              "selector": "avg_confidence_score",
-              "text": "avg_confidence_score",
-              "type": "number"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^bot_pct$/", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#f59e0b" }, "unit": "percent", "decimals": 1 }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"bot_pct","text":"bot_pct","type":"number"}], "format": "table" }],
       "transformations": []
     },
     {
       "id": 4,
-      "title": "Avg Confidence Score",
+      "title": "Unique IPs",
       "type": "stat",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/^avg_confidence_score$/",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "blue"
-          },
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/stats",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "total",
-              "text": "total",
-              "type": "number"
-            },
-            {
-              "selector": "bot_count",
-              "text": "bot_count",
-              "type": "number"
-            },
-            {
-              "selector": "suspicious_count",
-              "text": "suspicious_count",
-              "type": "number"
-            },
-            {
-              "selector": "likely_human_count",
-              "text": "likely_human_count",
-              "type": "number"
-            },
-            {
-              "selector": "human_count",
-              "text": "human_count",
-              "type": "number"
-            },
-            {
-              "selector": "unique_ips",
-              "text": "unique_ips",
-              "type": "number"
-            },
-            {
-              "selector": "avg_confidence_score",
-              "text": "avg_confidence_score",
-              "type": "number"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^unique_ips$/", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#22c55e" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"unique_ips","text":"unique_ips","type":"number"}], "format": "table" }],
       "transformations": []
     },
     {
       "id": 5,
-      "title": "Confidence Label Distribution",
-      "type": "piechart",
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "pieType": "donut",
-        "legend": {
-          "displayMode": "table",
-          "placement": "right"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "bot_count"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#ef4444"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "bot"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "suspicious_count"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#f59e0b"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "suspicious"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "likely_human_count"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#38bdf8"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "likely-human"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "human_count"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#22c55e"
-                }
-              },
-              {
-                "id": "displayName",
-                "value": "human"
-              }
-            ]
-          }
-        ]
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/stats",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "bot_count",
-              "text": "bot_count",
-              "type": "number"
-            },
-            {
-              "selector": "suspicious_count",
-              "text": "suspicious_count",
-              "type": "number"
-            },
-            {
-              "selector": "likely_human_count",
-              "text": "likely_human_count",
-              "type": "number"
-            },
-            {
-              "selector": "human_count",
-              "text": "human_count",
-              "type": "number"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "title": "Unique Tokens",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^unique_tokens$/", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#a78bfa" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"unique_tokens","text":"unique_tokens","type":"number"}], "format": "table" }],
       "transformations": []
     },
     {
       "id": 6,
-      "title": "Top Source IPs",
-      "type": "bargauge",
-      "gridPos": {
-        "x": 0,
-        "y": 4,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/^hits$/",
-          "values": true
-        },
-        "displayMode": "gradient",
-        "valueMode": "color",
-        "showUnfilled": true,
-        "legend": {
-          "displayMode": "hidden"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#38bdf8"
-          },
-          "custom": {
-            "axisPlacement": "auto"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/by-ip?limit=10",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "ip",
-              "text": "ip",
-              "type": "string"
-            },
-            {
-              "selector": "hits",
-              "text": "hits",
-              "type": "number"
-            },
-            {
-              "selector": "ip_country",
-              "text": "ip_country",
-              "type": "string"
-            },
-            {
-              "selector": "ip_org",
-              "text": "ip_org",
-              "type": "string"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "title": "Avg Confidence Score",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^avg_confidence_score$/", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#06b6d4" }, "decimals": 1 }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"avg_confidence_score","text":"avg_confidence_score","type":"number"}], "format": "table" }],
       "transformations": []
     },
     {
       "id": 7,
-      "title": "Top Countries",
-      "type": "bargauge",
-      "gridPos": {
-        "x": 8,
-        "y": 4,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
+      "title": "Events Over Time by Confidence Label",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
       "options": {
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/^hits$/",
-          "values": true
-        },
-        "displayMode": "gradient",
-        "valueMode": "color",
-        "showUnfilled": true,
-        "legend": {
-          "displayMode": "hidden"
-        }
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
       },
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#a78bfa"
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "bot" },          "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#ef4444" } }] },
+          { "matcher": { "id": "byName", "options": "suspicious" },   "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f59e0b" } }] },
+          { "matcher": { "id": "byName", "options": "likely-human" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }] },
+          { "matcher": { "id": "byName", "options": "human" },        "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#22c55e" } }] }
+        ]
+      },
+      "targets": [{
+        "refId": "A",
+        "type": "json",
+        "source": "url",
+        "url": "${SIGNALTRACE_URL}/export/over-time?from=${__from}&to=${__to}",
+        "url_options": { "method": "GET", "headers": [] },
+        "parser": "backend",
+        "root_selector": "",
+        "columns": [
+          { "selector": "bucket", "text": "bucket", "type": "timestamp" },
+          { "selector": "label",  "text": "label",  "type": "string" },
+          { "selector": "hits",   "text": "hits",   "type": "number" }
+        ],
+        "format": "table"
+      }],
+      "transformations": [
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "bucket": { "aggregations": [], "operation": "groupby" },
+              "label":  { "aggregations": [], "operation": "groupby" },
+              "hits":   { "aggregations": ["sum"], "operation": "aggregate" }
+            }
           }
         },
-        "overrides": []
-      },
-      "targets": [
         {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/by-country?limit=10",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "country",
-              "text": "country",
-              "type": "string"
-            },
-            {
-              "selector": "hits",
-              "text": "hits",
-              "type": "number"
-            }
-          ],
-          "format": "table"
+          "id": "partitionByValues",
+          "options": { "fields": ["label"] }
         }
-      ],
-      "transformations": []
+      ]
     },
     {
       "id": 8,
-      "title": "Recent Events",
-      "type": "table",
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 24,
-        "h": 10
-      },
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "${DS_INFINITY}"
-      },
-      "options": {
-        "sortBy": [
-          {
-            "displayName": "Time",
-            "desc": true
-          }
-        ]
-      },
+      "title": "Confidence Label Distribution",
+      "type": "piechart",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "pieType": "donut", "legend": { "displayMode": "table", "placement": "right" } },
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Label"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "bot": {
-                        "color": "#ef4444",
-                        "index": 0
-                      }
-                    }
-                  },
-                  {
-                    "type": "value",
-                    "options": {
-                      "suspicious": {
-                        "color": "#f59e0b",
-                        "index": 1
-                      }
-                    }
-                  },
-                  {
-                    "type": "value",
-                    "options": {
-                      "likely-human": {
-                        "color": "#38bdf8",
-                        "index": 2
-                      }
-                    }
-                  },
-                  {
-                    "type": "value",
-                    "options": {
-                      "human": {
-                        "color": "#22c55e",
-                        "index": 3
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
-          }
+          { "matcher": { "id": "byName", "options": "bot_count" },          "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#ef4444" } }, { "id": "displayName", "value": "bot" }] },
+          { "matcher": { "id": "byName", "options": "suspicious_count" },   "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f59e0b" } }, { "id": "displayName", "value": "suspicious" }] },
+          { "matcher": { "id": "byName", "options": "likely_human_count" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }, { "id": "displayName", "value": "likely-human" }] },
+          { "matcher": { "id": "byName", "options": "human_count" },        "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#22c55e" } }, { "id": "displayName", "value": "human" }] }
         ]
       },
-      "targets": [
-        {
-          "refId": "A",
-          "type": "json",
-          "source": "url",
-          "url": "${SIGNALTRACE_URL}/export/json",
-          "url_options": {
-            "method": "GET",
-            "headers": []
-          },
-          "parser": "backend",
-          "root_selector": "",
-          "columns": [
-            {
-              "selector": "clicked_at",
-              "text": "Time",
-              "type": "string"
-            },
-            {
-              "selector": "ip",
-              "text": "IP",
-              "type": "string"
-            },
-            {
-              "selector": "ip_country",
-              "text": "Country",
-              "type": "string"
-            },
-            {
-              "selector": "ip_org",
-              "text": "Org",
-              "type": "string"
-            },
-            {
-              "selector": "confidence_label",
-              "text": "Label",
-              "type": "string"
-            },
-            {
-              "selector": "confidence_score",
-              "text": "Score",
-              "type": "number"
-            },
-            {
-              "selector": "token",
-              "text": "Token",
-              "type": "string"
-            },
-            {
-              "selector": "user_agent",
-              "text": "User Agent",
-              "type": "string"
-            }
-          ],
-          "format": "table"
-        }
-      ],
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/stats/extended", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"bot_count","text":"bot_count","type":"number"},{"selector":"suspicious_count","text":"suspicious_count","type":"number"},{"selector":"likely_human_count","text":"likely_human_count","type":"number"},{"selector":"human_count","text":"human_count","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 9,
+      "title": "Top Source IPs",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^hits$/", "values": true }, "showUnfilled": true },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#38bdf8" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/by-ip?limit=5", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"ip","text":"ip","type":"string"},{"selector":"hits","text":"hits","type":"number"},{"selector":"ip_country","text":"ip_country","type":"string"},{"selector":"ip_org","text":"ip_org","type":"string"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 10,
+      "title": "Traffic by Country",
+      "type": "bargauge",
+      "gridPos": { "x": 8, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^hits$/", "values": true }, "showUnfilled": true },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#a78bfa" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/by-country?limit=5", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"country","text":"country","type":"string"},{"selector":"hits","text":"hits","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 11,
+      "title": "Top ASN Organizations",
+      "type": "table",
+      "gridPos": { "x": 16, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "sortBy": [{ "displayName": "hits", "desc": true }] },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/by-org?limit=5", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"org","text":"org","type":"string"},{"selector":"asn","text":"asn","type":"string"},{"selector":"hits","text":"hits","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 12,
+      "title": "Top Tokens / Paths",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 7 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^hits$/", "values": true }, "showUnfilled": true },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#8b5cf6" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/by-token?limit=5", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"token","text":"token","type":"string"},{"selector":"hits","text":"hits","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 13,
+      "title": "Top Bot-Classified Tokens",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 7 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^hits$/", "values": true }, "showUnfilled": true },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#ef4444" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/by-token?limit=5&label=bot", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"token","text":"token","type":"string"},{"selector":"hits","text":"hits","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 14,
+      "title": "Top Detection Signals",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 27, "w": 14, "h": 7 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^hits$/", "values": true }, "showUnfilled": true },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#a78bfa" } }, "overrides": [] },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/by-signal?limit=8", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"signal","text":"signal","type":"string"},{"selector":"hits","text":"hits","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 15,
+      "title": "Behavioral Signal Hits",
+      "type": "bargauge",
+      "gridPos": { "x": 14, "y": 27, "w": 10, "h": 7 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^hits$/", "values": true }, "showUnfilled": true },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#f59e0b" } },
+        "overrides": []
+      },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/behavioral-signals", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"signal","text":"signal","type":"string"},{"selector":"hits","text":"hits","type":"number"}], "format": "table" }],
+      "transformations": []
+    },
+    {
+      "id": 16,
+      "title": "Recent Events",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 10 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "options": { "sortBy": [{ "displayName": "Time", "desc": true }] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Label" }, "properties": [
+            { "id": "custom.displayMode", "value": "color-background" },
+            { "id": "mappings", "value": [
+              { "type": "value", "options": { "bot":          { "color": "#ef4444", "index": 0 } } },
+              { "type": "value", "options": { "suspicious":   { "color": "#f59e0b", "index": 1 } } },
+              { "type": "value", "options": { "likely-human": { "color": "#38bdf8", "index": 2 } } },
+              { "type": "value", "options": { "human":        { "color": "#22c55e", "index": 3 } } }
+            ]}
+          ]}
+        ]
+      },
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "${SIGNALTRACE_URL}/export/json", "url_options": { "method": "GET", "headers": [] }, "parser": "backend", "root_selector": "", "columns": [{"selector":"clicked_at","text":"Time","type":"string"},{"selector":"ip","text":"IP","type":"string"},{"selector":"ip_country","text":"Country","type":"string"},{"selector":"ip_org","text":"Org","type":"string"},{"selector":"confidence_label","text":"Label","type":"string"},{"selector":"confidence_score","text":"Score","type":"number"},{"selector":"token","text":"Token","type":"string"},{"selector":"user_agent","text":"User Agent","type":"string"}], "format": "table" }],
       "transformations": []
     }
   ],
@@ -804,10 +256,7 @@
         "pluginId": "yesoreyeram-infinity-datasource",
         "label": "Infinity Datasource",
         "hide": 0,
-        "current": {
-          "text": "SignalTrace Infinity",
-          "value": "SignalTrace Infinity"
-        },
+        "current": { "text": "SignalTrace Infinity", "value": "SignalTrace Infinity" },
         "regex": "SignalTrace Infinity"
       },
       {
