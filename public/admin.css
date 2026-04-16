@@ -956,3 +956,33 @@ tr:hover td { background: var(--surface-alt); }
     .page-header .header-tag { display: none; }
     .header-logo { display: none; }
 }
+
+
+/* ============================================================
+   SIGNAL REASON LABELS (details panel scoring section)
+   ============================================================ */
+.signal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 4px;
+}
+
+.signal-label {
+    display: block;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.signal-raw {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.signal-unknown {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
