@@ -1432,6 +1432,16 @@ function renderAdminPage(
                         <?php endforeach; ?>
                     </div>
 
+                    <?php if ($isDemo): ?>
+                        <div>
+                            <h2>Data Retention</h2>
+                            <p class="muted demo-lock-note">Not available in demo mode. The database resets automatically on a schedule.</p>
+                        </div>
+                        <div>
+                            <h2>Manual Cleanup</h2>
+                            <p class="muted demo-lock-note">Not available in demo mode.</p>
+                        </div>
+                    <?php else: ?>
                     <form method="post" action="/admin/save-retention-settings">
                         <h2>Data Retention</h2>
 
@@ -1450,6 +1460,7 @@ function renderAdminPage(
                         <p class="muted">Run cleanup now using the saved retention setting.</p>
                         <button type="submit" class="warning-button">Run Cleanup Now</button>
                     </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
