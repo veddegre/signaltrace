@@ -1346,6 +1346,14 @@ function renderAdminPage(
 		   </div>
 		   <?php endif; ?>
 
+		   <label for="redirect_rate_limit_count">Redirect Rate Limit (requests)</label>
+		   <input id="redirect_rate_limit_count" type="number" min="0" name="redirect_rate_limit_count" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_count', '10')) ?>">
+		   <p class="muted">Maximum number of redirects allowed from a single IP to the same token within the window below. Applies to known tokens only. Set to 0 to disable.</p>
+
+		   <label for="redirect_rate_limit_window">Redirect Rate Limit Window (seconds)</label>
+		   <input id="redirect_rate_limit_window" type="number" min="0" name="redirect_rate_limit_window" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_window', '60')) ?>">
+		   <p class="muted">Time window in seconds for the rate limit above. Hits are still logged when the limit is exceeded — only the redirect response is blocked (429).</p>
+
                     <button type="submit">Save Settings</button>
                 </form>
 
