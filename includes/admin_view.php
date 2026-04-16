@@ -590,7 +590,7 @@ function renderAdminPage(
                     <div>
                         <div><span class="mono">Bot hits:</span>          <?= (int) ($ipSummary['bot_count']          ?? 0) ?></div>
                         <div><span class="mono">Suspicious hits:</span>   <?= (int) ($ipSummary['suspicious_count']   ?? 0) ?></div>
-                        <div><span class="mono">Likely-human hits:</span> <?= (int) ($ipSummary['likely_human_count'] ?? 0) ?></div>
+                        <div><span class="mono">Uncertain hits:</span> <?= (int) ($ipSummary['uncertain_count'] ?? 0) ?></div>
                         <div><span class="mono">Human hits:</span>        <?= (int) ($ipSummary['human_count']        ?? 0) ?></div>
                     </div>
                     <div>
@@ -671,7 +671,7 @@ function renderAdminPage(
                         $confidenceLabel = (string) ($c['confidence_label'] ?? '');
                         $badgeClass = match ($confidenceLabel) {
                             'human'        => 'badge badge-human',
-                            'likely-human' => 'badge badge-likely-human',
+                            'uncertain' => 'badge badge-uncertain',
                             'suspicious'   => 'badge badge-suspicious',
                             'bot'          => 'badge badge-bot',
                             default        => 'badge',
@@ -1449,7 +1449,7 @@ function renderAdminPage(
 		       <?php $webhookThreshold = (string) getSetting($pdo, 'webhook_threshold', 'bot'); ?>
 		       <option value="bot"          <?= $webhookThreshold === 'bot'          ? 'selected' : '' ?>>bot only</option>
 		       <option value="suspicious"   <?= $webhookThreshold === 'suspicious'   ? 'selected' : '' ?>>suspicious and above</option>
-		       <option value="likely-human" <?= $webhookThreshold === 'likely-human' ? 'selected' : '' ?>>likely-human and above</option>
+		       <option value="uncertain" <?= $webhookThreshold === 'uncertain' ? 'selected' : '' ?>>uncertain and above</option>
 		       <option value="human"        <?= $webhookThreshold === 'human'        ? 'selected' : '' ?>>all hits</option>
 		   </select>
 		   <p class="muted">Minimum classification to trigger the threat webhook. Does not apply to known token hits — those use the token webhook below.</p>
@@ -1477,7 +1477,7 @@ function renderAdminPage(
 		   <label for="export_min_confidence">Export Minimum Confidence</label>
 		   <select id="export_min_confidence" name="export_min_confidence">
 		       <option value="human"        <?= $exportMinConf === 'human'        ? 'selected' : '' ?>>human</option>
-		       <option value="likely-human" <?= $exportMinConf === 'likely-human' ? 'selected' : '' ?>>likely-human</option>
+		       <option value="uncertain" <?= $exportMinConf === 'uncertain' ? 'selected' : '' ?>>uncertain</option>
 		       <option value="suspicious"   <?= $exportMinConf === 'suspicious'   ? 'selected' : '' ?>>suspicious</option>
 		       <option value="bot"          <?= $exportMinConf === 'bot'          ? 'selected' : '' ?>>bot</option>
 		   </select>
@@ -1524,7 +1524,7 @@ function renderAdminPage(
                         <label for="threat_feed_min_confidence">Minimum confidence to include</label>
                         <select id="threat_feed_min_confidence" name="threat_feed_min_confidence">
                             <option value="human" <?= $threatFeedMinConfidence === 'human' ? 'selected' : '' ?>>human</option>
-                            <option value="likely-human" <?= $threatFeedMinConfidence === 'likely-human' ? 'selected' : '' ?>>likely-human</option>
+                            <option value="uncertain" <?= $threatFeedMinConfidence === 'uncertain' ? 'selected' : '' ?>>uncertain</option>
                             <option value="suspicious" <?= $threatFeedMinConfidence === 'suspicious' ? 'selected' : '' ?>>suspicious</option>
                             <option value="bot" <?= $threatFeedMinConfidence === 'bot' ? 'selected' : '' ?>>bot</option>
                         </select>
