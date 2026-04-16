@@ -1,5 +1,3 @@
-# SignalTrace Tracking & Analysis
-
 <p align="center"> 
   <img src="docs/images/signaltrace_transparent.png" alt="SignalTrace — Signal Trace Tracking & Analysis" width="160"> 
 </p> 
@@ -81,8 +79,8 @@ SignalTrace processes every request in real time:
 ### Dashboard
 
 <p align="center"> 
-  <img src="docs/images/dashboard-dark.webp?v=2.4.1" alt="SignalTrace dashboard — dark mode, showing activity feed with behaviorally flagged IPs panel" width="49%"> 
-  <img src="docs/images/dashboard-light.webp?v=2.4.1" alt="SignalTrace dashboard — light mode" width="49%"> 
+  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard — dark mode, showing activity feed with behaviorally flagged IPs panel" width="49%"> 
+  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard — light mode" width="49%"> 
 </p>
 
 <p align="center">
@@ -92,7 +90,7 @@ SignalTrace processes every request in real time:
 ### Event Details
 
 <p align="center"> 
-  <img src="docs/images/details.webp?v=2.4.1" alt="SignalTrace event details — full request breakdown with scoring signals and actions" width="80%"> 
+  <img src="docs/images/details.webp" alt="SignalTrace event details — full request breakdown with scoring signals and actions" width="80%"> 
 </p>
 
 <p align="center">
@@ -102,8 +100,8 @@ SignalTrace processes every request in real time:
 ### Token & Rule Management
 
 <p align="center"> 
-  <img src="docs/images/tokens.webp?v=2.4.1" alt="SignalTrace token management — create and manage tracked tokens with feed exclusion" width="49%"> 
-  <img src="docs/images/skip.webp?v=2.4.1" alt="SignalTrace skip patterns — suppress known-noise paths from logging" width="49%"> 
+  <img src="docs/images/tokens.webp" alt="SignalTrace token management — create and manage tracked tokens with feed exclusion" width="49%"> 
+  <img src="docs/images/skip.webp" alt="SignalTrace skip patterns — suppress known-noise paths from logging" width="49%"> 
 </p>
 
 <p align="center">
@@ -111,8 +109,8 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/asn.webp?v=2.4.1" alt="SignalTrace ASN rules — apply scoring penalties and feed exclusions by autonomous system" width="49%"> 
-  <img src="docs/images/country.webp?v=2.4.1" alt="SignalTrace country rules — apply score penalties by country code" width="49%"> 
+  <img src="docs/images/asn.webp" alt="SignalTrace ASN rules — apply scoring penalties and feed exclusions by autonomous system" width="49%"> 
+  <img src="docs/images/country.webp" alt="SignalTrace country rules — apply score penalties by country code" width="49%"> 
 </p>
 
 <p align="center">
@@ -120,7 +118,7 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/ip.webp?v=2.4.1" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
+  <img src="docs/images/ip.webp" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
 </p>
 
 <p align="center">
@@ -130,8 +128,8 @@ SignalTrace processes every request in real time:
 ### Splunk Dashboards
 
 <p align="center"> 
-  <img src="docs/images/splunk.webp?v=2.4.1" alt="SignalTrace Splunk Overview dashboard — SOC display with stat panels, events over time, top IPs, detection signals" width="49%"> 
-  <img src="docs/images/splunk2.webp?v=2.4.1" alt="SignalTrace Splunk Event Investigation dashboard — filterable event table with token, IP, country, and signal filters" width="49%"> 
+  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk Overview dashboard — SOC display with stat panels, events over time, top IPs, detection signals" width="49%"> 
+  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk Event Investigation dashboard — filterable event table with token, IP, country, and signal filters" width="49%"> 
 </p>
 
 <p align="center">
@@ -141,7 +139,7 @@ SignalTrace processes every request in real time:
 ### Grafana Dashboard
 
 <p align="center"> 
-  <img src="docs/images/grafana.webp?v=2.4.1" alt="SignalTrace Grafana dashboard — stat panels, confidence label distribution, top source IPs, top countries, and recent events table" width="80%"> 
+  <img src="docs/images/grafana.webp" alt="SignalTrace Grafana dashboard — stat panels, confidence label distribution, top source IPs, top countries, and recent events table" width="80%"> 
 </p>
 
 <p align="center">
@@ -375,6 +373,8 @@ The app includes two Dashboard Studio dashboards:
 
 A pre-built Grafana dashboard is included at `grafana/signaltrace-dashboard.json`. It uses the [Infinity datasource](https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/) and requires no transformations — all aggregation is handled server-side via dedicated endpoints.
 
+The dashboard includes 16 panels: six stat panels (Total Events, Bot Events, Bot %, Unique IPs, Unique Tokens, Avg Confidence Score), Events Over Time with adaptive time bucketing, Confidence Label Distribution donut, Top Source IPs, Traffic by Country, Top ASN Organizations, Top Tokens, Top Bot-Classified Tokens, Top Detection Signals, Behavioral Signal Hits, and Recent Events.
+
 Configure your Infinity datasource with a Bearer token and your SignalTrace domain as an allowed host, then import the dashboard JSON. Two variables are prompted on import: the Infinity datasource and your SignalTrace base URL.
 
 See the [Grafana Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Grafana-Integration) for full setup instructions.
@@ -400,17 +400,19 @@ Paths associated with common probes carry their own penalties. High-risk paths l
 ## Features at a Glance
 
 * **Tracking:** custom tokens with redirect, full request logging, visitor fingerprinting, tracking pixel, GeoIP enrichment.
-* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel, date range filtering, classification badges with scores, bulk delete by filter, filter state preserved across row actions, dark mode, mobile layout.
-* **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, pixel URL generation.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow actions, date range filtering, classification badges with scores, bulk delete by filter, filter state preserved across row actions, dark mode, mobile layout.
+* **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions. Raw signal names preserved in tooltips for cross-referencing with exports and the wiki.
+* **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, per-token webhook opt-in, pixel URL generation.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code, affects scoring only.
 * **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
-* **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals in the last 24 hours.
+* **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals in the last 24 hours. Hide/show toggle. Clicking an IP forces show-all and collapses the panel.
 * **Skip patterns:** exact, contains, and prefix matching to suppress known noise. Add directly from the activity feed.
 * **Threat feed:** eight endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, and CIDR formats. Minimum hit count threshold. Feed preview count in Settings.
 * **Cleanup tools:** delete by token, by IP, by current filter, or selectively remove unknown-token hits.
 * **Data retention:** configurable retention window with manual trigger and automatic probabilistic cleanup.
-* **Webhook alerts:** fires on bot classification, deduplicates per IP per 5 minutes, supports custom JSON payload templates with `{{placeholder}}` syntax, auto-detects Slack/Discord format when no template is set.
+* **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold (bot, suspicious, likely-human, or all). Deduplicates per IP per 5 minutes. Custom JSON payload templates with `{{placeholder}}` syntax. Auto-detects Slack/Discord format.
+* **Token webhook:** fires when a known tracked token is hit, regardless of classification. Per-token opt-in. Deduplicates per visitor per token per 5 minutes. Separate URL and payload template from the threat webhook.
 
 ## Project Structure
 
@@ -508,7 +510,8 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 - [ ] Tune the threat feed confidence threshold, time window, and minimum hit count
 - [ ] Set `EXPORT_API_TOKEN` and configure your SIEM integration if applicable
 - [ ] Add a weekly `geoipupdate` cron job
-- [ ] Configure a webhook URL for real-time bot alerts
+- [ ] Configure a threat webhook URL and threshold for real-time bot alerts
+- [ ] Configure a token webhook URL for phishing simulation and campaign tracking if needed
 
 ## Tech Stack
 
