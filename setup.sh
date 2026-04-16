@@ -112,7 +112,6 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         if [ ! -d "$INSTALL_DIR" ]; then
             sudo git clone "$REPO_URL" "$INSTALL_DIR"
         fi
-        sudo chown -R www-data:www-data "$INSTALL_DIR"
         SCRIPT_DIR="$INSTALL_DIR"
         echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
         echo ""
@@ -310,7 +309,90 @@ echo "  Set this if SignalTrace runs behind nginx, Caddy, or Traefik."
 echo ""
 prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "" ""
 
-# -- Optional tuning -----------------------------------------------------------
+# -- Cloudflare Access (manual installs only) ----------------------------------
+CF_ACCESS_ENABLED_VAL="false"
+CF_ACCESS_AUD_VAL=""
+CF_ACCESS_TEAM_DOMAIN_VAL=""
+
+if [ "$INSTALL_TYPE" = "3" ]; then
+    echo -e "${BOLD}── Cloudflare Access (optional) ─────────────────────────────${RESET}"
+    echo "  Adds per-user identity and MFA in front of /admin using"
+    echo "  Cloudflare Zero Trust. Requires your domain to be on Cloudflare."
+    echo "  See the wiki for setup instructions before enabling this."
+    echo ""
+    read -r -p "  Enable Cloudflare Access? [y/N] " do_cf_access
+    if [[ "$do_cf_access" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "${CYAN}Cloudflare Access AUD token${RESET}"
+        echo "  Found in Zero Trust → Access controls → Applications → Edit → Additional settings → Token"
+        read -r -p "  Value: " CF_ACCESS_AUD_VAL
+        echo ""
+        echo -e "${CYAN}Cloudflare team domain${RESET}"
+        echo "  Found in Zero Trust → Settings → Teams tab (e.g. yourteam.cloudflareaccess.com)"
+        read -r -p "  Value: " CF_ACCESS_TEAM_DOMAIN_VAL
+        echo ""
+        if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ]; then
+            CF_ACCESS_ENABLED_VAL="true"
+            echo -e "  ${GREEN}Cloudflare Access enabled.${RESET}"
+        else
+            echo -e "  ${YELLOW}AUD or team domain missing — Cloudflare Access will not be enabled.${RESET}"
+        fi
+    fi
+    echo ""
+fi
+
+# -- Demo mode (manual installs only) -----------------------------------------
+DEMO_MODE_ENABLED=false
+DEMO_APP_NAME="SignalTrace"
+DEMO_BASE_URL=""
+DEMO_DEFAULT_REDIRECT_URL="https://example.com/"
+DEMO_ADMIN_USERNAME_DISPLAY="demo"
+DEMO_ADMIN_PASSWORD_DISPLAY=""
+
+if [ "$INSTALL_TYPE" = "3" ]; then
+    echo -e "${BOLD}── Demo Mode (optional) ──────────────────────────────────────${RESET}"
+    echo "  Demo mode shows a banner with a reset countdown and locks"
+    echo "  certain settings so visitors cannot change them."
+    echo ""
+    read -r -p "  Enable demo mode? [y/N] " do_demo
+    if [[ "$do_demo" =~ ^[Yy]$ ]]; then
+        DEMO_MODE_ENABLED=true
+        echo ""
+
+        echo -e "${CYAN}App Name${RESET}"
+        echo "  Displayed in the admin header."
+        read -r -p "  Value [SignalTrace]: " demo_app_name_input
+        DEMO_APP_NAME="${demo_app_name_input:-SignalTrace}"
+        echo ""
+
+        echo -e "${CYAN}Base URL${RESET}"
+        echo "  The public URL of this install (e.g. https://trysignaltrace.com)."
+        echo "  Used to build threat feed and export endpoint URLs in Settings."
+        read -r -p "  Value: " DEMO_BASE_URL
+        echo ""
+
+        echo -e "${CYAN}Default Redirect URL${RESET}"
+        echo "  Where unknown honeypot paths redirect to."
+        read -r -p "  Value [https://example.com/]: " demo_redirect_input
+        DEMO_DEFAULT_REDIRECT_URL="${demo_redirect_input:-https://example.com/}"
+        echo ""
+
+        echo -e "${CYAN}Demo username to display in banner${RESET}"
+        read -r -p "  Value [demo]: " demo_user_input
+        DEMO_ADMIN_USERNAME_DISPLAY="${demo_user_input:-demo}"
+        echo ""
+
+        echo -e "${CYAN}Demo password to display in banner${RESET}"
+        echo "  This is display-only — it does not set the actual password."
+        read -r -p "  Value: " DEMO_ADMIN_PASSWORD_DISPLAY
+        echo ""
+
+        echo -e "  ${GREEN}Demo mode enabled.${RESET}"
+    fi
+    echo ""
+fi
+
+
 echo -e "${BOLD}── Optional Tuning ──────────────────────────────────────────${RESET}"
 echo "  Press Enter to accept defaults for all of these."
 echo ""
@@ -350,20 +432,40 @@ AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS}"
 SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN}"
 EOF
 else
+    # Manual install — write config.local.php
     cat > "$OUTPUT_FILE" << EOF
 <?php
 define('ADMIN_USERNAME',      '${ADMIN_USERNAME}');
 define('ADMIN_PASSWORD_HASH', '${ADMIN_PASSWORD_HASH}');
 define('VISITOR_HASH_SALT',   '${VISITOR_HASH_SALT}');
-define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');
-define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');
 define('EXPORT_API_TOKEN',    '${SIGNALTRACE_EXPORT_API_TOKEN}');
 define('TRUSTED_PROXY_IP',    '${SIGNALTRACE_TRUSTED_PROXY_IP}');
 define('AUTH_MAX_FAILURES',   ${AUTH_MAX_FAILURES});
 define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
+
+    if [ -n "$MAXMIND_ACCOUNT_ID" ]; then
+        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" >> "$OUTPUT_FILE"
+    fi
+    if [ -n "$MAXMIND_LICENSE_KEY" ]; then
+        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" >> "$OUTPUT_FILE"
+    fi
     if [ -n "$SELF_REFERER_DOMAIN" ]; then
         echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" >> "$OUTPUT_FILE"
+    fi
+    if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
+        echo "" >> "$OUTPUT_FILE"
+        echo "// Cloudflare Access" >> "$OUTPUT_FILE"
+        echo "define('CF_ACCESS_ENABLED',     true);" >> "$OUTPUT_FILE"
+        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" >> "$OUTPUT_FILE"
+        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" >> "$OUTPUT_FILE"
+    fi
+    if [ "$DEMO_MODE_ENABLED" = true ]; then
+        echo "" >> "$OUTPUT_FILE"
+        echo "// Demo mode" >> "$OUTPUT_FILE"
+        echo "define('DEMO_MODE',             true);" >> "$OUTPUT_FILE"
+        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" >> "$OUTPUT_FILE"
+        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" >> "$OUTPUT_FILE"
     fi
 fi
 
@@ -443,9 +545,9 @@ else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing PHP dependencies..."
     echo ""
-    cd "$SCRIPT_DIR" && sudo -u www-data composer install --no-dev --no-interaction
+    cd "$SCRIPT_DIR" && composer update --no-dev --no-interaction
     if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: composer install failed.${RESET}"
+        echo -e "${RED}Error: composer update failed.${RESET}"
         exit 1
     fi
     echo -e "  ${GREEN}PHP dependencies installed.${RESET}"
@@ -479,8 +581,8 @@ GEOIPCONF
 
     # ── Database initialisation -----------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    DB_FILE="/var/www/signaltrace/data/database.db"
-    DB_DIR="/var/www/signaltrace/data"
+    DB_FILE="${INSTALL_DIR}/data/database.db"
+    DB_DIR="${INSTALL_DIR}/data"
 
     if [ -f "$DB_FILE" ]; then
         echo -e "${YELLOW}Database already exists at ${DB_FILE}.${RESET}"
@@ -494,29 +596,62 @@ GEOIPCONF
     if [ "${SKIP_DB:-false}" = false ]; then
         echo "Initialising database..."
         sudo mkdir -p "$DB_DIR"
-        sudo chown www-data:www-data "$DB_DIR"
-        sudo chmod 775 "$DB_DIR"
         [ -f "$DB_FILE" ] && sudo rm -f "$DB_FILE"
-        sudo -u www-data sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
-        sudo chown www-data:www-data "$DB_FILE"
-        sudo chmod 664 "$DB_FILE"
+        sudo sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
         echo -e "  ${GREEN}Database initialised.${RESET}"
         echo ""
 
         read -r -p "  Load sample data so the dashboard has something to show? [y/N] " doseed
         if [[ "$doseed" =~ ^[Yy]$ ]]; then
-            sudo -u www-data sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
+            sudo sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
             echo -e "  ${GREEN}Sample data loaded.${RESET}"
+        fi
+
+        # Seed demo settings into the database so they are correct from first boot.
+        # These fields are locked in the UI when DEMO_MODE is true so they cannot
+        # be changed through the Settings form.
+        if [ "$DEMO_MODE_ENABLED" = true ]; then
+            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
+            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
+            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
+            echo -e "  ${GREEN}Demo settings seeded into database.${RESET}"
         fi
     fi
     echo ""
 
-    # ── Fix ownership ---------------------------------------------------------
+    # ── Fix ownership and permissions -----------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Setting file ownership..."
-    sudo chown -R www-data:www-data /var/www/signaltrace
-    sudo chmod -R 775 /var/www/signaltrace/data
-    echo -e "  ${GREEN}Ownership set to www-data.${RESET}"
+    echo "Setting file ownership and permissions..."
+
+    # includes/, public/, db/, vendor/ — root-owned, web server read-only
+    sudo chown -R root:www-data "${INSTALL_DIR}/includes/"
+    sudo chmod 750 "${INSTALL_DIR}/includes/"
+    sudo chmod 640 "${INSTALL_DIR}/includes/"*.php
+    echo -e "  ${GREEN}includes/ — root:www-data (640)${RESET}"
+
+    sudo chown -R root:www-data "${INSTALL_DIR}/public/"
+    sudo chmod 750 "${INSTALL_DIR}/public/"
+    sudo find "${INSTALL_DIR}/public/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}public/ — root:www-data (640)${RESET}"
+
+    sudo chown -R root:www-data "${INSTALL_DIR}/db/"
+    sudo chmod 750 "${INSTALL_DIR}/db/"
+    sudo chmod 640 "${INSTALL_DIR}/db/"*
+    echo -e "  ${GREEN}db/ — root:www-data (640)${RESET}"
+
+    sudo chown -R root:www-data "${INSTALL_DIR}/vendor/"
+    sudo find "${INSTALL_DIR}/vendor/" -type d -exec chmod 750 {} \;
+    sudo find "${INSTALL_DIR}/vendor/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}vendor/ — root:www-data (640)${RESET}"
+
+    # data/ — web server needs write on database and directory only
+    sudo chown root:www-data "$DB_DIR"
+    sudo chmod 770 "$DB_DIR"
+    if [ -f "$DB_FILE" ]; then
+        sudo chown root:www-data "$DB_FILE"
+        sudo chmod 660 "$DB_FILE"
+        echo -e "  ${GREEN}data/database.db — root:www-data (660)${RESET}"
+    fi
     echo ""
 
     # ── Apache vhost ----------------------------------------------------------
@@ -533,6 +668,10 @@ GEOIPCONF
 
     SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
 
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+
     <Directory /var/www/signaltrace/public>
         AllowOverride All
         Require all granted
@@ -543,6 +682,7 @@ GEOIPCONF
 </VirtualHost>
 APACHECONF
 
+    sudo a2enmod rewrite ssl
     sudo a2ensite signaltrace.conf
     sudo a2dissite 000-default.conf 2>/dev/null || true
     sudo systemctl restart apache2
@@ -585,6 +725,14 @@ APACHECONF
         echo -e "${CYAN}SignalTrace is available at: https://${APACHE_SERVER_NAME}/admin${RESET}"
     else
         echo -e "${CYAN}SignalTrace is available at: http://${APACHE_SERVER_NAME}/admin${RESET}"
+    fi
+
+    if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
+        echo ""
+        echo -e "${YELLOW}Cloudflare Access is enabled. Remember to:${RESET}"
+        echo "  1. Create an A record for your domain in Cloudflare with the proxy enabled (orange cloud)"
+        echo "  2. Configure the Access application for your domain in Zero Trust"
+        echo "  3. See the wiki for the full setup guide"
     fi
 fi
 echo ""
