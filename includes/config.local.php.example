@@ -1,70 +1,50 @@
 <?php
-declare(strict_types=1);
+// ============================================================
+// SignalTrace Local Configuration
+// Copy this file to config.local.php and fill in your values.
+// Never commit config.local.php to version control.
+// ============================================================
 
-/*
-|--------------------------------------------------------------------------
-| SignalTrace Local Configuration
-|--------------------------------------------------------------------------
-| Copy this file to includes/config.local.php and update the values below.
-| This file must NOT be committed to Git — add it to .gitignore.
-*/
-
-/* Admin credentials ---------------------------------------------------- */
-
+// Admin credentials
+// Generate password hash: php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT);"
 define('ADMIN_USERNAME',      'admin');
+define('ADMIN_PASSWORD_HASH', '$2y$12$...');
 
-// Generate with:  php -r "echo password_hash('your-password', PASSWORD_DEFAULT) . PHP_EOL;"
-define('ADMIN_PASSWORD_HASH', 'replace-with-password-hash');
+// Visitor hash salt — generate with: openssl rand -hex 64
+define('VISITOR_HASH_SALT', '');
 
-/* Visitor fingerprint salt --------------------------------------------- */
+// Base URL of your SignalTrace install (no trailing slash)
+// Used for feed and export URL display in Settings.
+// define('BASE_URL', 'https://yourdomain.example');
 
-// Generate with:  openssl rand -hex 64
-// Do NOT change after deployment — it will invalidate all existing visitor hashes.
-define('VISITOR_HASH_SALT', 'replace-with-random-secret');
+// Trusted reverse proxy IP — only set if running behind a known proxy.
+// SignalTrace will trust X-Forwarded-For only from this IP.
+// define('TRUSTED_PROXY_IP', '');
 
-/* Admin login rate limiting -------------------------------------------- */
+// Self-referrer domain — requests from this domain to the root path
+// receive a score penalty. Set to your own domain.
+// define('SELF_REFERER_DOMAIN', 'yourdomain.example');
 
-// Lock out an IP after this many consecutive failures within the window.
-define('AUTH_MAX_FAILURES', 5);
+// Export API token for Splunk/Grafana/automation integrations.
+// Generate with: openssl rand -hex 32
+// define('EXPORT_API_TOKEN', '');
 
-// Lockout duration in seconds (default 900 = 15 minutes).
-define('AUTH_LOCKOUT_SECS', 900);
+// Admin login rate limiting
+// define('AUTH_MAX_FAILURES', 5);
+// define('AUTH_LOCKOUT_SECS', 900);
 
-/* Reverse proxy trust -------------------------------------------------- */
+// Demo mode — displays the demo banner on admin pages.
+// The reset mechanism is separate and not included in the repository.
+// define('DEMO_MODE', true);
+// define('DEMO_ADMIN_USERNAME', 'demo');
+// define('DEMO_ADMIN_PASSWORD', 'trysignaltrace');
 
-// Set to the IP of your reverse proxy (nginx, load balancer, etc.) if one
-// sits in front of SignalTrace.  When set, the rightmost X-Forwarded-For
-// entry is used as the client IP instead of REMOTE_ADDR.
-// Leave blank if there is no proxy.
-// Example:  define('TRUSTED_PROXY_IP', '10.0.0.1');
-define('TRUSTED_PROXY_IP', '');
-
-/* Export API token (for Splunk / automation) ---------------------------- */
-
-// When set, this token can be used to authenticate export requests
-// without HTTP Basic credentials — useful for Splunk scripted inputs,
-// cron jobs, or any tool that can't do interactive auth.
-//
-// Use in one of two ways:
-//   HTTP header (preferred — not logged by Apache):
-//     Authorization: Bearer YOUR_TOKEN
-//   Query param (fallback — appears in access logs, use with care):
-//     /export/json?api_key=YOUR_TOKEN
-//
-// Generate with:  openssl rand -hex 32
-//
-// Leave blank to require admin Basic Auth for all export access.
-define('EXPORT_API_TOKEN', '');
-
-/* Self-referrer domain penalty ----------------------------------------- */
-
-// If set, requests arriving with this domain as the Referer on the root path
-// receive a small score penalty.  Use your own domain.
-// Example:  define('SELF_REFERER_DOMAIN', 'yourdomain.example');
-define('SELF_REFERER_DOMAIN', '');
-
-/* Demo mode ------------------------------------------------------------ */
-
-// Set to true on the live demo instance.
-// Enables the demo banner. Never set to true in production.
-define('DEMO_MODE', false);
+// ============================================================
+// Cloudflare Access (optional)
+// Adds an identity layer in front of /admin using Cloudflare
+// Zero Trust. When disabled (default), Basic Auth is used alone.
+// See: https://github.com/veddegre/signaltrace/wiki/Cloudflare-Access
+// ============================================================
+// define('CF_ACCESS_ENABLED',     true);
+// define('CF_ACCESS_AUD',         'your-application-audience-tag');
+// define('CF_ACCESS_TEAM_DOMAIN', 'yourteam.cloudflareaccess.com');
