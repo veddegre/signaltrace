@@ -1,1802 +1,1016 @@
 <?php
+
 declare(strict_types=1);
 
 /**
- * Maps raw confidence_reason signal names to human-readable labels.
- * Returns the friendly label, or null if the signal is unknown (caller
- * should fall back to displaying the raw name).
+ * Build a redirect URL back to /admin preserving any filter params
+ * that were passed through the form as hidden fields.
+ * Optionally append a tab name.
  */
-function signalLabel(string $signal): ?string
+function adminRedirectUrl(string $tab = ''): string
 {
-    // Handle dynamic prefix signals first
-    if (str_starts_with($signal, 'path:'))         return 'High-risk path (' . substr($signal, 5) . ')';
-    if (str_starts_with($signal, 'country_penalty:')) return 'Country penalty (' . substr($signal, 16) . ')';
-    if (str_starts_with($signal, 'asn_rule:'))     return 'ASN rule match (' . substr($signal, 9) . ')';
-    if (str_starts_with($signal, 'ip_override:'))  return 'IP override (' . substr($signal, 12) . ')';
-    if (str_starts_with($signal, 'ua:'))           return 'User-agent signal (' . substr($signal, 3) . ')';
+    $params = [];
 
-    static $map = [
-        // Positive signals
-        'get_request'              => 'GET request',
-        'browser_ua'               => 'Browser-like user-agent',
-        'sec_fetch_navigate'       => 'Sec-Fetch navigation headers present',
-        'accept_language_present'  => 'Accept-Language header present',
-        'referer_present'          => 'Referer header present',
+    $token   = trim((string) ($_POST['_filter_token']   ?? ''));
+    $ip      = trim((string) ($_POST['_filter_ip']      ?? ''));
+    $visitor = trim((string) ($_POST['_filter_visitor']  ?? ''));
+    $known   = trim((string) ($_POST['_filter_known']   ?? ''));
+    $from    = trim((string) ($_POST['_filter_date_from'] ?? ''));
+    $to      = trim((string) ($_POST['_filter_date_to']   ?? ''));
 
-        // Header absence penalties
-        'accept_missing'           => 'Missing Accept header',
-        'accept_language_missing'  => 'Missing Accept-Language header',
-        'accept_encoding_missing'  => 'Missing Accept-Encoding header',
-        'accept_wildcard'          => 'Accept: */* (no content preference)',
-        'sec_fetch_missing'        => 'Missing Sec-Fetch headers',
-        'sec_ch_ua_missing'        => 'Missing Sec-CH-UA (Client Hints)',
+    if ($tab !== '')     $params['tab']       = $tab;
+    if ($token !== '')   $params['token']     = $token;
+    if ($ip !== '')      $params['ip']        = $ip;
+    if ($visitor !== '') $params['visitor']   = $visitor;
+    if ($known === '1')  $params['known']     = '1';
+    if ($from !== '')    $params['date_from'] = $from;
+    if ($to !== '')      $params['date_to']   = $to;
 
-        // User-agent signals
-        'browser_ua_unsupported'   => 'Browser UA with no supporting headers (likely spoofed)',
-        'known_automation_ua'      => 'Known automation user-agent',
-
-        // Request characteristics
-        'post_request'             => 'POST request',
-        'no_referer'               => 'No Referer header',
-        'host_raw_ip'              => 'Raw IP address in Host header',
-        'bot_signal'               => 'Bot-like request pattern',
-        'exploit_like_query'       => 'Exploit-like query string',
-        'hosting_provider_ip'      => 'Hosting / datacenter IP range',
-        'hosting_provider'         => 'Hosting / datacenter IP range',
-
-        // Behavioral signals
-        'burst_activity'           => 'Burst activity (many requests in short window)',
-        'rapid_repeat'             => 'Rapid repeat requests',
-        'fast_repeat'              => 'Fast repeat requests',
-        'multi_token_scan'         => 'Multi-token scan (hit multiple paths)',
-
-        // Path penalties
-        'path:.env'                => 'High-risk path (.env)',
-        'path:.git'                => 'High-risk path (.git)',
-        'path:wp-admin'            => 'WordPress admin path probe',
-        'path:wp-login'            => 'WordPress login path probe',
-        'path:phpmyadmin'          => 'phpMyAdmin path probe',
-        'path:phpinfo'             => 'phpinfo path probe',
-
-        // Self-referrer
-        'self_referer'             => 'Request from own domain (self-referrer)',
-    ];
-
-    return $map[$signal] ?? null;
+    return '/admin' . (!empty($params) ? '?' . http_build_query($params) : '');
 }
 
-/**
- * Renders a confidence_reason string as compact signal tags.
- * Friendly label is shown; raw signal name appears as a tooltip on hover.
- */
-function renderSignalReasons(string $reasons): string
+function handleAdminActions(PDO $pdo, string $path): bool
 {
-    if ($reasons === '') return '<span class="muted">—</span>';
-
-    $signals = array_map('trim', explode(',', $reasons));
-    $parts   = [];
-
-    foreach ($signals as $signal) {
-        if ($signal === '') continue;
-        $label = signalLabel($signal);
-
-        // Determine tag style based on signal type
-        if (in_array($signal, ['get_request', 'browser_ua', 'sec_fetch_navigate', 'accept_language_present', 'referer_present'], true)) {
-            $class = 'signal-tag signal-tag--positive';
-        } elseif (in_array($signal, ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'], true)) {
-            $class = 'signal-tag signal-tag--behavioral';
-        } elseif (str_starts_with($signal, 'path:') || str_starts_with($signal, 'country_penalty:') || str_starts_with($signal, 'asn_rule:') || str_starts_with($signal, 'ip_override:')) {
-            $class = 'signal-tag signal-tag--rule';
-        } else {
-            $class = 'signal-tag signal-tag--negative';
-        }
-
-        $display = $label ?? $signal;
-        $title   = $label !== null ? h($signal) : '';
-
-        $parts[] = '<span class="' . $class . '"'
-            . ($title !== '' ? ' title="' . $title . '"' : '')
-            . '>' . h($display) . '</span>';
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        return false;
     }
 
-    return '<div class="signal-tag-list">' . implode('', $parts) . '</div>';
+    // CSRF verification on every POST before dispatching.
+    verifyCsrfToken();
+
+    switch ($path) {
+        case '/admin/save-settings':
+            requireAdminAuth();
+            handleSaveSettings($pdo);
+            return true;
+
+        case '/admin/save-threat-feed-settings':
+            requireAdminAuth();
+            handleSaveThreatFeedSettings($pdo);
+            return true;
+
+        case '/admin/save-retention-settings':
+            requireAdminAuth();
+            handleSaveRetentionSettings($pdo);
+            return true;
+
+        case '/admin/run-cleanup':
+            requireAdminAuth();
+            handleRunCleanup($pdo);
+            return true;
+
+        case '/admin/create-link':
+            requireAdminAuth();
+            handleCreateLink($pdo);
+            return true;
+
+        case '/admin/update-link':
+            requireAdminAuth();
+            handleUpdateLink($pdo);
+            return true;
+
+        case '/admin/delete-link':
+            requireAdminAuth();
+            handleDeleteLink($pdo);
+            return true;
+
+        case '/admin/deactivate-link':
+            requireAdminAuth();
+            handleDeactivateLink($pdo);
+            return true;
+
+        case '/admin/activate-link':
+            requireAdminAuth();
+            handleActivateLink($pdo);
+            return true;
+
+        case '/admin/create-skip-pattern':
+            requireAdminAuth();
+            handleCreateSkipPattern($pdo);
+            return true;
+
+        case '/admin/add-token-to-skip':
+            requireAdminAuth();
+            handleAddTokenToSkip($pdo);
+            return true;
+
+        case '/admin/delete-skip-pattern':
+            requireAdminAuth();
+            handleDeleteSkipPattern($pdo);
+            return true;
+
+        case '/admin/deactivate-skip-pattern':
+            requireAdminAuth();
+            handleToggleSkipPattern($pdo, false);
+            return true;
+
+        case '/admin/activate-skip-pattern':
+            requireAdminAuth();
+            handleToggleSkipPattern($pdo, true);
+            return true;
+
+        case '/admin/delete-click':
+            requireAdminAuth();
+            handleDeleteClick($pdo);
+            return true;
+
+        case '/admin/delete-token-clicks':
+            requireAdminAuth();
+            handleDeleteTokenClicks($pdo);
+            return true;
+
+        case '/admin/create-asn-rule':
+            requireAdminAuth();
+            handleCreateAsnRule($pdo);
+            return true;
+
+        case '/admin/update-asn-rule':
+            requireAdminAuth();
+            handleUpdateAsnRule($pdo);
+            return true;
+
+        case '/admin/activate-asn-rule':
+            requireAdminAuth();
+            handleToggleAsnRule($pdo, true);
+            return true;
+
+        case '/admin/deactivate-asn-rule':
+            requireAdminAuth();
+            handleToggleAsnRule($pdo, false);
+            return true;
+
+        case '/admin/delete-asn-rule':
+            requireAdminAuth();
+            handleDeleteAsnRule($pdo);
+            return true;
+
+        case '/admin/delete-ip-clicks':
+            requireAdminAuth();
+            handleDeleteIpClicks($pdo);
+            return true;
+
+        case '/admin/delete-filtered-clicks':
+            requireAdminAuth();
+            handleDeleteFilteredClicks($pdo);
+            return true;
+
+        case '/admin/create-ip-override':
+            requireAdminAuth();
+            handleCreateIpOverride($pdo);
+            return true;
+
+        case '/admin/update-ip-override':
+            requireAdminAuth();
+            handleUpdateIpOverride($pdo);
+            return true;
+
+        case '/admin/activate-ip-override':
+            requireAdminAuth();
+            handleToggleIpOverride($pdo, true);
+            return true;
+
+        case '/admin/deactivate-ip-override':
+            requireAdminAuth();
+            handleToggleIpOverride($pdo, false);
+            return true;
+
+        case '/admin/delete-ip-override':
+            requireAdminAuth();
+            handleDeleteIpOverride($pdo);
+            return true;
+
+        case '/admin/create-country-rule':
+            requireAdminAuth();
+            handleCreateCountryRule($pdo);
+            return true;
+
+        case '/admin/update-country-rule':
+            requireAdminAuth();
+            handleUpdateCountryRule($pdo);
+            return true;
+
+        case '/admin/activate-country-rule':
+            requireAdminAuth();
+            handleToggleCountryRule($pdo, true);
+            return true;
+
+        case '/admin/deactivate-country-rule':
+            requireAdminAuth();
+            handleToggleCountryRule($pdo, false);
+            return true;
+
+        case '/admin/delete-country-rule':
+            requireAdminAuth();
+            handleDeleteCountryRule($pdo);
+            return true;
+
+        default:
+            return false;
+    }
 }
 
-function renderAdminPage(
-    string $appName,
-    string $baseUrl,
-    string $defaultRedirectUrl,
-    string $unknownPathBehavior,
-    bool $pixelEnabled,
-    bool $noiseFilterEnabled,
-    string $tokenFilter,
-    string $ipFilter,
-    string $visitorFilter,
-    bool $knownOnly,
-    array $clicks,
-    int $totalCount,
-    int $totalPages,
-    int $currentPage,
-    int $pageSize,
-    array $links,
-    array $tokenCounts,
-    array $skipPatterns,
-    array $asnRules,
-    string $refreshUrl,
-    ?array $ipSummary = null,
-): void {
-    $pdo       = db();
-    $csrfToken = generateCsrfToken();
+function handleUpdateLink(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    $token = trim((string) ($_POST['token'] ?? ''), '/');
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+    $description = trim((string) ($_POST['description'] ?? ''));
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
 
-    $autoRefreshSecs  = max(0, (int) getSetting($pdo, 'auto_refresh_secs', '0'));
-    $webhookUrl       = (string) getSetting($pdo, 'webhook_url', '');
-    $webhookTemplate  = (string) getSetting($pdo, 'webhook_template', '');
-    $pageSizeSetting  = (string) getSetting($pdo, 'page_size', '50');
-    $exportMinConf    = (string) getSetting($pdo, 'export_min_confidence', 'suspicious');
-    $exportWinHours   = (string) getSetting($pdo, 'export_window_hours', '168');
-    $exportMinScore   = (string) getSetting($pdo, 'export_min_score', '0');
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid link id.';
+        exit;
+    }
 
-    $dateFrom        = trim((string) ($_GET['date_from']        ?? ''));
-    $dateTo          = trim((string) ($_GET['date_to']          ?? ''));
-    $showAll         = isset($_GET['show_all'])         && $_GET['show_all']         === '1';
-    $hideBehavioral  = isset($_GET['hide_behavioral'])  && $_GET['hide_behavioral']  === '1';
+    if ($token === '' || $destination === '') {
+        http_response_code(400);
+        echo 'Path/token and destination are required.';
+        exit;
+    }
 
-    $activeTab  = trim((string) ($_GET['tab'] ?? ''));
-    $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
+    // SECURITY: isSafeRedirectUrl enforces an http/https allowlist in addition
+    // to basic URL validation. FILTER_VALIDATE_URL alone accepts javascript: URIs.
+    if (!isSafeRedirectUrl($destination)) {
+        http_response_code(400);
+        echo 'Invalid destination URL. Only http and https are allowed.';
+        exit;
+    }
 
-    $editLink = null;
-    if ($editLinkId > 0) {
-        foreach ($links as $candidateLink) {
-            if ((int) $candidateLink['id'] === $editLinkId) {
-                $editLink = $candidateLink;
-                break;
-            }
+    if (!preg_match('#^[A-Za-z0-9./_-]+$#', $token)) {
+        http_response_code(400);
+        echo 'Path/token may contain only letters, numbers, dot, slash, underscore, and dash.';
+        exit;
+    }
+
+    try {
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed);
+        header('Location: /admin?tab=links', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to update link. The token/path may already exist.';
+        exit;
+    }
+}
+
+function handleSaveSettings(PDO $pdo): void
+{
+    // In demo mode, certain settings are locked and cannot be changed via POST.
+    // The UI renders them as read-only, but we also block at the action layer
+    // in case someone crafts a request manually.
+    $isDemo = defined('DEMO_MODE') && DEMO_MODE;
+
+    $appNameInput = $isDemo
+        ? (string) getSetting($pdo, 'app_name', 'SignalTrace')
+        : trim((string) ($_POST['app_name'] ?? 'SignalTrace'));
+
+    $baseUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'base_url', '')
+        : trim((string) ($_POST['base_url'] ?? ''));
+
+    $defaultRedirectUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'default_redirect_url', '')
+        : trim((string) ($_POST['default_redirect_url'] ?? ''));
+
+    $webhookUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'webhook_url', '')
+        : trim((string) ($_POST['webhook_url'] ?? ''));
+
+    $webhookTemplateInput = $isDemo
+        ? (string) getSetting($pdo, 'webhook_template', '')
+        : trim((string) ($_POST['webhook_template'] ?? ''));
+
+    $tokenWebhookUrlInput = $isDemo
+        ? (string) getSetting($pdo, 'token_webhook_url', '')
+        : trim((string) ($_POST['token_webhook_url'] ?? ''));
+
+    $tokenWebhookTemplateInput = $isDemo
+        ? (string) getSetting($pdo, 'token_webhook_template', '')
+        : trim((string) ($_POST['token_webhook_template'] ?? ''));
+
+    $unknownPathBehaviorInput  = trim((string) ($_POST['unknown_path_behavior'] ?? 'redirect'));
+    $pixelEnabledInput         = isset($_POST['pixel_enabled'])       ? '1' : '0';
+    $noiseFilterEnabledInput   = isset($_POST['noise_filter_enabled']) ? '1' : '0';
+    $displayMinScoreInput      = trim((string) ($_POST['display_min_score']   ?? '20'));
+    $pageSizeInput             = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
+    $autoRefreshInput          = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
+    $webhookThresholdInput     = strtolower(trim((string) ($_POST['webhook_threshold'] ?? 'bot')));
+    $exportMinConfidenceInput  = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
+    $exportWindowHoursInput    = max(1, (int) ($_POST['export_window_hours'] ?? 168));
+    $exportMinScoreInput       = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
+
+    if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
+        http_response_code(400);
+        echo 'Display minimum score must be numeric.';
+        exit;
+    }
+
+    $displayMinScoreInput = (string) max(0, min(100, (int) $displayMinScoreInput));
+
+    if ($appNameInput === '') {
+        http_response_code(400);
+        echo 'App name is required.';
+        exit;
+    }
+
+    if ($defaultRedirectUrlInput === '' || !isSafeRedirectUrl($defaultRedirectUrlInput)) {
+        http_response_code(400);
+        echo 'A valid default redirect URL (http or https) is required.';
+        exit;
+    }
+
+    if ($baseUrlInput !== '' && !isSafeRedirectUrl($baseUrlInput)) {
+        http_response_code(400);
+        echo 'Base URL must be blank or a valid http/https URL.';
+        exit;
+    }
+
+    if (!in_array($unknownPathBehaviorInput, ['redirect', '404'], true)) {
+        http_response_code(400);
+        echo 'Invalid unknown path behavior.';
+        exit;
+    }
+
+    if ($webhookUrlInput !== '' && !isSafeRedirectUrl($webhookUrlInput)) {
+        http_response_code(400);
+        echo 'Webhook URL must be blank or a valid http/https URL.';
+        exit;
+    }
+
+    if ($webhookTemplateInput !== '') {
+        // Validate template produces valid JSON by substituting dummy values.
+        $dummyReplacements = [
+            '{{ip}}'       => '1.2.3.4',
+            '{{token}}'    => '/test',
+            '{{label}}'    => 'bot',
+            '{{score}}'    => '0',
+            '{{org}}'      => 'Test Org',
+            '{{asn}}'      => '12345',
+            '{{country}}'  => 'US',
+            '{{ua}}'       => 'test/1.0',
+            '{{time}}'     => date('Y-m-d H:i:s T'),
+            '{{triggers}}' => 'bot_classification',
+        ];
+        $testJson = str_replace(array_keys($dummyReplacements), array_values($dummyReplacements), $webhookTemplateInput);
+        if (json_decode($testJson) === null) {
+            http_response_code(400);
+            echo 'Webhook template does not produce valid JSON. Check your template syntax.';
+            exit;
         }
     }
 
-    $editAsnRuleId = (int) ($_GET['edit_asn_rule_id'] ?? 0);
-    $editAsnRule = null;
-    if ($editAsnRuleId > 0) {
-        foreach ($asnRules as $candidateRule) {
-            if ((int) $candidateRule['id'] === $editAsnRuleId) {
-                $editAsnRule = $candidateRule;
-                break;
-            }
+    if (!in_array($webhookThresholdInput, ['bot', 'suspicious', 'uncertain', 'human'], true)) {
+        http_response_code(400);
+        echo 'Invalid webhook threshold value.';
+        exit;
+    }
+
+    if ($tokenWebhookUrlInput !== '' && !isSafeRedirectUrl($tokenWebhookUrlInput)) {
+        http_response_code(400);
+        echo 'Token webhook URL must be blank or a valid http/https URL.';
+        exit;
+    }
+
+    if ($tokenWebhookTemplateInput !== '') {
+        $dummyReplacements = [
+            '{{ip}}'       => '1.2.3.4',
+            '{{token}}'    => '/test',
+            '{{label}}'    => 'human',
+            '{{score}}'    => '85',
+            '{{org}}'      => 'Test Org',
+            '{{asn}}'      => '12345',
+            '{{country}}'  => 'US',
+            '{{ua}}'       => 'Mozilla/5.0',
+            '{{time}}'     => date('Y-m-d H:i:s T'),
+            '{{triggers}}' => 'browser_ua, get_request',
+        ];
+        $testJson = str_replace(array_keys($dummyReplacements), array_values($dummyReplacements), $tokenWebhookTemplateInput);
+        if (json_decode($testJson) === null) {
+            http_response_code(400);
+            echo 'Token webhook template does not produce valid JSON. Check your template syntax.';
+            exit;
         }
     }
 
-    $hasActiveFilter = (
-        $tokenFilter !== ''
-        || $ipFilter !== ''
-        || $visitorFilter !== ''
-    || $knownOnly
-    || $showAll
-        || $dateFrom !== ''
-        || $dateTo !== ''
-    );
-    $exportUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/export/json';
-
-    $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
-    $threatFeedWindowHours = (string) (getSetting($pdo, 'threat_feed_window_hours', '168') ?? '168');
-    $threatFeedMinConfidence = (string) (getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
-    $threatFeedMinHits = (string) (getSetting($pdo, 'threat_feed_min_hits', '1') ?? '1');
-    $dataRetentionDays = (string) (getSetting($pdo, 'data_retention_days', '0') ?? '0');
-
-    $ipOverrides       = getIpOverrides($pdo);
-    $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, 24);
-    $ipOverrideMap     = getActiveIpOverrideMap($pdo);
-    $countryRules      = getCountryRules($pdo);
-
-    $editOverrideId = (int) ($_GET['edit_override_id'] ?? 0);
-    $editOverride   = null;
-    if ($editOverrideId > 0) {
-        foreach ($ipOverrides as $candidate) {
-            if ((int) $candidate['id'] === $editOverrideId) {
-                $editOverride = $candidate;
-                break;
-            }
-        }
+    if (!in_array($exportMinConfidenceInput, ['human', 'uncertain', 'suspicious', 'bot'], true)) {
+        http_response_code(400);
+        echo 'Invalid export minimum confidence value.';
+        exit;
     }
 
-    $editCountryId   = (int) ($_GET['edit_country_id'] ?? 0);
-    $editCountryRule = null;
-    if ($editCountryId > 0) {
-        foreach ($countryRules as $candidate) {
-            if ((int) $candidate['id'] === $editCountryId) {
-                $editCountryRule = $candidate;
-                break;
-            }
-        }
+    setSetting($pdo, 'app_name',                $appNameInput);
+    setSetting($pdo, 'base_url',                $baseUrlInput);
+    setSetting($pdo, 'default_redirect_url',    $defaultRedirectUrlInput);
+    setSetting($pdo, 'unknown_path_behavior',   $unknownPathBehaviorInput);
+    setSetting($pdo, 'pixel_enabled',           $pixelEnabledInput);
+    setSetting($pdo, 'noise_filter_enabled',    $noiseFilterEnabledInput);
+    setSetting($pdo, 'display_min_score',       $displayMinScoreInput);
+    setSetting($pdo, 'page_size',               (string) $pageSizeInput);
+    setSetting($pdo, 'auto_refresh_secs',       (string) $autoRefreshInput);
+    setSetting($pdo, 'webhook_url',             $webhookUrlInput);
+    setSetting($pdo, 'webhook_template',        $webhookTemplateInput);
+    setSetting($pdo, 'webhook_threshold',       $webhookThresholdInput);
+    setSetting($pdo, 'token_webhook_url',       $tokenWebhookUrlInput);
+    setSetting($pdo, 'token_webhook_template',  $tokenWebhookTemplateInput);
+    setSetting($pdo, 'export_min_confidence',   $exportMinConfidenceInput);
+    setSetting($pdo, 'export_window_hours',     (string) $exportWindowHoursInput);
+    setSetting($pdo, 'export_min_score',        (string) $exportMinScoreInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleSaveThreatFeedSettings(PDO $pdo): void
+{
+    $enabledInput = isset($_POST['threat_feed_enabled']) ? '1' : '0';
+    $windowHoursInput = max(1, (int) ($_POST['threat_feed_window_hours'] ?? 168));
+    $minConfidenceInput = strtolower(trim((string) ($_POST['threat_feed_min_confidence'] ?? 'suspicious')));
+
+    if (!in_array($minConfidenceInput, ['human', 'uncertain', 'suspicious', 'bot'], true)) {
+        http_response_code(400);
+        echo 'Invalid minimum confidence value.';
+        exit;
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
-        $params = [];
-
-        if ($tokenFilter !== '') {
-            $params['token'] = $tokenFilter;
-        }
-        if ($ipFilter !== '') {
-            $params['ip'] = $ipFilter;
-        }
-        if ($visitorFilter !== '') {
-            $params['visitor'] = $visitorFilter;
-        }
-        if ($knownOnly) {
-            $params['known'] = '1';
-        }
-        if ($dateFrom !== '') {
-            $params['date_from'] = $dateFrom;
-        }
-        if ($dateTo !== '') {
-            $params['date_to'] = $dateTo;
-        }
-        if ($showAll) {
-            $params['show_all'] = '1';
-        }
-
-        if ($hideBehavioral) {
-            $params['hide_behavioral'] = '1';
-        }
-
-        if ($activeTab !== '') {
-            $params['tab'] = $activeTab;
-        }
-
-        foreach ($overrides as $key => $value) {
-            if ($value === null || $value === '') {
-                unset($params[$key]);
-            } else {
-                $params[$key] = $value;
-            }
-        }
-
-        return '/admin' . (!empty($params) ? '?' . http_build_query($params) : '');
-    };
-
-    $buildExportUrl = function () use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
-        $params = [];
-
-        if ($tokenFilter !== '') {
-            $params['token'] = $tokenFilter;
-        }
-        if ($ipFilter !== '') {
-            $params['ip'] = $ipFilter;
-        }
-        if ($visitorFilter !== '') {
-            $params['visitor'] = $visitorFilter;
-        }
-        if ($knownOnly) {
-            $params['known'] = '1';
-        }
-        if ($dateFrom !== '') {
-            $params['date_from'] = $dateFrom;
-        }
-        if ($dateTo !== '') {
-            $params['date_to'] = $dateTo;
-        }
-
-        return '/expor/json' . (!empty($params) ? '?' . http_build_query($params) : '');
-    };
-
-    $threatFeedUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/feed/ips.txt';
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title><?= h($appName) ?></title>
-	<link rel="stylesheet" href="/admin.css">
-        <link rel="icon" type="image/png" href="/signaltrace_transparent.png">
-        <link rel="apple-touch-icon" href="/signaltrace_transparent.png">
-    </head>
-    <body>
-        <header class="page-header">
-            <div class="page-header-left">
-                <a href="/admin" class="header-home-link">
-                    <img src="/signaltrace_transparent.png" alt="SignalTrace" class="header-logo">
-                    <h1><?= h($appName) ?></h1>
-                </a>
-                <span class="header-tag">Admin</span>
-            </div>
-            <button type="button" class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
-                <span class="theme-icon" id="theme-icon">☀️</span>
-                <span id="theme-label">Light</span>
-            </button>
-        </header>
-        <div class="page-body">
-
-        <div class="tabs">
-            <div class="tab" id="tab-dashboard" onclick="showTab('dashboard')">Dashboard</div>
-            <div class="tab" id="tab-links" onclick="showTab('links')">Tokens</div>
-	    <div class="tab" id="tab-skip" onclick="showTab('skip')">Skip Patterns</div>
-            <div class="tab" id="tab-asn" onclick="showTab('asn')">ASN Rules</div>
-            <div class="tab" id="tab-countries" onclick="showTab('countries')">Country Rules</div>
-            <div class="tab" id="tab-overrides" onclick="showTab('overrides')">IP Overrides</div>
-            <div class="tab" id="tab-settings" onclick="showTab('settings')">Settings</div>
-        </div>
-
-        <div class="tab-content" id="content-dashboard">
-            <form method="get" action="/admin" class="inline-form">
-		<h2>Filter Activity</h2>
-		<div class="filter-container">
-                    <div class="filter-inputs">
-	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Filter by token or path">
-	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="Filter by IP">
-	                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Filter by visitor hash">
-	                <label class="date-filter-label">
-	                    <span class="date-filter-hint">📅 From</span>
-	                    <input type="date" name="date_from" value="<?= h($dateFrom) ?>">
-	                </label>
-	                <label class="date-filter-label">
-	                    <span class="date-filter-hint">📅 To</span>
-	                    <input type="date" name="date_to" value="<?= h($dateTo) ?>">
-	                </label>
-		    </div>
-                    <div class="filter-toggles">
-	                <label>
-	                    <input type="checkbox" name="known" value="1" <?= $knownOnly ? 'checked' : '' ?>>
-	                    Known tokens only
-			</label>
-			<label>
-			    <input type="checkbox" name="show_top_tokens" value="1"
-			        <?= (isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1') ? 'checked' : '' ?>>
-			    Show Top Tokens
-			</label>
-			<label>
-			    <input type="checkbox" name="show_all" value="1" <?= (isset($_GET['show_all']) && $_GET['show_all'] === '1') ? 'checked' : '' ?>>
-			    Show all
-			</label>
-                </div>
-                <div class="filter-actions">
-                    <button type="submit">Apply Filter</button>
-                    <a class="button-link" href="/admin">Clear Filter</a>
-                    <a class="button-link" href="<?= h($refreshUrl) ?>">Refresh</a>
-                    <?php
-                    $exportParams = [];
-                    if ($tokenFilter   !== '') $exportParams['token']    = $tokenFilter;
-                    if ($ipFilter      !== '') $exportParams['ip']       = $ipFilter;
-                    if ($visitorFilter !== '') $exportParams['visitor']  = $visitorFilter;
-                    if ($knownOnly)            $exportParams['known']    = '1';
-                    if ($dateFrom      !== '') $exportParams['date_from'] = $dateFrom;
-                    if ($dateTo        !== '') $exportParams['date_to']   = $dateTo;
-                    $exportHref = '/export/json' . (!empty($exportParams) ? '?' . http_build_query($exportParams) : '');
-                    ?>
-                    <a class="button-link" href="<?= h($exportHref) ?>" target="_blank" rel="noopener">Export JSON</a>
-                    <a class="button-link" href="<?= h(str_replace('/export/json', '/export/csv', $exportHref)) ?>" target="_blank" rel="noopener">Export CSV</a>
-		</div>
-               </div>
-            </form>
-
-            <?php if ($hasActiveFilter): ?>
-                <div class="active-filters">
-                    <?php if ($tokenFilter !== ''): ?>
-                        <span class="filter-pill">
-                            token: <?= h($tokenFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['token' => null])) ?>">×</a>
-                        </span>
-                    <?php endif; ?>
-
-                    <?php if ($ipFilter !== ''): ?>
-                        <span class="filter-pill">
-                            ip: <?= h($ipFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['ip' => null])) ?>">×</a>
-                        </span>
-                    <?php endif; ?>
-
-                    <?php if ($visitorFilter !== ''): ?>
-                        <span class="filter-pill">
-                            visitor: <?= h($visitorFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['visitor' => null])) ?>">×</a>
-                        </span>
-                    <?php endif; ?>
-
-                    <?php if ($dateFrom !== ''): ?>
-                        <span class="filter-pill">
-                            from: <?= h($dateFrom) ?>
-                            <a href="<?= h($buildAdminUrl(['date_from' => null])) ?>">×</a>
-                        </span>
-                    <?php endif; ?>
-
-                    <?php if ($dateTo !== ''): ?>
-                        <span class="filter-pill">
-                            to: <?= h($dateTo) ?>
-                            <a href="<?= h($buildAdminUrl(['date_to' => null])) ?>">×</a>
-                        </span>
-                    <?php endif; ?>
-
-                    <?php if ($knownOnly): ?>
-                        <span class="filter-pill">
-                            known only
-                            <a href="<?= h($buildAdminUrl(['known' => null])) ?>">×</a>
-                        </span>
-		    <?php endif; ?>
-
-		    <?php if ($showAll): ?>
-			<span class="filter-pill">
-		            show all
-		            <a href="<?= h($buildAdminUrl(['show_all' => null])) ?>">×</a>
-		       </span>
-		    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-
-
-
-<?php if ($tokenFilter !== '' && !$knownOnly && $ipFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
-    <form method="post" action="/admin/delete-token-clicks" class="inline-form">
-        <h2>Token Cleanup</h2>
-        <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
-
-        <div class="filter-actions" style="margin-left: 0;">
-            <button type="submit"
-                    name="mode"
-                    value="unknown_only"
-                    class="warning-button"
-                    onclick="return confirm('Delete unknown-only clicks for this token/path?');">
-                Delete Unknown Token Hits
-            </button>
-
-            <button type="submit"
-                    name="mode"
-                    value="all"
-                    class="danger-button"
-                    onclick="return confirm('Delete ALL clicks for this token/path?');">
-                Delete All Clicks for Token
-            </button>
-        </div>
-    </form>
-<?php endif; ?>
-
-<?php if ($ipFilter !== '' && !$knownOnly && $tokenFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
-    <form method="post" action="/admin/delete-ip-clicks" class="inline-form">
-        <h2>IP Cleanup</h2>
-        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
-
-        <div class="filter-actions" style="margin-left: 0;">
-            <button type="submit"
-                    name="mode"
-                    value="unknown_only"
-                    class="warning-button"
-                    onclick="return confirm('Delete unknown-only clicks for this IP?');">
-                Delete Unknown IP Hits
-            </button>
-
-            <button type="submit"
-                    name="mode"
-                    value="all"
-                    class="danger-button"
-                    onclick="return confirm('Delete ALL clicks for this IP?');">
-                Delete All Clicks for IP
-            </button>
-        </div>
-    </form>
-<?php endif; ?>
-
-<?php if ($hasActiveFilter): ?>
-    <form method="post" action="/admin/delete-filtered-clicks" class="inline-form">
-        <h2>Bulk Delete</h2>
-        <p class="muted">Delete all <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter.</p>
-        <?php if ($tokenFilter   !== ''): ?><input type="hidden" name="token"     value="<?= h($tokenFilter) ?>"><?php endif; ?>
-        <?php if ($ipFilter      !== ''): ?><input type="hidden" name="ip"        value="<?= h($ipFilter) ?>"><?php endif; ?>
-        <?php if ($visitorFilter !== ''): ?><input type="hidden" name="visitor"   value="<?= h($visitorFilter) ?>"><?php endif; ?>
-        <?php if ($knownOnly):            ?><input type="hidden" name="known"     value="1"><?php endif; ?>
-        <?php if ($dateFrom      !== ''): ?><input type="hidden" name="date_from" value="<?= h($dateFrom) ?>"><?php endif; ?>
-        <?php if ($dateTo        !== ''): ?><input type="hidden" name="date_to"   value="<?= h($dateTo) ?>"><?php endif; ?>
-        <div class="filter-actions" style="margin-left: 0;">
-            <button type="submit"
-                    class="danger-button"
-                    onclick="return confirm('Delete ALL <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter? This cannot be undone.');">
-                Delete All Matching Clicks
-            </button>
-        </div>
-    </form>
-<?php endif; ?>
-
-
-
-	    <?php $showTopTokens = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1'; ?>
-            <?php if ($showTopTokens): ?>
-            <h2>Top Tokens</h2>
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th>Token</th>
-                        <th>Hits</th>
-                        <th>Last Seen</th>
-                        <th>Known?</th>
-                    </tr>
-                    <?php foreach ($tokenCounts as $row): ?>
-                        <tr>
-                            <td class="mono">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $row['token']])) ?>">
-                                    <?= h((string) $row['token']) ?>
-                                </a>
-                            </td>
-                            <td><?= (int) $row['hit_count'] ?></td>
-                            <td><?= h((string) $row['last_seen']) ?></td>
-                            <td><?= ((int) $row['is_known'] === 1) ? 'Yes' : 'No' ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-	    </div>
-            <?php endif; ?>
-
-            <?php if (!empty($behavioralFlags) && !$hideBehavioral): ?>
-            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span>
-                <a class="copy-button" style="margin-left:8px;font-size:0.75rem;" href="<?= h($buildAdminUrl(['hide_behavioral' => '1'])) ?>">Hide</a>
-            </h2>
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th>IP</th>
-                        <th>Org</th>
-                        <th>Country</th>
-                        <th>Hits</th>
-                        <th>Burst</th>
-                        <th>Rapid</th>
-                        <th>Multi-token</th>
-                        <th>Lowest Score</th>
-                        <th>First Seen</th>
-                        <th>Last Seen</th>
-                    </tr>
-                    <?php foreach ($behavioralFlags as $flag): ?>
-                        <?php $flagIp = (string) ($flag['ip'] ?? ''); ?>
-                        <tr>
-                            <td class="mono ip-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp, 'show_all' => '1', 'hide_behavioral' => '1'])) ?>">
-                                    <?= h($flagIp) ?>
-                                </a>
-                            </td>
-                            <td><?= h((string) ($flag['ip_org'] ?? '')) ?></td>
-                            <td><?= h((string) ($flag['ip_country'] ?? '')) ?></td>
-                            <td><?= (int) ($flag['total_hits'] ?? 0) ?></td>
-                            <td><?= (int) ($flag['burst_hits'] ?? 0) > 0 ? '<span class="badge badge-bot">' . (int)$flag['burst_hits'] . '</span>' : '—' ?></td>
-                            <td><?= (int) ($flag['rapid_hits'] ?? 0) > 0 ? '<span class="badge badge-suspicious">' . (int)$flag['rapid_hits'] . '</span>' : '—' ?></td>
-                            <td><?= (int) ($flag['multi_hits'] ?? 0) > 0 ? '<span class="badge badge-suspicious">' . (int)$flag['multi_hits'] . '</span>' : '—' ?></td>
-                            <td><?= h((string) ($flag['lowest_score'] ?? '')) ?></td>
-                            <td><?= h((string) ($flag['first_seen'] ?? '')) ?></td>
-                            <td><?= h((string) ($flag['last_seen'] ?? '')) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-            <?php elseif (!empty($behavioralFlags) && $hideBehavioral): ?>
-            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span>
-                <a class="copy-button" style="margin-left:8px;font-size:0.75rem;" href="<?= h($buildAdminUrl(['hide_behavioral' => null])) ?>">Show (<?= count($behavioralFlags) ?>)</a>
-            </h2>
-            <?php endif; ?>
-
-            <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
-            <?php
-            $summaryAsn     = (string) ($ipSummary['ip_asn'] ?? '');
-            $summaryAsnRule = $summaryAsn !== '' ? getAsnRuleByAsn($pdo, $summaryAsn) : null;
-            ?>
-            <div class="ip-summary">
-                <strong>IP Summary: <?= h($ipFilter) ?></strong>
-                <div style="display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle;">
-                    <button type="button" class="copy-button" onclick="copyText('<?= h($ipFilter) ?>')" title="Copy IP">Copy</button>
-                    <a class="copy-button" href="https://www.virustotal.com/gui/ip-address/<?= h($ipFilter) ?>" target="_blank" rel="noopener" title="Open in VirusTotal">VT</a>
-                    <a class="copy-button" href="https://www.abuseipdb.com/check/<?= h($ipFilter) ?>" target="_blank" rel="noopener" title="Check AbuseIPDB">Abuse</a>
-                    <a class="copy-button" href="https://ipinfo.io/<?= h($ipFilter) ?>" target="_blank" rel="noopener" title="View IPInfo">Info</a>
-                </div>
-                <div class="details-grid" style="margin-top: 8px;">
-                    <div>
-                        <div><span class="mono">First seen:</span> <?= h((string) ($ipSummary['first_seen'] ?? '—')) ?></div>
-                        <div><span class="mono">Last seen:</span>  <?= h((string) ($ipSummary['last_seen']  ?? '—')) ?></div>
-                        <div><span class="mono">Total hits:</span> <?= (int) ($ipSummary['total_hits'] ?? 0) ?></div>
-                        <div><span class="mono">Distinct tokens:</span> <?= (int) ($ipSummary['distinct_tokens'] ?? 0) ?></div>
-                    </div>
-                    <div>
-                        <div><span class="mono">Bot hits:</span>          <?= (int) ($ipSummary['bot_count']          ?? 0) ?></div>
-                        <div><span class="mono">Suspicious hits:</span>   <?= (int) ($ipSummary['suspicious_count']   ?? 0) ?></div>
-                        <div><span class="mono">Uncertain hits:</span> <?= (int) ($ipSummary['uncertain_count'] ?? 0) ?></div>
-                        <div><span class="mono">Human hits:</span>        <?= (int) ($ipSummary['human_count']        ?? 0) ?></div>
-                    </div>
-                    <div>
-                        <div><span class="mono">Org:</span>     <?= h((string) ($ipSummary['ip_org']     ?? '—')) ?></div>
-                        <div>
-                            <span class="mono">ASN:</span> <?= h($summaryAsn) ?>
-                            <?php if ($summaryAsn !== '' && $summaryAsnRule === null): ?>
-                                <form method="post" action="/admin/create-asn-rule" class="inline-action-form" style="display:inline-block;">
-                                    <input type="hidden" name="asn" value="<?= h($summaryAsn) ?>">
-                                    <input type="hidden" name="label" value="<?= h((string) ($ipSummary['ip_org'] ?? '')) ?>">
-                                    <input type="hidden" name="penalty" value="10">
-                                    <button type="submit" class="copy-button">Add ASN Rule</button>
-                                </form>
-                            <?php elseif ($summaryAsnRule !== null): ?>
-                                <span class="badge badge-suspicious">ASN rule active — penalty <?= (int) $summaryAsnRule['penalty'] ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <div><span class="mono">Country:</span> <?= h((string) ($ipSummary['ip_country'] ?? '—')) ?></div>
-                    </div>
-                </div>
-                <?php
-                $summaryOverrideMode = $ipOverrideMap[$ipFilter] ?? null;
-                $filterHiddensSummary = '';
-                if ($tokenFilter   !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_token"     value="' . h($tokenFilter)   . '">';
-                if ($ipFilter      !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_ip"        value="' . h($ipFilter)      . '">';
-                if ($visitorFilter !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_visitor"   value="' . h($visitorFilter) . '">';
-                if ($knownOnly)            $filterHiddensSummary .= '<input type="hidden" name="_filter_known"     value="1">';
-                if ($dateFrom      !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
-                if ($dateTo        !== '') $filterHiddensSummary .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
-                ?>
-                <div style="margin-top:10px;">
-                <?php if ($summaryOverrideMode === null): ?>
-                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                        <?= $filterHiddensSummary ?>
-                        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
-                        <input type="hidden" name="mode" value="block">
-                        <input type="hidden" name="notes" value="Added from IP summary">
-                        <button type="submit" class="danger-button">Block IP</button>
-                    </form>
-                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                        <?= $filterHiddensSummary ?>
-                        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
-                        <input type="hidden" name="mode" value="allow">
-                        <input type="hidden" name="notes" value="Added from IP summary">
-                        <button type="submit" class="warning-button">Allow IP</button>
-                    </form>
-                <?php else: ?>
-                    <span class="badge <?= $summaryOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
-                        IP override: <?= h($summaryOverrideMode) ?>
-                    </span>
-                    <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
-                <?php endif; ?>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <h2>Activity</h2>
-            <p class="muted">
-                <?= $knownOnly ? 'Showing only known tokens.' : 'Showing all clicks that were not suppressed as noise.' ?>
-                <?php if ($totalCount > 0): ?>
-                    <span style="margin-left: 8px;"><?= number_format($totalCount) ?> total &mdash; page <?= $currentPage ?> of <?= $totalPages ?></span>
-                <?php endif; ?>
-            </p>
-
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th class="time-col">Time</th>
-                        <th class="type-col">Type</th>
-                        <th class="token-col">Token / Path</th>
-                        <th class="ip-col">IP</th>
-                        <th>Org</th>
-                        <th class="classification-col">Classification</th>
-                        <th class="details-col">Details</th>
-                    </tr>
-                    <?php foreach ($clicks as $i => $c): ?>
-                        <?php
-                        $confidenceLabel = (string) ($c['confidence_label'] ?? '');
-                        $badgeClass = match ($confidenceLabel) {
-                            'human'        => 'badge badge-human',
-                            'uncertain' => 'badge badge-uncertain',
-                            'suspicious'   => 'badge badge-suspicious',
-                            'bot'          => 'badge badge-bot',
-                            default        => 'badge',
-                        };
-                        $detailsId    = 'details-' . $i;
-                        $rowToken     = (string) ($c['token'] ?? '');
-                        $displayToken = ($rowToken === 'root') ? '/' : $rowToken;
-                        $rowIp        = (string) ($c['ip'] ?? '');
-                        $rowVisitor   = (string) ($c['visitor_hash'] ?? '');
-                        $rowUa        = (string) ($c['user_agent'] ?? '');
-
-                        // Display timestamp from unix_ms if available, fall back to clicked_at string.
-                        $tsMs      = $c['clicked_at_unix_ms'] ?? null;
-                        $tsDisplay = $tsMs !== null
-                            ? date('Y-m-d H:i:s', (int) ($tsMs / 1000))
-                            : (string) ($c['clicked_at'] ?? '');
-                        ?>
-                        <tr class="<?= $confidenceLabel === 'bot' ? 'bot' : '' ?>">
-                            <td class="time-col" title="<?= h((string) ($c['clicked_at'] ?? '')) ?>"><?= h($tsDisplay) ?></td>
-                            <td class="type-col"><?= h((string) ($c['event_type'] ?? 'click')) ?></td>
-                            <td class="mono token-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>">
-                                    <?= h($rowToken) ?>
-                                </a>
-                            </td>
-                            <td class="mono ip-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $rowIp])) ?>">
-                                    <?= h($rowIp) ?>
-                                </a>
-                            </td>
-			    <td><?= h((string) ($c['ip_org'] ?? '')) ?></td>
-			    <?php $rowScore = (int) ($c['confidence_score'] ?? 0); ?>
-                            <td class="classification-col">
-			        <span class="<?= h($badgeClass) ?>">
-			            <?= h($confidenceLabel) ?>
-			        </span>
-			        <span class="score-pill"><?= $rowScore ?></span>
-			    </td>
-			    <td class="details-col">
-                                <button type="button" class="details-button" onclick="toggleDetails('<?= h($detailsId) ?>', this)">Details</button>
-                            </td>
-                        </tr>
-                        <tr id="<?= h($detailsId) ?>" class="details-row">
-                            <td colspan="7" class="details-cell">
-                                <div class="details-grid">
-                                    <div class="detail-box">
-                                        <strong>Identity</strong>
-                                        <div>
-                                            <span class="mono">Click ID:</span> <?= h((string) ($c['id'] ?? '')) ?>
-                                        </div>
-					<div>
-					    <span class="mono">IP:</span>
-					    <a class="pill-link mono" href="<?= h($buildAdminUrl(['ip' => $rowIp])) ?>"><?= h($rowIp) ?></a>
-					    <button type="button" class="copy-button" onclick="copyText('<?= h($rowIp) ?>')" title="Copy IP">Copy</button>
-					    <a class="copy-button" href="https://www.virustotal.com/gui/ip-address/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Open in VirusTotal">VT</a>
-					    <a class="copy-button" href="https://www.abuseipdb.com/check/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Check AbuseIPDB">Abuse</a>
-					    <a class="copy-button" href="https://ipinfo.io/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="View IPInfo">Info</a>
-					</div>
-					<?php
-                        $rowAsn = (string) ($c['ip_asn'] ?? '');
-                        $asnRule = $rowAsn !== '' ? getAsnRuleByAsn($pdo, $rowAsn) : null;
-                        ?>
-					<div>
-					    <span class="mono">ASN:</span> <?= h($rowAsn) ?>
-
-					    <?php if ($rowAsn !== '' && $asnRule === null): ?>
-					        <form method="post" action="/admin/create-asn-rule" class="inline-action-form" style="display:inline-block;">
-					            <input type="hidden" name="asn" value="<?= h($rowAsn) ?>">
-					            <input type="hidden" name="label" value="<?= h((string) ($c['ip_org'] ?? '')) ?>">
-					            <input type="hidden" name="penalty" value="10">
-					            <button type="submit" class="copy-button">Add ASN Rule</button>
-					        </form>
-					    <?php elseif ($asnRule !== null): ?>
-					        <span class="badge badge-suspicious">ASN rule active</span>
-					    <?php endif; ?>
-					</div>
-                                        <div><span class="mono">Org:</span> <?= h((string) ($c['ip_org'] ?? '')) ?></div>
-                                        <div><span class="mono">Country:</span> <?= h((string) ($c['ip_country'] ?? '')) ?></div>
-                                        <div>
-                                            <span class="mono">Visitor:</span>
-                                            <a class="pill-link mono" href="<?= h($buildAdminUrl(['visitor' => $rowVisitor])) ?>"><?= h($rowVisitor) ?></a>
-                                            <button type="button" class="copy-button" onclick="copyText('<?= h($rowVisitor) ?>')">Copy</button>
-                                        </div>
-                                        <div><span class="mono">XFF:</span> <?= h((string) ($c['x_forwarded_for'] ?? '')) ?></div>
-                                    </div>
-
-                                    <div class="detail-box">
-					<strong>Scoring</strong>
-					<?php
-                                                $score = (int) ($c['confidence_score'] ?? 0);
-                        if ($score <= 10) {
-                            $confidenceLevel = 'high';
-                        } elseif ($score <= 30) {
-                            $confidenceLevel = 'medium';
-                        } elseif ($score <= 60) {
-                            $confidenceLevel = 'low';
-                        } else {
-                            $confidenceLevel = 'very low';
-                        }
-                        ?>
-					<div><span class="mono">Classification:</span> <?= h((string) ($c['confidence_label'] ?? '')) ?> (<?= h((string) ($c['confidence_score'] ?? '')) ?>)</div>
-                                        <div><span class="mono">Reason:</span> <?= renderSignalReasons((string) ($c['confidence_reason'] ?? '')) ?></div>
-                                        <div><span class="mono">First for token:</span> <?= !empty($c['first_for_token']) ? 'Yes' : 'No' ?></div>
-                                        <div><span class="mono">Prior events for token:</span> <?= h((string) ($c['prior_events_for_token'] ?? '0')) ?></div>
-                                    </div>
-
-                                    <div class="detail-box">
-                                        <strong>Request</strong>
-                                        <div>
-                                            <span class="mono">Token / Path:</span>
-                                            <a class="pill-link mono" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>"><?= h($rowToken) ?></a>
-                                            <button type="button" class="copy-button" onclick="copyText('<?= h($rowToken) ?>')">Copy</button>
-                                        </div>
-                                        <div><span class="mono">Method:</span> <?= h((string) ($c['request_method'] ?? '')) ?></div>
-                                        <div><span class="mono">Host:</span> <?= h((string) ($c['host'] ?? '')) ?></div>
-                                        <div><span class="mono">Scheme:</span> <?= h((string) ($c['scheme'] ?? '')) ?></div>
-                                        <div><span class="mono">URI:</span> <span class="wrap"><?= h((string) ($c['request_uri'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Query:</span> <span class="wrap"><?= h((string) ($c['query_string'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Remote port:</span> <?= h((string) ($c['remote_port'] ?? '')) ?></div>
-                                    </div>
-
-                                    <div class="detail-box">
-                                        <strong>Headers</strong>
-                                        <div><span class="mono">Referer:</span> <span class="wrap"><?= h((string) ($c['referer'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept:</span> <span class="wrap"><?= h((string) ($c['accept'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept-Language:</span> <span class="wrap"><?= h((string) ($c['accept_language'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Accept-Encoding:</span> <span class="wrap"><?= h((string) ($c['accept_encoding'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-Fetch-Site:</span> <span class="wrap"><?= h((string) ($c['sec_fetch_site'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-Fetch-Mode:</span> <span class="wrap"><?= h((string) ($c['sec_fetch_mode'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-Fetch-Dest:</span> <span class="wrap"><?= h((string) ($c['sec_fetch_dest'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-CH-UA:</span> <span class="wrap"><?= h((string) ($c['sec_ch_ua'] ?? '')) ?></span></div>
-                                        <div><span class="mono">Sec-CH-UA-Platform:</span> <span class="wrap"><?= h((string) ($c['sec_ch_ua_platform'] ?? '')) ?></span></div>
-                                    </div>
-
-                                    <div class="detail-box" style="grid-column: 1 / -1;">
-                                        <strong>User-Agent</strong>
-                                        <div class="wrap">
-                                            <?= h($rowUa) ?>
-                                            <button type="button" class="copy-button" onclick="copyText('<?= h($rowUa) ?>')">Copy</button>
-                                        </div>
-                                    </div>
-
-                                    <div class="detail-box" style="grid-column: 1 / -1;">
-                                        <strong>Actions</strong>
-                                        <?php
-                                        // Hidden filter fields included in every action form so the
-                                        // handler can redirect back to the current filtered view.
-                                        $filterHiddens = '';
-                                        if ($tokenFilter   !== '') $filterHiddens .= '<input type="hidden" name="_filter_token"     value="' . h($tokenFilter)   . '">';
-                                        if ($ipFilter      !== '') $filterHiddens .= '<input type="hidden" name="_filter_ip"        value="' . h($ipFilter)      . '">';
-                                        if ($visitorFilter !== '') $filterHiddens .= '<input type="hidden" name="_filter_visitor"   value="' . h($visitorFilter) . '">';
-                                        if ($knownOnly)            $filterHiddens .= '<input type="hidden" name="_filter_known"     value="1">';
-                                        if ($dateFrom      !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
-                                        if ($dateTo        !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
-                                        ?>
-
-                                        <form method="post" action="/admin/delete-click" class="inline-action-form" onsubmit="return confirm('Delete this click?');">
-                                            <?= $filterHiddens ?>
-                                            <input type="hidden" name="id" value="<?= h((string) ($c['id'] ?? '')) ?>">
-                                            <button type="submit" class="danger-button">Delete This Click</button>
-                                        </form>
-
-                                        <form method="post" action="/admin/add-token-to-skip" class="inline-action-form" onsubmit="return confirm('Add this token/path to skip patterns?');">
-                                            <?= $filterHiddens ?>
-                                            <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                            <button type="submit" class="warning-button">Skip Exact Token</button>
-                                        </form>
-
-                                        <?php if (empty($c['link_id'])): ?>
-                                            <form method="post" action="/admin/delete-token-clicks" class="inline-action-form" onsubmit="return confirm('Delete unknown-only clicks for this token/path?');">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                                <input type="hidden" name="mode" value="unknown_only">
-                                                <button type="submit" class="warning-button">Delete Unknown Token Hits</button>
-                                            </form>
-                                        <?php endif; ?>
-
-                                        <form method="post" action="/admin/delete-token-clicks" class="inline-action-form" onsubmit="return confirm('Delete ALL clicks for this token/path?');">
-                                            <?= $filterHiddens ?>
-                                            <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                            <input type="hidden" name="mode" value="all">
-                                            <button type="submit" class="danger-button">Delete All Clicks for Token</button>
-                                        </form>
-
-                                        <?php $existingOverrideMode = $ipOverrideMap[$rowIp] ?? null; ?>
-                                        <?php if ($existingOverrideMode === null): ?>
-                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-                                                <input type="hidden" name="mode" value="block">
-                                                <input type="hidden" name="notes" value="Added from activity feed">
-                                                <button type="submit" class="danger-button">Block IP</button>
-                                            </form>
-                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-                                                <input type="hidden" name="mode" value="allow">
-                                                <input type="hidden" name="notes" value="Added from activity feed">
-                                                <button type="submit" class="warning-button">Allow IP</button>
-                                            </form>
-                                        <?php else: ?>
-                                            <span class="badge <?= $existingOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
-                                                IP override: <?= h($existingOverrideMode) ?>
-                                            </span>
-                                            <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-
-            <?php if ($totalPages > 1): ?>
-            <div class="pagination">
-                <?php if ($currentPage > 1): ?>
-                    <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) ($currentPage - 1)])) ?>">&larr; Prev</a>
-                <?php endif; ?>
-
-                <?php
-                $start = max(1, $currentPage - 2);
-                $end   = min($totalPages, $currentPage + 2);
-                for ($p = $start; $p <= $end; $p++):
-                ?>
-                    <?php if ($p === $currentPage): ?>
-                        <span class="page-current"><?= $p ?></span>
-                    <?php else: ?>
-                        <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) $p])) ?>"><?= $p ?></a>
-                    <?php endif; ?>
-                <?php endfor; ?>
-
-                <?php if ($currentPage < $totalPages): ?>
-                    <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) ($currentPage + 1)])) ?>">Next &rarr;</a>
-                <?php endif; ?>
-
-                <span class="muted">
-                    <?= number_format($totalCount) ?> total &mdash; page <?= $currentPage ?> of <?= $totalPages ?>
-                </span>
-            </div>
-            <?php endif; ?>
-
-        </div>
-
-	<div class="tab-content" id="content-links">
-	    <?php if ($editLink !== null): ?>
-	    <form method="post" action="/admin/update-link">
-	        <h2>Edit Token</h2>
-
-	        <input type="hidden" name="id" value="<?= (int) $editLink['id'] ?>">
-
-	        <label for="edit_token">Token / Path</label>
-	        <input id="edit_token" type="text" name="token" required value="<?= h((string) $editLink['token']) ?>">
-
-	        <label for="edit_destination">Destination URL</label>
-	        <input id="edit_destination" type="url" name="destination" required value="<?= h((string) $editLink['destination']) ?>">
-
-	        <label for="edit_description">Description</label>
-	        <input id="edit_description" type="text" name="description" value="<?= h((string) ($editLink['description'] ?? '')) ?>">
-
-	        <div style="margin-bottom: 12px;">
-	            <label style="display: inline-flex; align-items: center; gap: 6px;">
-	                <input type="checkbox" name="exclude_from_feed" value="1" <?= ((int) ($editLink['exclude_from_feed'] ?? 0) === 1) ? 'checked' : '' ?>>
-	                <span>Exclude from threat feed</span>
-	            </label>
-	            <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
-	        </div>
-
-	        <div style="margin-bottom: 12px;">
-	            <label style="display: inline-flex; align-items: center; gap: 6px;">
-	                <input type="checkbox" name="include_in_token_webhook" value="1" <?= ((int) ($editLink['include_in_token_webhook'] ?? 0) === 1) ? 'checked' : '' ?>>
-	                <span>Send token webhook on hit</span>
-	            </label>
-	            <p class="muted" style="margin: 4px 0 0 0;">Fire the token webhook URL when this token is hit. Requires a token webhook URL to be configured in Settings.</p>
-	        </div>
-
-	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-	            <button type="submit">Save Changes</button>
-	            <form method="get" action="/admin" class="inline-action-form">
-	                <input type="hidden" name="tab" value="links">
-	                <button type="submit">Cancel</button>
-	            </form>
-	        </div>
-	    </form>
-	<?php endif; ?>
-            <form method="post" action="/admin/create-link">
-                <h2>Create Token</h2>
-                <label for="token">Token / Path</label>
-                <input id="token" type="text" name="token" required placeholder="payroll or abc123">
-
-                <label for="destination">Destination URL</label>
-                <input id="destination" type="url" name="destination" required placeholder="https://www.example.com/">
-
-                <label for="description">Description</label>
-                <input id="description" type="text" name="description" placeholder="Optional description">
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: inline-flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" name="exclude_from_feed" value="1">
-                        <span>Exclude from threat feed</span>
-                    </label>
-                    <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: inline-flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" name="include_in_token_webhook" value="1">
-                        <span>Send token webhook on hit</span>
-                    </label>
-                    <p class="muted" style="margin: 4px 0 0 0;">Fire the token webhook URL when this token is hit. Requires a token webhook URL to be configured in Settings.</p>
-                </div>
-
-                <button type="submit">Create Token</button>
-            </form>
-
-            <h2>Token Summary</h2>
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th>ID</th>
-                        <th>Token / Path</th>
-                        <th>Description</th>
-                        <th>Destination</th>
-                        <th>Active</th>
-			<th>Clicks</th>
-                        <th>Excl. Feed</th>
-                        <th>Token Webhook</th>
-                        <th>Path URL</th>
-                        <th>Pixel URL</th>
-                        <th class="actions-col">Actions</th>
-                    </tr>
-		    <?php foreach ($links as $link): ?>
-		   <?php
-            $tokenUrl = $baseUrl !== ''
-                ? rtrim($baseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
-                : '';
-
-		        $pixelUrl = $baseUrl !== ''
-		            ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
-		            : '';
-		        ?>
-		<tr>
-		    <td><?= (int) $link['id'] ?></td>
-		    <td class="mono">
-		        <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $link['token'], 'tab' => 'links'])) ?>">
-		            <?= h((string) $link['token']) ?>
-		        </a>
-		    </td>
-		    <td><?= h((string) ($link['description'] ?? '')) ?></td>
-		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
-		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
-		    <td><?= (int) $link['click_count'] ?></td>
-		    <td>
-		        <?php if ((int) ($link['exclude_from_feed'] ?? 0) === 1): ?>
-		            <span class="badge badge-suspicious" title="IPs hitting this token are excluded from the threat feed">Yes</span>
-		        <?php else: ?>
-		            No
-		        <?php endif; ?>
-		    </td>
-
-		    <td>
-		        <?php if ((int) ($link['include_in_token_webhook'] ?? 0) === 1): ?>
-		            <span class="badge badge-human" title="Token webhook fires on hit">Yes</span>
-		        <?php else: ?>
-		            No
-		        <?php endif; ?>
-		    </td>
-
-		    <td class="mono wrap">
-		        <?php if ($tokenUrl !== ''): ?>
-		            <div class="url-cell">
-		                <span><?= h($tokenUrl) ?></span>
-		                <button type="button" class="copy-button" onclick="copyText('<?= h($tokenUrl) ?>')">Copy</button>
-		            </div>
-		        <?php endif; ?>
-		    </td>
-
-		    <td class="mono wrap">
-		        <?php if ($pixelUrl !== ''): ?>
-		            <div class="url-cell">
-		                <span><?= h($pixelUrl) ?></span>
-		                <button type="button" class="copy-button" onclick="copyText('<?= h($pixelUrl) ?>')">Copy</button>
-		            </div>
-		        <?php endif; ?>
-		    </td>
-
-		    <td class="actions-col">
-
-			   <form method="get" action="/admin" class="inline-action-form">
-			       <input type="hidden" name="tab" value="links">
-			       <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
-	 		       <button type="submit">Edit</button>
-			   </form>
-
-		        <?php if ((int) $link['active'] === 1): ?>
-		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
-               			 <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		                <button type="submit">Deactivate</button>
-		            </form>
-		        <?php else: ?>
-		            <form method="post" action="/admin/activate-link" class="inline-action-form">
-		                <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		                <button type="submit">Activate</button>
-   		         </form>
-     			 <?php endif; ?>
-
-		        <form method="post" action="/admin/delete-link" class="inline-action-form" onsubmit="return confirm('Delete this token/path?');">
-		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		            <button type="submit">Delete</button>
-		        </form>
-
-		        <form method="post" action="/admin/delete-link" class="inline-action-form" onsubmit="return confirm('Delete this token/path and all related clicks?');">
-		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		            <input type="hidden" name="delete_clicks" value="1">
-		            <button type="submit" class="danger-button">Delete + Clicks</button>
-		        </form>
-		    </td>
-		</tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-        </div>
-
-	<div class="tab-content" id="content-asn">
-
-	    <?php if ($editAsnRule !== null): ?>
-	    <form method="post" action="/admin/update-asn-rule">
-	        <h2>Edit ASN Rule</h2>
-	        <input type="hidden" name="id" value="<?= (int) $editAsnRule['id'] ?>">
-
-	        <label for="edit_asn_asn">ASN</label>
-	        <input id="edit_asn_asn" type="text" name="asn" required value="<?= h((string) $editAsnRule['asn']) ?>">
-
-	        <label for="edit_asn_label">Label</label>
-	        <input id="edit_asn_label" type="text" name="label" value="<?= h((string) ($editAsnRule['label'] ?? '')) ?>">
-
-	        <label for="edit_asn_penalty">Penalty</label>
-	        <input id="edit_asn_penalty" type="number" name="penalty" min="1" max="100" value="<?= (int) $editAsnRule['penalty'] ?>">
-
-	        <div style="margin-bottom: 12px;">
-	            <label style="display: inline-flex; align-items: center; gap: 6px;">
-	                <input type="checkbox" name="exclude_from_feed" value="1" <?= ((int) ($editAsnRule['exclude_from_feed'] ?? 0) === 1) ? 'checked' : '' ?>>
-	                <span>Never add to threat feed</span>
-	            </label>
-	            <p class="muted" style="margin: 4px 0 0 0;">Score penalty still applies. Use this for your own infrastructure, CDNs, or monitoring services.</p>
-	        </div>
-
-	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-	            <button type="submit">Save Changes</button>
-	            <form method="get" action="/admin" class="inline-action-form">
-	                <input type="hidden" name="tab" value="asn">
-	                <button type="submit">Cancel</button>
-	            </form>
-	        </div>
-	    </form>
-	    <?php endif; ?>
-
-	    <form method="post" action="/admin/create-asn-rule">
-	        <h2>Create ASN Rule</h2>
-	        <label for="asn">ASN</label>
-	        <input id="asn" type="text" name="asn" required placeholder="8075">
-	        <label for="asn_label">Label</label>
-	        <input id="asn_label" type="text" name="label" placeholder="Microsoft">
-	        <label for="asn_penalty">Penalty</label>
-	        <input id="asn_penalty" type="number" name="penalty" min="1" max="100" value="10">
-	        <div style="margin-bottom: 12px;">
-	            <label style="display: inline-flex; align-items: center; gap: 6px;">
-	                <input type="checkbox" name="exclude_from_feed" value="1">
-	                <span>Never add to threat feed</span>
-	            </label>
-	            <p class="muted" style="margin: 4px 0 0 0;">Score penalty still applies. Use this for your own infrastructure, CDNs, or monitoring services.</p>
-	        </div>
-	        <button type="submit">Add ASN Rule</button>
-	    </form>
-
-	    <h2>ASN Rules</h2>
-	    <div class="table-wrap">
-	        <table class="compact-table">
-	            <tr>
-	                <th>ID</th>
-	                <th>ASN</th>
-	                <th>Label</th>
-	                <th>Penalty</th>
-	                <th>Active</th>
-	                <th>Excl. Feed</th>
-	                <th class="actions-col">Actions</th>
-	            </tr>
-	            <?php foreach ($asnRules as $rule): ?>
-	                <tr>
-	                    <td><?= (int) $rule['id'] ?></td>
-	                    <td class="mono"><?= h((string) $rule['asn']) ?></td>
-	                    <td><?= h((string) ($rule['label'] ?? '')) ?></td>
-	                    <td><?= (int) $rule['penalty'] ?></td>
-	                    <td><?= ((int) $rule['active'] === 1) ? 'Yes' : 'No' ?></td>
-	                    <td>
-	                        <?php if ((int) ($rule['exclude_from_feed'] ?? 0) === 1): ?>
-	                            <span class="badge badge-suspicious" title="This ASN will never appear in the threat feed">Yes</span>
-	                        <?php else: ?>
-	                            No
-	                        <?php endif; ?>
-	                    </td>
-	                    <td class="actions-col">
-	                        <form method="get" action="/admin" class="inline-action-form">
-	                            <input type="hidden" name="tab" value="asn">
-	                            <input type="hidden" name="edit_asn_rule_id" value="<?= (int) $rule['id'] ?>">
-	                            <button type="submit">Edit</button>
-	                        </form>
-	                        <?php if ((int) $rule['active'] === 1): ?>
-	                            <form method="post" action="/admin/deactivate-asn-rule" class="inline-action-form">
-	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-	                                <button type="submit">Deactivate</button>
-	                            </form>
-	                        <?php else: ?>
-	                            <form method="post" action="/admin/activate-asn-rule" class="inline-action-form">
-	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-	                                <button type="submit">Activate</button>
-	                            </form>
-	                        <?php endif; ?>
-	                        <form method="post" action="/admin/delete-asn-rule" class="inline-action-form" onsubmit="return confirm('Delete this ASN rule?');">
-	                            <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-	                            <button type="submit">Delete</button>
-	                        </form>
-	                    </td>
-	                </tr>
-	            <?php endforeach; ?>
-	        </table>
-	    </div>
-	</div>
-
-        <div class="tab-content" id="content-countries">
-
-            <?php if ($editCountryRule !== null): ?>
-            <form method="post" action="/admin/update-country-rule">
-                <h2>Edit Country Rule</h2>
-                <input type="hidden" name="id" value="<?= (int) $editCountryRule['id'] ?>">
-
-                <label for="edit_country_code">Country Code</label>
-                <input id="edit_country_code" type="text" name="country_code" required maxlength="2" style="text-transform:uppercase;" value="<?= h((string) $editCountryRule['country_code']) ?>">
-
-                <label for="edit_country_label">Label (optional)</label>
-                <input id="edit_country_label" type="text" name="label" value="<?= h((string) ($editCountryRule['label'] ?? '')) ?>" placeholder="e.g. High-risk region">
-
-                <label for="edit_country_penalty">Score Penalty (1–100)</label>
-                <input id="edit_country_penalty" type="number" name="penalty" min="1" max="100" value="<?= (int) $editCountryRule['penalty'] ?>">
-
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button type="submit">Save Changes</button>
-                    <form method="get" action="/admin" class="inline-action-form">
-                        <input type="hidden" name="tab" value="countries">
-                        <button type="submit">Cancel</button>
-                    </form>
-                </div>
-            </form>
-            <?php endif; ?>
-
-            <form method="post" action="/admin/create-country-rule">
-                <h2>Add Country Rule</h2>
-                <p class="muted">Applies a score penalty to all requests from the specified country. Use 2-letter ISO country codes (e.g. CN, RU, KP). Only affects scoring — does not exclude IPs from the threat feed.</p>
-
-                <label for="country_code">Country Code</label>
-                <input id="country_code" type="text" name="country_code" required maxlength="2" style="text-transform:uppercase; width: 80px;" placeholder="CN">
-
-                <label for="country_label">Label (optional)</label>
-                <input id="country_label" type="text" name="label" placeholder="e.g. High-risk region">
-
-                <label for="country_penalty">Score Penalty (1–100)</label>
-                <input id="country_penalty" type="number" name="penalty" min="1" max="100" value="15">
-
-                <button type="submit">Add Country Rule</button>
-            </form>
-
-            <h2>Country Rules</h2>
-            <?php if (empty($countryRules)): ?>
-                <p class="muted">No country rules configured.</p>
-            <?php else: ?>
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th>Code</th>
-                        <th>Label</th>
-                        <th>Penalty</th>
-                        <th>Active</th>
-                        <th>Created</th>
-                        <th class="actions-col">Actions</th>
-                    </tr>
-                    <?php foreach ($countryRules as $rule): ?>
-                        <tr>
-                            <td class="mono"><?= h((string) $rule['country_code']) ?></td>
-                            <td><?= h((string) ($rule['label'] ?? '')) ?></td>
-                            <td>-<?= (int) $rule['penalty'] ?></td>
-                            <td><?= ((int) $rule['active'] === 1) ? 'Yes' : 'No' ?></td>
-                            <td><?= h((string) ($rule['created_at'] ?? '')) ?></td>
-                            <td class="actions-col">
-                                <form method="get" action="/admin" class="inline-action-form">
-                                    <input type="hidden" name="tab" value="countries">
-                                    <input type="hidden" name="edit_country_id" value="<?= (int) $rule['id'] ?>">
-                                    <button type="submit">Edit</button>
-                                </form>
-                                <?php if ((int) $rule['active'] === 1): ?>
-                                    <form method="post" action="/admin/deactivate-country-rule" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-                                        <button type="submit">Deactivate</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="/admin/activate-country-rule" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-                                        <button type="submit">Activate</button>
-                                    </form>
-                                <?php endif; ?>
-                                <form method="post" action="/admin/delete-country-rule" class="inline-action-form" onsubmit="return confirm('Delete this country rule?');">
-                                    <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-                                    <button type="submit">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-            <?php endif; ?>
-        </div>
-
-        <div class="tab-content" id="content-overrides">
-
-            <?php if ($editOverride !== null): ?>
-            <form method="post" action="/admin/update-ip-override">
-                <h2>Edit IP Override</h2>
-                <input type="hidden" name="id" value="<?= (int) $editOverride['id'] ?>">
-
-                <label for="edit_override_ip">IP Address</label>
-                <input id="edit_override_ip" type="text" name="ip" required value="<?= h((string) $editOverride['ip']) ?>">
-
-                <label for="edit_override_mode">Mode</label>
-                <select id="edit_override_mode" name="mode">
-                    <option value="block" <?= $editOverride['mode'] === 'block' ? 'selected' : '' ?>>Block — always classify as bot (score 0)</option>
-                    <option value="allow" <?= $editOverride['mode'] === 'allow' ? 'selected' : '' ?>>Allow — always classify as human (score 100)</option>
-                </select>
-
-                <label for="edit_override_notes">Notes</label>
-                <input id="edit_override_notes" type="text" name="notes" value="<?= h((string) ($editOverride['notes'] ?? '')) ?>" placeholder="Optional note">
-
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button type="submit">Save Changes</button>
-                    <form method="get" action="/admin" class="inline-action-form">
-                        <input type="hidden" name="tab" value="overrides">
-                        <button type="submit">Cancel</button>
-                    </form>
-                </div>
-            </form>
-            <?php endif; ?>
-
-            <form method="post" action="/admin/create-ip-override">
-                <h2>Add IP Override</h2>
-                <p class="muted">Overrides bypass scoring entirely. Blocked IPs are always classified as bot (score 0). Allowed IPs are always classified as human (score 100). Applies to future requests only.</p>
-
-                <label for="override_ip">IP Address</label>
-                <input id="override_ip" type="text" name="ip" required placeholder="1.2.3.4 or 2001:db8::1">
-
-                <label for="override_mode">Mode</label>
-                <select id="override_mode" name="mode">
-                    <option value="block">Block — always classify as bot (score 0)</option>
-                    <option value="allow">Allow — always classify as human (score 100)</option>
-                </select>
-
-                <label for="override_notes">Notes</label>
-                <input id="override_notes" type="text" name="notes" placeholder="Optional note (e.g. monitoring service, your office IP)">
-
-                <button type="submit">Add Override</button>
-            </form>
-
-            <h2>IP Overrides</h2>
-            <?php if (empty($ipOverrides)): ?>
-                <p class="muted">No IP overrides configured.</p>
-            <?php else: ?>
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th>IP</th>
-                        <th>Mode</th>
-                        <th>Notes</th>
-                        <th>Active</th>
-                        <th>Created</th>
-                        <th class="actions-col">Actions</th>
-                    </tr>
-                    <?php foreach ($ipOverrides as $override): ?>
-                        <tr>
-                            <td class="mono"><?= h((string) $override['ip']) ?></td>
-                            <td>
-                                <span class="badge <?= $override['mode'] === 'block' ? 'badge-bot' : 'badge-human' ?>">
-                                    <?= h((string) $override['mode']) ?>
-                                </span>
-                            </td>
-                            <td><?= h((string) ($override['notes'] ?? '')) ?></td>
-                            <td><?= ((int) $override['active'] === 1) ? 'Yes' : 'No' ?></td>
-                            <td><?= h((string) ($override['created_at'] ?? '')) ?></td>
-                            <td class="actions-col">
-                                <form method="get" action="/admin" class="inline-action-form">
-                                    <input type="hidden" name="tab" value="overrides">
-                                    <input type="hidden" name="edit_override_id" value="<?= (int) $override['id'] ?>">
-                                    <button type="submit">Edit</button>
-                                </form>
-                                <?php if ((int) $override['active'] === 1): ?>
-                                    <form method="post" action="/admin/deactivate-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
-                                        <button type="submit">Deactivate</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="/admin/activate-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
-                                        <button type="submit">Activate</button>
-                                    </form>
-                                <?php endif; ?>
-                                <form method="post" action="/admin/delete-ip-override" class="inline-action-form" onsubmit="return confirm('Delete this IP override?');">
-                                    <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
-                                    <button type="submit">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-            <?php endif; ?>
-        </div>
-
-        <div class="tab-content" id="content-settings">
-            <div class="two-column-settings">
-                <form method="post" action="/admin/save-settings">
-                    <h2>Settings</h2>
-
-                    <label for="app_name">App Name</label>
-                    <input id="app_name" type="text" name="app_name" value="<?= h((string) $appName) ?>" required>
-
-                    <label for="base_url">Base URL</label>
-                    <input id="base_url" type="url" name="base_url" value="<?= h((string) $baseUrl) ?>" placeholder="https://yourdomain.example">
-
-                    <label for="default_redirect_url">Default Redirect URL</label>
-                    <input id="default_redirect_url" type="url" name="default_redirect_url" value="<?= h((string) $defaultRedirectUrl) ?>" required>
-
-                    <label for="unknown_path_behavior">Unknown Path Behavior</label>
-                    <select id="unknown_path_behavior" name="unknown_path_behavior">
-                        <option value="redirect" <?= $unknownPathBehavior === 'redirect' ? 'selected' : '' ?>>Redirect</option>
-                        <option value="404" <?= $unknownPathBehavior === '404' ? 'selected' : '' ?>>404</option>
-                    </select>
-
-		    <div style="margin-bottom: 12px;">
-		         <label style="display: inline-flex; align-items: center; gap: 6px; margin-right: 16px;">
-			        <input type="checkbox" name="pixel_enabled" value="1" <?= $pixelEnabled ? 'checked' : '' ?>>
-			        <span>Pixel enabled</span>
-			 </label>
-                         <label style="display: inline-flex; align-items: center; gap: 6px;">
-			        <input type="checkbox" name="noise_filter_enabled" value="1" <?= $noiseFilterEnabled ? 'checked' : '' ?>>
-			        <span>Noise filter enabled</span>
-		         </label>
-		   </div>
-
-		   <label for="display_min_score">Minimum Display Score</label>
-		   <input id="display_min_score" type="number"  min="0" max="100" name="display_min_score" value="<?= h((string) getSetting($pdo, 'display_min_score', '20')) ?>">
-
-		   <p class="muted">Hide lower-scored events from the dashboard unless “Show all” is checked.</p>
-
-
-		   <label for="page_size">Rows Per Page</label>
-		   <input id="page_size" type="number" min="10" max="500" name="page_size" value="<?= h($pageSizeSetting) ?>">
-		   <p class="muted">Number of activity rows shown per page (10-500).</p>
-
-		   <label for="auto_refresh_secs">Auto-Refresh Interval (seconds)</label>
-		   <input id="auto_refresh_secs" type="number" min="0" name="auto_refresh_secs" value="<?= h((string) $autoRefreshSecs) ?>">
-		   <p class="muted">Reload the dashboard after this many seconds. Set to 0 to disable.</p>
-
-		   <label for="webhook_url">Threat Webhook URL</label>
-		   <input id="webhook_url" type="url" name="webhook_url" value="<?= h($webhookUrl) ?>" placeholder="https://hooks.slack.com/...">
-		   <p class="muted">Fires when an unknown-path hit meets the threshold below. Slack/Discord URLs auto-detected; others receive generic JSON.</p>
-
-		   <label for="webhook_threshold">Threat Webhook Threshold</label>
-		   <select id="webhook_threshold" name="webhook_threshold">
-		       <?php $webhookThreshold = (string) getSetting($pdo, 'webhook_threshold', 'bot'); ?>
-		       <option value="bot"          <?= $webhookThreshold === 'bot'          ? 'selected' : '' ?>>bot only</option>
-		       <option value="suspicious"   <?= $webhookThreshold === 'suspicious'   ? 'selected' : '' ?>>suspicious and above</option>
-		       <option value="uncertain" <?= $webhookThreshold === 'uncertain' ? 'selected' : '' ?>>uncertain and above</option>
-		       <option value="human"        <?= $webhookThreshold === 'human'        ? 'selected' : '' ?>>all hits</option>
-		   </select>
-		   <p class="muted">Minimum classification to trigger the threat webhook. Does not apply to known token hits — those use the token webhook below.</p>
-
-		   <label for="webhook_template">Threat Webhook Payload Template (optional)</label>
-		   <textarea id="webhook_template" name="webhook_template" rows="8" style="font-family: var(--font-mono); font-size: 0.8125rem; width: 100%; resize: vertical;" placeholder='{"event": "signaltrace_alert", "ip": "{{ip}}", "label": "{{label}}", "score": {{score}}}'><?= h($webhookTemplate) ?></textarea>
-		   <p class="muted">
-		       JSON template with placeholders. When set, overrides Slack/Discord auto-detection.<br>
-		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
-		   </p>
-
-		   <label for="token_webhook_url">Token Webhook URL</label>
-		   <?php $tokenWebhookUrl = (string) getSetting($pdo, 'token_webhook_url', ''); ?>
-		   <input id="token_webhook_url" type="url" name="token_webhook_url" value="<?= h($tokenWebhookUrl) ?>" placeholder="https://hooks.slack.com/...">
-		   <p class="muted">Fires when any known tracked token is hit, regardless of classification. Deduplicates per visitor per token per 5 minutes. Does not fire for unknown honeypot paths.</p>
-
-		   <label for="token_webhook_template">Token Webhook Payload Template (optional)</label>
-		   <?php $tokenWebhookTemplate = (string) getSetting($pdo, 'token_webhook_template', ''); ?>
-		   <textarea id="token_webhook_template" name="token_webhook_template" rows="8" style="font-family: var(--font-mono); font-size: 0.8125rem; width: 100%; resize: vertical;" placeholder='{"event": "signaltrace_token_hit", "ip": "{{ip}}", "token": "{{token}}", "label": "{{label}}", "score": {{score}}}'><?= h($tokenWebhookTemplate) ?></textarea>
-		   <p class="muted">
-		       Same placeholder syntax as the threat webhook. Leave blank for auto-detected Slack/Discord format or generic JSON.<br>
-		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
-		   </p>
-
-		   <label for="export_min_confidence">Export Minimum Confidence</label>
-		   <select id="export_min_confidence" name="export_min_confidence">
-		       <option value="human"        <?= $exportMinConf === 'human'        ? 'selected' : '' ?>>human</option>
-		       <option value="uncertain" <?= $exportMinConf === 'uncertain' ? 'selected' : '' ?>>uncertain</option>
-		       <option value="suspicious"   <?= $exportMinConf === 'suspicious'   ? 'selected' : '' ?>>suspicious</option>
-		       <option value="bot"          <?= $exportMinConf === 'bot'          ? 'selected' : '' ?>>bot</option>
-		   </select>
-		   <p class="muted">Minimum classification label for exports when no dashboard filters are active.</p>
-
-		   <label for="export_min_score">Export Minimum Score (0–100)</label>
-		   <input id="export_min_score" type="number" min="0" max="100" name="export_min_score" value="<?= h($exportMinScore) ?>">
-		   <p class="muted">Minimum numeric confidence score for exports. Acts as a second filter alongside the label — both conditions must be met. Set to 0 to disable score filtering.</p>
-
-		   <label for="export_window_hours">Export Time Window (hours)</label>
-		   <input id="export_window_hours" type="number" min="1" name="export_window_hours" value="<?= h($exportWinHours) ?>">
-		   <p class="muted">How far back to look when no date filters are active (168 = 7 days). Use 87600 to export everything.</p>
-
-		   <?php if ($baseUrl !== ''): ?>
-		   <div style="margin-top: 1rem; padding: 0.875rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius);">
-		       <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.6rem;">Export Endpoints</strong>
-		       <p class="muted" style="margin-bottom: 0.5rem;">Authenticate with admin Basic Auth, or set <code>EXPORT_API_TOKEN</code> in <code>config.local.php</code> and use <code>Authorization: Bearer YOUR_TOKEN</code> (recommended — not logged) or <code>?api_key=YOUR_TOKEN</code> (appears in access logs).</p>
-		       <div style="margin-bottom: 0.4rem;">
-		           <span class="mono"><?= h(rtrim($baseUrl, '/') . '/export/json') ?></span>
-		           <button type="button" class="copy-button" onclick="copyText('<?= h(rtrim($baseUrl, '/') . '/export/json') ?>')">Copy</button>
-		       </div>
-		       <div>
-		           <span class="mono"><?= h(rtrim($baseUrl, '/') . '/export/csv') ?></span>
-		           <button type="button" class="copy-button" onclick="copyText('<?= h(rtrim($baseUrl, '/') . '/export/csv') ?>')">Copy</button>
-		       </div>
-		   </div>
-		   <?php endif; ?>
-
-                    <button type="submit">Save Settings</button>
-                </form>
-
-                <div>
-                    <form method="post" action="/admin/save-threat-feed-settings">
-                        <h2>Threat Feed</h2>
-
-                        <label>
-                            <input type="checkbox" name="threat_feed_enabled" value="1" <?= $threatFeedEnabled ? 'checked' : '' ?>>
-                            Enable threat feed
-                        </label>
-
-                        <label for="threat_feed_window_hours">Keep IPs on feed for this many hours</label>
-                        <input id="threat_feed_window_hours" type="number" min="1" name="threat_feed_window_hours" value="<?= h($threatFeedWindowHours) ?>">
-
-                        <label for="threat_feed_min_confidence">Minimum confidence to include</label>
-                        <select id="threat_feed_min_confidence" name="threat_feed_min_confidence">
-                            <option value="human" <?= $threatFeedMinConfidence === 'human' ? 'selected' : '' ?>>human</option>
-                            <option value="uncertain" <?= $threatFeedMinConfidence === 'uncertain' ? 'selected' : '' ?>>uncertain</option>
-                            <option value="suspicious" <?= $threatFeedMinConfidence === 'suspicious' ? 'selected' : '' ?>>suspicious</option>
-                            <option value="bot" <?= $threatFeedMinConfidence === 'bot' ? 'selected' : '' ?>>bot</option>
-                        </select>
-
-                        <label for="threat_feed_min_hits">Minimum hits before adding to feed</label>
-                        <input id="threat_feed_min_hits" type="number" min="1" name="threat_feed_min_hits" value="<?= h($threatFeedMinHits) ?>">
-                        <p class="muted">An IP must be seen at least this many times within the window before appearing in the feed. Set to 1 to include on first hit.</p>
-
-                        <button type="submit">Save Threat Feed Settings</button>
-                    </form>
-
-                    <?php
-                    $feedCount = getThreatFeedCount($pdo);
-                    ?>
-                    <div style="margin-top: 1rem; padding: 0.875rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius);">
-                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.6rem;">
-                            Feed Preview
-                        </strong>
-                        <p class="muted" style="margin-bottom: 0.75rem;">
-                            Currently <strong><?= (int) $feedCount['ipv4'] ?></strong> IPv4
-                            and <strong><?= (int) $feedCount['ipv6'] ?></strong> IPv6
-                            addresses in the feed
-                            (<?= (int) $feedCount['total'] ?> total).
-                        </p>
-
-                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.5rem;">IPv4 Feeds</strong>
-                        <?php
-                        $ipv4Feeds = [
-                            'Plain text'    => '/feed/ips.txt',
-                            'Nginx deny'    => '/feed/ips.nginx',
-                            'iptables'      => '/feed/ips.iptables',
-                            'CIDR (/32)'    => '/feed/ips.cidr',
-                        ];
-                        $ipv6Feeds = [
-                            'Plain text'    => '/feed/ipv6.txt',
-                            'Nginx deny'    => '/feed/ipv6.nginx',
-                            'ip6tables'     => '/feed/ipv6.iptables',
-                            'CIDR (/128)'   => '/feed/ipv6.cidr',
-                        ];
-                        foreach ($ipv4Feeds as $label => $feedPath):
-                            $fullUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . $feedPath;
-                        ?>
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
-                            <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 90px;"><?= h($label) ?></span>
-                            <span class="mono" style="font-size: 0.75rem;"><?= h($fullUrl) ?></span>
-                            <button type="button" class="copy-button" onclick="copyText('<?= h($fullUrl) ?>')">Copy</button>
-                            <?php if ($baseUrl !== ''): ?>
-                                <a class="copy-button" href="<?= h($fullUrl) ?>" target="_blank" rel="noopener">Open</a>
-                            <?php endif; ?>
-                        </div>
-                        <?php endforeach; ?>
-
-                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-top: 0.75rem; margin-bottom: 0.5rem;">IPv6 Feeds</strong>
-                        <?php foreach ($ipv6Feeds as $label => $feedPath):
-                            $fullUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . $feedPath;
-                        ?>
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
-                            <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 90px;"><?= h($label) ?></span>
-                            <span class="mono" style="font-size: 0.75rem;"><?= h($fullUrl) ?></span>
-                            <button type="button" class="copy-button" onclick="copyText('<?= h($fullUrl) ?>')">Copy</button>
-                            <?php if ($baseUrl !== ''): ?>
-                                <a class="copy-button" href="<?= h($fullUrl) ?>" target="_blank" rel="noopener">Open</a>
-                            <?php endif; ?>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-
-                    <form method="post" action="/admin/save-retention-settings">
-                        <h2>Data Retention</h2>
-
-                        <label for="data_retention_days">Delete click data older than this many days</label>
-                        <input id="data_retention_days" type="number" min="0" name="data_retention_days" value="<?= h($dataRetentionDays) ?>">
-
-                        <p class="muted">
-                            Set to 0 to disable automatic cleanup.
-                        </p>
-
-                        <button type="submit">Save Retention Settings</button>
-                    </form>
-
-                    <form method="post" action="/admin/run-cleanup" onsubmit="return confirm('Run cleanup using the current retention setting?');">
-                        <h2>Manual Cleanup</h2>
-                        <p class="muted">Run cleanup now using the saved retention setting.</p>
-                        <button type="submit" class="warning-button">Run Cleanup Now</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-content" id="content-skip">
-            <form method="post" action="/admin/create-skip-pattern">
-                <h2>Create Skip Pattern</h2>
-
-                <label for="skip_type">Pattern Type</label>
-                <select id="skip_type" name="type">
-                    <option value="exact">Exact</option>
-                    <option value="contains">Contains</option>
-                    <option value="prefix">Prefix</option>
-                </select>
-
-                <label for="skip_pattern">Pattern</label>
-                <input id="skip_pattern" type="text" name="pattern" required placeholder=".env or api/">
-
-                <button type="submit">Add Skip Pattern</button>
-            </form>
-
-            <h2>Skip Patterns</h2>
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <tr>
-                        <th>ID</th>
-                        <th>Type</th>
-                        <th>Pattern</th>
-                        <th>Active</th>
-                        <th class="skip-actions-col">Actions</th>
-                    </tr>
-                    <?php foreach ($skipPatterns as $pattern): ?>
-                        <tr>
-                            <td><?= (int) $pattern['id'] ?></td>
-                            <td><?= h((string) $pattern['type']) ?></td>
-                            <td class="mono"><?= h((string) $pattern['pattern']) ?></td>
-                            <td><?= ((int) $pattern['active'] === 1) ? 'Yes' : 'No' ?></td>
-                            <td class="skip-actions-col">
-                                <?php if ((int) $pattern['active'] === 1): ?>
-                                    <form method="post" action="/admin/deactivate-skip-pattern" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
-                                        <button type="submit">Deactivate</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="/admin/activate-skip-pattern" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
-                                        <button type="submit">Activate</button>
-                                    </form>
-                                <?php endif; ?>
-
-                                <form method="post" action="/admin/delete-skip-pattern" class="inline-action-form" onsubmit="return confirm('Delete this skip pattern?');">
-                                    <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
-                                    <button type="submit">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-        </div>
-
-        <script>
-        /* --------------------------------------------------------
-           THEME TOGGLE
-           Persists choice in localStorage; applies to <html>
-           so the CSS [data-theme] selectors pick it up.
-           -------------------------------------------------------- */
-        (function () {
-            var saved = localStorage.getItem('st-theme');
-            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            var theme = saved || (prefersDark ? 'dark' : 'light');
-            document.documentElement.setAttribute('data-theme', theme);
-        })();
-
-        function toggleTheme() {
-            var current = document.documentElement.getAttribute('data-theme') || 'light';
-            var next    = current === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('st-theme', next);
-            updateThemeButton(next);
-        }
-
-        function updateThemeButton(theme) {
-            var icon  = document.getElementById('theme-icon');
-            var label = document.getElementById('theme-label');
-            if (!icon || !label) return;
-            if (theme === 'dark') {
-                icon.textContent  = '🌙';
-                label.textContent = 'Dark';
-            } else {
-                icon.textContent  = '☀️';
-                label.textContent = 'Light';
-            }
-        }
-
-        /* --------------------------------------------------------
-           CSRF TOKEN INJECTION
-           Injects the CSRF hidden field into every POST form.
-           -------------------------------------------------------- */
-        const CSRF_TOKEN = <?= json_encode($csrfToken) ?>;
-
-        function injectCsrf() {
-            document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function (form) {
-                if (!form.querySelector('input[name="csrf_token"]')) {
-                    var input   = document.createElement('input');
-                    input.type  = 'hidden';
-                    input.name  = 'csrf_token';
-                    input.value = CSRF_TOKEN;
-                    form.appendChild(input);
-                }
-            });
-        }
-
-        /* Run immediately for forms already in the DOM */
-        injectCsrf();
-
-        /* --------------------------------------------------------
-           TAB MANAGEMENT
-           -------------------------------------------------------- */
-        function showTab(name) {
-            document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
-            document.querySelectorAll('.tab-content').forEach(function (c) { c.classList.remove('active'); });
-            var tab     = document.getElementById('tab-' + name);
-            var content = document.getElementById('content-' + name);
-            if (tab && content) {
-                tab.classList.add('active');
-                content.classList.add('active');
-                localStorage.setItem('activeTab', name);
-            }
-        }
-
-        function toggleDetails(id, button) {
-            var row  = document.getElementById(id);
-            if (!row) return;
-            var open = row.classList.toggle('open');
-            if (button) { button.textContent = open ? 'Hide' : 'Details'; }
-        }
-
-        /* --------------------------------------------------------
-           COPY TO CLIPBOARD
-           -------------------------------------------------------- */
-        async function copyText(value) {
-            try {
-                await navigator.clipboard.writeText(value);
-            } catch (e) {
-                var temp = document.createElement('textarea');
-                temp.value = value;
-                document.body.appendChild(temp);
-                temp.select();
-                document.execCommand('copy');
-                document.body.removeChild(temp);
-            }
-        }
-
-        /* --------------------------------------------------------
-           DOMContentLoaded — tab restore, CSRF re-injection,
-           auto-refresh, theme button sync
-           -------------------------------------------------------- */
-        document.addEventListener('DOMContentLoaded', function () {
-
-            /* Sync button label with current theme */
-            var currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-            updateThemeButton(currentTheme);
-
-            /* Inject CSRF into any forms rendered after the initial parse */
-            injectCsrf();
-
-            /* Tab restore — URL param beats localStorage */
-            var urlParams  = new URLSearchParams(window.location.search);
-            var tabFromUrl = urlParams.get('tab');
-            var saved      = tabFromUrl || localStorage.getItem('activeTab') || 'dashboard';
-            showTab(saved);
-
-            /* Auto-refresh — only fires when the dashboard tab is active */
-            var refreshSecs = <?= (int) $autoRefreshSecs ?>;
-            if (refreshSecs > 0) {
-                setTimeout(function () {
-                    var active = document.querySelector('.tab.active');
-                    if (active && active.id === 'tab-dashboard') {
-                        window.location.reload();
-                    }
-                }, refreshSecs * 1000);
-            }
-        });
-        </script>
-    </div><!-- /.page-body -->
-    </body>
-    </html>
-    <?php
+    setSetting($pdo, 'threat_feed_enabled', $enabledInput);
+    setSetting($pdo, 'threat_feed_window_hours', (string) $windowHoursInput);
+    setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleSaveRetentionSettings(PDO $pdo): void
+{
+    $retentionDaysInput = max(0, (int) ($_POST['data_retention_days'] ?? 0));
+
+    setSetting($pdo, 'data_retention_days', (string) $retentionDaysInput);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleRunCleanup(PDO $pdo): void
+{
+    $days = (int) getSetting($pdo, 'data_retention_days', '0');
+
+    if ($days <= 0) {
+        header('Location: /admin', true, 302);
+        exit;
+    }
+
+    cleanupOldClicks($pdo, $days);
+
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleCreateLink(PDO $pdo): void
+{
+    $token = trim((string) ($_POST['token'] ?? ''), '/');
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+    $description = trim((string) ($_POST['description'] ?? ''));
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+
+    if ($token === '' || $destination === '') {
+        http_response_code(400);
+        echo 'Path/token and destination are required.';
+        exit;
+    }
+
+    // SECURITY: Enforce http/https allowlist.
+    if (!isSafeRedirectUrl($destination)) {
+        http_response_code(400);
+        echo 'Invalid destination URL. Only http and https are allowed.';
+        exit;
+    }
+
+    if (!preg_match('#^[A-Za-z0-9./_-]+$#', $token)) {
+        http_response_code(400);
+        echo 'Path/token may contain only letters, numbers, dot, slash, underscore, and dash.';
+        exit;
+    }
+
+    try {
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed);
+        header('Location: /admin', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to create link. It may already exist.';
+        exit;
+    }
+}
+
+function handleDeleteLink(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    $deleteClicks = isset($_POST['delete_clicks']) && $_POST['delete_clicks'] === '1';
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid link id.';
+        exit;
+    }
+
+    deleteLink($pdo, $id, $deleteClicks);
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleDeactivateLink(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid link id.';
+        exit;
+    }
+
+    deactivateLink($pdo, $id);
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleActivateLink(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid link id.';
+        exit;
+    }
+
+    activateLink($pdo, $id);
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleCreateSkipPattern(PDO $pdo): void
+{
+    $type = strtolower(trim((string) ($_POST['type'] ?? '')));
+    $pattern = strtolower(trim((string) ($_POST['pattern'] ?? '')));
+
+    if (!in_array($type, ['exact', 'contains', 'prefix'], true)) {
+        http_response_code(400);
+        echo 'Invalid skip pattern type.';
+        exit;
+    }
+
+    if ($pattern === '') {
+        http_response_code(400);
+        echo 'Pattern is required.';
+        exit;
+    }
+
+    createSkipPattern($pdo, $type, $pattern);
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleAddTokenToSkip(PDO $pdo): void
+{
+    $token = strtolower(trim((string) ($_POST['token'] ?? '')));
+    $redirectToken = trim((string) ($_POST['redirect_token'] ?? $token));
+
+    if ($token === '') {
+        http_response_code(400);
+        echo 'Token is required.';
+        exit;
+    }
+
+    createSkipPattern($pdo, 'exact', $token);
+
+    header('Location: ' . adminRedirectUrl(), true, 302);
+    exit;
+}
+
+function handleDeleteSkipPattern(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid skip pattern id.';
+        exit;
+    }
+
+    deleteSkipPattern($pdo, $id);
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleToggleSkipPattern(PDO $pdo, bool $active): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid skip pattern id.';
+        exit;
+    }
+
+    setSkipPatternActive($pdo, $id, $active);
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+function handleDeleteClick(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid click id.';
+        exit;
+    }
+
+    $stmt = $pdo->prepare("DELETE FROM clicks WHERE id = :id");
+    $stmt->execute([':id' => $id]);
+
+    header('Location: ' . adminRedirectUrl(), true, 302);
+    exit;
+}
+
+function handleDeleteTokenClicks(PDO $pdo): void
+{
+    $token = trim((string) ($_POST['token'] ?? ''));
+    $mode = trim((string) ($_POST['mode'] ?? 'unknown_only'));
+
+    if ($token === '') {
+        http_response_code(400);
+        echo 'Token is required.';
+        exit;
+    }
+
+    if (!in_array($mode, ['unknown_only', 'all'], true)) {
+        http_response_code(400);
+        echo 'Invalid delete mode.';
+        exit;
+    }
+
+    if ($mode === 'unknown_only') {
+        $stmt = $pdo->prepare("
+            DELETE FROM clicks
+            WHERE token = :token
+              AND link_id IS NULL
+        ");
+        $stmt->execute([':token' => $token]);
+    } else {
+        $stmt = $pdo->prepare("
+            DELETE FROM clicks
+            WHERE token = :token
+        ");
+        $stmt->execute([':token' => $token]);
+    }
+
+    header('Location: ' . adminRedirectUrl(), true, 302);
+    exit;
+}
+
+function handleCreateAsnRule(PDO $pdo): void
+{
+    $asn = trim((string) ($_POST['asn'] ?? ''));
+    $label = trim((string) ($_POST['label'] ?? ''));
+    $penalty = (int) ($_POST['penalty'] ?? 10);
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+
+    if ($asn === '' || !ctype_digit($asn)) {
+        http_response_code(400);
+        echo 'ASN must be numeric.';
+        exit;
+    }
+
+    $penalty = max(1, min(100, $penalty));
+
+    try {
+        createAsnRule($pdo, $asn, $label, $penalty, $excludeFromFeed);
+        header('Location: /admin?tab=asn', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to create ASN rule. It may already exist.';
+        exit;
+    }
+}
+
+function handleUpdateAsnRule(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    $asn = trim((string) ($_POST['asn'] ?? ''));
+    $label = trim((string) ($_POST['label'] ?? ''));
+    $penalty = (int) ($_POST['penalty'] ?? 10);
+    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid ASN rule id.';
+        exit;
+    }
+
+    if ($asn === '' || !ctype_digit($asn)) {
+        http_response_code(400);
+        echo 'ASN must be numeric.';
+        exit;
+    }
+
+    $penalty = max(1, min(100, $penalty));
+
+    try {
+        updateAsnRule($pdo, $id, $asn, $label, $penalty, $excludeFromFeed);
+        header('Location: /admin?tab=asn', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to update ASN rule. The ASN may already exist on another rule.';
+        exit;
+    }
+}
+
+function handleToggleAsnRule(PDO $pdo, bool $active): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid ASN rule id.';
+        exit;
+    }
+
+    setAsnRuleActive($pdo, $id, $active);
+    header('Location: /admin?tab=asn', true, 302);
+    exit;
+}
+
+function handleDeleteAsnRule(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid ASN rule id.';
+        exit;
+    }
+
+    deleteAsnRule($pdo, $id);
+    header('Location: /admin?tab=asn', true, 302);
+    exit;
+}
+
+function handleDeleteIpClicks(PDO $pdo): void
+{
+    $ip = trim((string) ($_POST['ip'] ?? ''));
+    $mode = trim((string) ($_POST['mode'] ?? 'unknown_only'));
+
+    if ($ip === '') {
+        http_response_code(400);
+        echo 'IP is required.';
+        exit;
+    }
+
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo 'Invalid IP address.';
+        exit;
+    }
+
+    if (!in_array($mode, ['unknown_only', 'all'], true)) {
+        http_response_code(400);
+        echo 'Invalid delete mode.';
+        exit;
+    }
+
+    if ($mode === 'unknown_only') {
+        $stmt = $pdo->prepare("
+            DELETE FROM clicks
+            WHERE ip = :ip
+              AND link_id IS NULL
+        ");
+        $stmt->execute([':ip' => $ip]);
+    } else {
+        $stmt = $pdo->prepare("
+            DELETE FROM clicks
+            WHERE ip = :ip
+        ");
+        $stmt->execute([':ip' => $ip]);
+    }
+
+    header('Location: ' . adminRedirectUrl(), true, 302);
+    exit;
+}
+
+/* ======================================================
+   IP OVERRIDE HANDLERS
+   ====================================================== */
+
+function handleCreateIpOverride(PDO $pdo): void
+{
+    $ip    = trim((string) ($_POST['ip']    ?? ''));
+    $mode  = trim((string) ($_POST['mode']  ?? 'block'));
+    $notes = trim((string) ($_POST['notes'] ?? ''));
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo 'Invalid IP address.';
+        exit;
+    }
+
+    if (!in_array($mode, ['allow', 'block'], true)) {
+        http_response_code(400);
+        echo 'Invalid mode.';
+        exit;
+    }
+
+    createIpOverride($pdo, $ip, $mode, $notes);
+
+    // If filter params are present this was triggered from the activity feed — go back there.
+    // Otherwise go to the overrides tab.
+    $hasFilters = ($_POST['_filter_token'] ?? '') !== ''
+        || ($_POST['_filter_ip'] ?? '') !== ''
+        || ($_POST['_filter_visitor'] ?? '') !== ''
+        || ($_POST['_filter_known'] ?? '') === '1'
+        || ($_POST['_filter_date_from'] ?? '') !== ''
+        || ($_POST['_filter_date_to'] ?? '') !== '';
+
+    header('Location: ' . ($hasFilters ? adminRedirectUrl() : '/admin?tab=overrides'), true, 302);
+    exit;
+}
+
+function handleUpdateIpOverride(PDO $pdo): void
+{
+    $id    = (int) ($_POST['id']    ?? 0);
+    $ip    = trim((string) ($_POST['ip']    ?? ''));
+    $mode  = trim((string) ($_POST['mode']  ?? 'block'));
+    $notes = trim((string) ($_POST['notes'] ?? ''));
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid id.';
+        exit;
+    }
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo 'Invalid IP address.';
+        exit;
+    }
+
+    if (!in_array($mode, ['allow', 'block'], true)) {
+        http_response_code(400);
+        echo 'Invalid mode.';
+        exit;
+    }
+
+    updateIpOverride($pdo, $id, $ip, $mode, $notes);
+    header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleToggleIpOverride(PDO $pdo, bool $active): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    setIpOverrideActive($pdo, $id, $active);
+    header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleDeleteIpOverride(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    deleteIpOverride($pdo, $id);
+    header('Location: /admin?tab=overrides', true, 302);
+    exit;
+}
+
+function handleDeleteFilteredClicks(PDO $pdo): void
+{
+    $tokenFilter   = trim((string) ($_POST['token']     ?? ''));
+    $ipFilter      = trim((string) ($_POST['ip']        ?? ''));
+    $visitorFilter = trim((string) ($_POST['visitor']   ?? ''));
+    $knownOnly     = isset($_POST['known']) && $_POST['known'] === '1';
+    $dateFrom      = trim((string) ($_POST['date_from'] ?? ''));
+    $dateTo        = trim((string) ($_POST['date_to']   ?? ''));
+
+    // Require at least one filter — refuse to delete everything with no filter
+    if ($tokenFilter === '' && $ipFilter === '' && $visitorFilter === ''
+        && !$knownOnly && $dateFrom === '' && $dateTo === '') {
+        http_response_code(400);
+        echo 'At least one filter is required for bulk delete.';
+        exit;
+    }
+
+    $where  = ['1=1'];
+    $params = [];
+
+    if ($tokenFilter !== '') {
+        $where[]  = 'token LIKE :token';
+        $params[':token'] = '%' . $tokenFilter . '%';
+    }
+    if ($ipFilter !== '') {
+        $where[]  = 'ip = :ip';
+        $params[':ip'] = $ipFilter;
+    }
+    if ($visitorFilter !== '') {
+        $where[]  = 'visitor_hash = :visitor';
+        $params[':visitor'] = $visitorFilter;
+    }
+    if ($knownOnly) {
+        $where[] = 'link_id IS NOT NULL';
+    }
+    if ($dateFrom !== '') {
+        $where[]  = 'clicked_at >= :date_from';
+        $params[':date_from'] = $dateFrom;
+    }
+    if ($dateTo !== '') {
+        $where[]  = 'clicked_at <= :date_to';
+        $params[':date_to'] = $dateTo . ' 23:59:59';
+    }
+
+    $sql  = 'DELETE FROM clicks WHERE ' . implode(' AND ', $where);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    // Redirect back to dashboard with filters cleared
+    header('Location: /admin', true, 302);
+    exit;
+}
+
+/* ======================================================
+   COUNTRY RULE HANDLERS
+   ====================================================== */
+
+function handleCreateCountryRule(PDO $pdo): void
+{
+    $code    = strtoupper(trim((string) ($_POST['country_code'] ?? '')));
+    $label   = trim((string) ($_POST['label']   ?? ''));
+    $penalty = max(1, min(100, (int) ($_POST['penalty'] ?? 10)));
+
+    if ($code === '' || !preg_match('/^[A-Z]{2}$/', $code)) {
+        http_response_code(400);
+        echo 'Country code must be a 2-letter ISO code (e.g. CN, RU).';
+        exit;
+    }
+
+    createCountryRule($pdo, $code, $label, $penalty);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+function handleUpdateCountryRule(PDO $pdo): void
+{
+    $id      = (int) ($_POST['id'] ?? 0);
+    $code    = strtoupper(trim((string) ($_POST['country_code'] ?? '')));
+    $label   = trim((string) ($_POST['label']   ?? ''));
+    $penalty = max(1, min(100, (int) ($_POST['penalty'] ?? 10)));
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid id.';
+        exit;
+    }
+
+    if ($code === '' || !preg_match('/^[A-Z]{2}$/', $code)) {
+        http_response_code(400);
+        echo 'Country code must be a 2-letter ISO code (e.g. CN, RU).';
+        exit;
+    }
+
+    updateCountryRule($pdo, $id, $code, $label, $penalty);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+function handleToggleCountryRule(PDO $pdo, bool $active): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    setCountryRuleActive($pdo, $id, $active);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+function handleDeleteCountryRule(PDO $pdo): void
+{
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        http_response_code(400);
+        exit;
+    }
+    deleteCountryRule($pdo, $id);
+    header('Location: /admin?tab=countries', true, 302);
+    exit;
 }
