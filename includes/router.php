@@ -157,6 +157,9 @@ function handleExport(PDO $pdo, string $format): void
         $f['knownOnly'],
         $f['dateFrom'] !== '' ? $f['dateFrom'] : null,
         $f['dateTo']   !== '' ? $f['dateTo']   : null,
+        5000,
+        $f['fromMs'],
+        $f['toMs'],
     );
 
     if ($format === 'csv') {
