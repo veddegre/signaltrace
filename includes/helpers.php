@@ -497,7 +497,7 @@ function calculateConfidence(PDO $pdo, array $requestData): array
     /* === FINALIZE === */
     $score = max(0, min(100, $score));
     if ($score >= 75)     { $label = 'human'; }
-    elseif ($score >= 60) { $label = 'likely-human'; }
+    elseif ($score >= 60) { $label = 'uncertain'; }
     elseif ($score >= 25) { $label = 'suspicious'; }
     else                  { $label = 'bot'; }
 
@@ -776,8 +776,8 @@ function maybeFireAlert(PDO $pdo, array $requestData): void
 
     $allowedLabels = match ($threshold) {
         'suspicious'   => ['bot', 'suspicious'],
-        'likely-human' => ['bot', 'suspicious', 'likely-human'],
-        'human'        => ['bot', 'suspicious', 'likely-human', 'human'],
+        'uncertain' => ['bot', 'suspicious', 'uncertain'],
+        'human'        => ['bot', 'suspicious', 'uncertain', 'human'],
         default        => ['bot'],
     };
 
@@ -802,8 +802,8 @@ function shouldSendAlert(PDO $pdo, string $ip): bool
 
     $allowedLabels = match ($threshold) {
         'suspicious'   => ['bot', 'suspicious'],
-        'likely-human' => ['bot', 'suspicious', 'likely-human'],
-        'human'        => ['bot', 'suspicious', 'likely-human', 'human'],
+        'uncertain' => ['bot', 'suspicious', 'uncertain'],
+        'human'        => ['bot', 'suspicious', 'uncertain', 'human'],
         default        => ['bot'],
     };
 
