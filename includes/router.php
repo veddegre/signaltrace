@@ -132,19 +132,6 @@ function parseExportFilters(): array
     $dateFrom      = trim((string) ($_GET['date_from'] ?? ''));
     $dateTo        = trim((string) ($_GET['date_to']   ?? ''));
 
-    // Grafana passes time range as Unix ms via ${__from} and ${__to}.
-    // When present, convert to date strings and treat as manual filters
-    // so the configured export window is bypassed.
-    $fromMs = isset($_GET['from']) && $_GET['from'] !== '' ? (int) $_GET['from'] : null;
-    $toMs   = isset($_GET['to'])   && $_GET['to']   !== '' ? (int) $_GET['to']   : null;
-
-    if ($fromMs !== null && $dateFrom === '') {
-        $dateFrom = date('Y-m-d', (int) ($fromMs / 1000));
-    }
-    if ($toMs !== null && $dateTo === '') {
-        $dateTo = date('Y-m-d', (int) ($toMs / 1000));
-    }
-
     $manualFilters = ($tokenFilter !== '' || $ipFilter !== '' || $visitorFilter !== ''
         || $knownOnly || $dateFrom !== '' || $dateTo !== '');
 
