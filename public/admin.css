@@ -780,7 +780,7 @@ tr:hover td { background: var(--surface-alt); }
 }
 
 .badge-human        { background: var(--human-bg);      color: var(--human-text);      }
-.badge-likely-human { background: var(--likely-bg);     color: var(--likely-text);     }
+.badge-uncertain { background: var(--likely-bg);     color: var(--likely-text);     }
 .badge-suspicious   { background: var(--suspicious-bg); color: var(--suspicious-text); }
 .badge-bot          { background: var(--bot-bg);        color: var(--bot-text);        }
 
@@ -1006,4 +1006,27 @@ tr:hover td { background: var(--surface-alt); }
     background: var(--accent-light);
     color: var(--accent);
     border: 1px solid transparent;
+}
+
+/* ── Demo mode locked fields ──────────────────────────────── */
+.demo-locked-field {
+    display: block;
+    padding: 8px 10px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
+.demo-lock-note {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-left: 8px;
 }
