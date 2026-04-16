@@ -2,6 +2,22 @@
 
 ---
 
+## [2.5.2] — April 16, 2026
+
+### Admin View Fixes and Restore Missing Features
+
+**Behavioral Flagged IPs panel** — The panel now collapses automatically when an IP filter is active, so clicking a flagged IP no longer buries the IP summary below a full table of results. The Hide/Show toggle is restored. Block/Allow actions are restored in the behavioral table rows. The IP link now forces `show_all=1` so all hits for that IP are visible regardless of the display minimum score setting.
+
+**IP summary panel** — Block IP and Allow IP action buttons are restored below the summary stats when no override exists for the filtered IP. When an override is already active, the current mode badge and a Manage link are shown instead.
+
+**Token webhook per-token opt-in** — The "Fire token webhook on hit" checkbox was missing from both the Create Token and Edit Token forms, and from the token summary table. All three are restored.
+
+**`uncertain` label rename gaps** — Several places still referenced `likely-human` after the rename: the confidence badge class in the activity table, the IP summary "Likely-human hits" label and `likely_human_count` column, and the threat feed minimum confidence dropdown. All corrected to `uncertain`.
+
+**`renderSignalReasons` and `signalLabel`** — These functions were dropped from `admin_view.php` during a rebuild from an uploaded server file. Both functions and the `renderSignalReasons()` call in the scoring detail panel are restored.
+
+---
+
 ## [2.5.1] — April 16, 2026
 
 ### Bug Fixes
