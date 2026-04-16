@@ -959,30 +959,51 @@ tr:hover td { background: var(--surface-alt); }
 
 
 /* ============================================================
-   SIGNAL REASON LABELS (details panel scoring section)
+   SIGNAL REASON TAGS (details panel scoring section)
    ============================================================ */
-.signal-list {
+.signal-tag-list {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-top: 4px;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
 }
 
-.signal-label {
-    display: block;
-    font-size: 0.8125rem;
-    line-height: 1.4;
-}
-
-.signal-raw {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    margin-left: 2px;
-}
-
-.signal-unknown {
-    font-family: var(--font-mono);
+.signal-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
     font-size: 0.75rem;
-    color: var(--text-secondary);
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
+    cursor: default;
+}
+
+/* Positive — green tint */
+.signal-tag--positive {
+    background: var(--human-bg);
+    color: var(--human-text);
+    border: 1px solid transparent;
+}
+
+/* Negative — red/orange tint */
+.signal-tag--negative {
+    background: var(--bot-bg);
+    color: var(--bot-text);
+    border: 1px solid transparent;
+}
+
+/* Behavioral — amber */
+.signal-tag--behavioral {
+    background: var(--suspicious-bg);
+    color: var(--suspicious-text);
+    border: 1px solid transparent;
+}
+
+/* Rule-based (path, country, ASN, IP override) — blue tint */
+.signal-tag--rule {
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid transparent;
 }
