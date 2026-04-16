@@ -2,118 +2,176 @@
 
 ---
 
+## [2.4.1] — April 15, 2026
+
+### Grafana Dashboard — Expanded
+
+The Grafana dashboard was expanded from 8 to 16 panels to match the coverage of the Splunk Overview dashboard. All panels use server-side aggregation endpoints with no Grafana transformations required.
+
+New panels added: **Unique Tokens** and **Bot %** stat panels; **Events Over Time** timeseries with per-label color coding; **Top Tokens / Paths** and **Top Bot-Classified Tokens** bar gauges; **Top ASN Organizations** table; **Top Detection Signals** and **Behavioral Signal Hits** bar gauges.
+
+The Events Over Time panel uses adaptive time bucketing based on the Grafana time range: 15-minute buckets for ranges under 6 hours, 1-hour for 6–48 hours, 6-hour for 2–14 days, and 1-day for longer ranges. The bucket size is calculated server-side and requires no Grafana configuration.
+
+### New Export Endpoints
+
+Six new server-side aggregation endpoints were added, all sharing the same filter logic as `/export/json`:
+
+**`/export/stats/extended`** — extends `/export/stats` with `unique_tokens` and `bot_pct` (bot percentage as a float).
+
+**`/export/by-token`** — top tokens by hit count. Accepts `limit` (default 5) and optional `label` filter (e.g. `label=bot`) for the bot-classified tokens panel.
+
+**`/export/by-org`** — top ASN organisations by hit count. Accepts `limit` (default 5).
+
+**`/export/by-signal`** — top confidence reason signals, exploded from the comma-separated `confidence_reason` field. Excludes `country_penalty` and `ip_override` meta-reasons. Accepts `limit` (default 8).
+
+**`/export/behavioral-signals`** — returns only behavioral signal hits: `burst_activity`, `rapid_repeat`, `fast_repeat`, and `multi_token_scan`. Server-side filtered so no Grafana transformation is needed.
+
+**`/export/over-time`** — events bucketed by confidence label over time. Accepts `from` and `to` as Unix timestamps in milliseconds. Bucket size adapts automatically to the span.
+
+### Webhook System Redesign
+
+The webhook system was split into two independent webhooks serving different use cases.
+
+**Threat webhook** (existing, enhanced): fires on unknown-path hits that meet the configured classification threshold. A new **Threat Webhook Threshold** setting was added with options: bot only (default), suspicious and above, likely-human and above, or all hits. The webhook skips known token hits — those are handled by the token webhook instead.
+
+**Token webhook** (new): fires when a known tracked token is hit, regardless of classification. Useful for phishing simulations and campaign tracking where any interaction — including human — is significant. Configured via **Token Webhook URL** and **Token Webhook Template** in Settings. Uses the same `{{placeholder}}` template syntax as the threat webhook. Auto-detects Slack and Discord format when no template is set. Deduplicates per visitor hash per token per 5 minutes.
+
+Per-token opt-in: each token has a new **Send token webhook on hit** checkbox. The token webhook only fires for tokens where this is enabled. The token summary table shows the current flag state for each token.
+
+Both webhooks support the same placeholders: `{{ip}}`, `{{token}}`, `{{label}}`, `{{score}}`, `{{org}}`, `{{asn}}`, `{{country}}`, `{{ua}}`, `{{time}}`, `{{triggers}}`.
+
+### Admin Dashboard — IP Summary Improvements
+
+The IP summary card (shown when filtering by a single exact IP) was expanded with several additions:
+
+**Copy / VT / Abuse / Info** links now appear inline next to the IP address for quick access to VirusTotal, AbuseIPDB, and IPInfo without opening a details row.
+
+**ASN rule management**: the ASN field shows an Add ASN Rule button when no rule exists, or an "ASN rule active" badge with the penalty if one does. The org name is pre-filled as the rule label.
+
+**Block / Allow buttons** were added to the IP summary card. If an override already exists the current mode is shown with a link to manage it.
+
+### Admin Dashboard — Behaviorally Flagged IPs Improvements
+
+A **Hide / Show** toggle was added to the Behaviorally Flagged IPs panel heading. Clicking Hide collapses the table and shows a Show (N) link with the count. The `hide_behavioral` URL parameter preserves state across pagination and filter changes.
+
+Clicking an IP in the behavioral table now navigates to the filtered feed with `show_all=1` forced (bypassing the display minimum score setting) and `hide_behavioral=1` set (collapsing the panel so the feed is immediately visible).
+
+### Scoring — Signal Reason Labels
+
+The Reason field in the details panel now displays confidence signals as colored pill tags with friendly descriptions rather than raw internal signal names. Four categories: green for positive signals, red for negative signals, amber for behavioral signals, and blue for rule-based signals (path, country, ASN, IP override).
+
+The raw signal name is preserved as a browser tooltip on hover for cross-referencing with exports and the wiki. Unknown signals fall back to displaying the raw name so no information is lost.
+
+### Bug Fix — Root Path Logging for Admin Sessions
+
+The browser prefetch of `/` that occurs when navigating to `/admin` was being logged as a honeypot hit. A session flag (`admin_authenticated`) is now set in `requireAdminAuth()` after successful login. In `handleTrackedRequest()`, requests to `/` are silently suppressed when this flag is present. Non-admin traffic to `/` is logged normally. Works correctly for the demo instance and shared deployments.
+
+### Schema
+
+`include_in_token_webhook INTEGER NOT NULL DEFAULT 0` was added to the `links` table. `webhook_threshold`, `token_webhook_url`, and `token_webhook_template` were added to the default settings. `schema.sql` and `seed.sql` were updated to reflect all changes. The `ensureColumn` migration in `db.php` handles existing databases automatically.
+
+---
+
 ## [2.4.0] — April 14, 2026
 
 ### Grafana Integration
 
 A pre-built Grafana dashboard was added at `grafana/signaltrace-dashboard.json`. The dashboard uses the [Infinity datasource](https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/) and requires no Grafana transformations — all aggregation is done server-side.
 
-Three new aggregation API endpoints were added:
+Three aggregation API endpoints were added: **`/export/stats`** (summary counts), **`/export/by-ip`** (top IPs by hit count), and **`/export/by-country`** (top countries by hit count). All share the same filter logic as `/export/json`.
 
-**`/export/stats`** — returns a single JSON object with pre-aggregated summary counts: total events, bot count, suspicious count, likely-human count, human count, unique IPs, and average confidence score. Used by the stat panels and pie chart.
+The initial dashboard included eight panels: Total Events, Bot Events, Unique IPs, and Avg Confidence Score (stat panels); Confidence Label Distribution (donut chart); Top Source IPs and Top Countries (bar gauge panels); and Recent Events (table).
 
-**`/export/by-ip`** — returns top source IPs by hit count, pre-aggregated and sorted descending. Accepts an optional `limit` parameter (default 20, max 500). Used by the Top Source IPs panel.
+### Export Filter Passthrough Fix
 
-**`/export/by-country`** — returns top countries by hit count, pre-aggregated and sorted descending. Accepts an optional `limit` parameter (default 20, max 500). Used by the Top Countries panel.
-
-All three endpoints share the same filter logic as `/export/json` — when `date_from` or `date_to` parameters are present the configured export settings are bypassed, otherwise the configured confidence threshold and time window apply.
-
-The dashboard includes eight panels: Total Events, Bot Events, Unique IPs, and Avg Confidence Score (stat panels); Confidence Label Distribution (donut chart); Top Source IPs and Top Countries (bar gauge panels); and Recent Events (table). Two dashboard variables are prompted on import: the Infinity datasource and the SignalTrace base URL. Authentication is handled at the datasource level via a Bearer token — no token variable is stored in the dashboard JSON.
-
-### Threat Feed — Multiple Formats and IPv6
-
-The threat feed is now split into separate IPv4 and IPv6 endpoints to avoid confusing downstream tools that expect one address family. Eight endpoints are now available:
-
-**IPv4:** `/feed/ips.txt`, `/feed/ips.nginx`, `/feed/ips.iptables`, `/feed/ips.cidr`
-**IPv6:** `/feed/ipv6.txt`, `/feed/ipv6.nginx`, `/feed/ipv6.iptables`, `/feed/ipv6.cidr`
-
-Format details: `.txt` is one IP per line; `.nginx` emits `deny <ip>;` blocks; `.iptables` emits a complete iptables-restore-compatible filter block with a header comment; `.cidr` appends `/32` (IPv4) or `/128` (IPv6) to each address.
-
-IPv6 addresses are normalized to their canonical compressed form via an `inet_pton`/`inet_ntop` round-trip before output, so addresses are always consistent regardless of how they were stored.
-
-The existing `/feed/ips.txt` endpoint is unchanged and remains the legacy alias for the IPv4 plain-text feed.
-
-A feed preview now appears in the Settings tab showing the current count of IPv4 and IPv6 addresses in the feed. All eight feed URLs are listed with Copy and Open buttons grouped by address family.
-
-### Threat Feed — IP Validation and Minimum Hits
-
-The threat feed now validates every IP address via `filter_var(FILTER_VALIDATE_IP)` before including it in output. Values like `unknown` that may have been stored in edge cases are silently dropped.
-
-A **Minimum hits before adding to feed** setting was added to the Threat Feed section of Settings. An IP must be seen at least this many times within the configured window before appearing in any feed. Default is 1, preserving previous behaviour.
-
-### IP Overrides
-
-A new **IP Overrides** tab was added between Country Rules and Settings. Overrides bypass scoring entirely and apply a fixed classification to all future requests from the specified IP:
-
-* **Block** — always classified as bot (score 0, label `bot`, reason `ip_override:block`)
-* **Allow** — always classified as human (score 100, label `human`, reason `ip_override:allow`)
-
-Overrides apply to future requests only and do not retroactively change stored click data. Allowed IPs are also excluded from all threat feed output. Blocked IPs always appear in the threat feed regardless of confidence threshold or minimum hit count.
-
-Quick Block and Allow buttons appear in the details row of the activity feed for any IP that does not already have an override. If an override exists, the current mode is shown with a link to manage it. The override map is preloaded once per page render rather than queried per row.
-
-### Country Rules
-
-A new **Country Rules** tab was added. Country rules apply a configurable score penalty to all requests from a specified country, identified by 2-letter ISO code. Rules affect scoring only — they do not exclude IPs from the threat feed.
-
-Each rule has a country code, optional label, and penalty (1–100). Rules can be activated, deactivated, and deleted. The country penalty is applied after all other scoring signals and before the final label is assigned. The reason field records `country_penalty:XX` so the effect is visible in the activity feed details.
+Dashboard filters were not being passed through to the CSV and JSON export links. The `handleExport()` function in `router.php` was refactored to use a shared `parseExportFilters()` helper.
 
 ### Splunk Dashboards
 
-The **Overview** dashboard (`signaltrace_overview.json`) was updated with two new panels in a bottom row: **Top Detection Signals** showing the top 8 confidence reason signals across all events (excluding `country_penalty` and `ip_override` entries); and **Behavioral Signal Hits** showing counts for burst, rapid-repeat, fast-repeat, and multi-token-scan signals specifically. The top tokens and bot tokens row was repositioned to accommodate the new bottom row. Traffic by Country and Top ASN Organizations were converted from bar charts to tables.
-
-The **Event Investigation** dashboard (`signaltrace_events.json`) was updated with two additional filter inputs: **Country** (2-letter ISO code, applied as a post-filter `where` clause) and **Detection Signal / Reason** (matches against `confidence_reason` using regex, supporting values like `country_penalty:CN` or `ip_override:block`). The `confidence_reason` field was added to the results table. Both new filters default to `*` (show all) and apply on Enter.
-
-### Behaviorally Flagged IPs Panel
-
-A **Behaviorally Flagged IPs** panel now appears on the Dashboard tab when any IPs have triggered behavioral signals in the last 24 hours. The panel shows IPs that produced burst, rapid-repeat, or multi-token-scan signals, with per-signal hit counts, total hits, org, country, lowest score, and first/last seen. Each IP links directly to the filtered activity feed.
-
-### Webhook Improvements
-
-A **Webhook Payload Template** field was added to Settings. When set, the template is used instead of the Slack/Discord auto-detected format or generic JSON default. Templates use `{{placeholder}}` syntax. Available placeholders: `{{ip}}`, `{{token}}`, `{{label}}`, `{{score}}`, `{{org}}`, `{{asn}}`, `{{country}}`, `{{ua}}`, `{{time}}`, `{{triggers}}`.
-
-The template is validated on save by substituting dummy values and checking that the result parses as valid JSON. Leaving the field blank preserves the existing auto-detection behaviour.
-
-`{{country}}` and `{{triggers}}` were also added to the default Slack/Discord and generic JSON payloads, which previously omitted them.
-
-### Dashboard — Bulk Delete by Filter
-
-A **Bulk Delete** section now appears on the Dashboard tab whenever any filter is active. It shows the count of matching clicks and provides a single button to delete all of them. At least one filter must be active — bulk delete with no filters is rejected by the server to prevent accidental full-table wipes.
-
-### Dashboard — Filter Preservation
-
-Actions taken from the details row (Delete Click, Skip Token, Delete Token Hits, Block IP, Allow IP) now redirect back to the dashboard with all active filters preserved. Previously these actions always redirected to the unfiltered dashboard, discarding the current filter state.
+The **Overview** dashboard was updated with Top Detection Signals and Behavioral Signal Hits panels. The **Event Investigation** dashboard was updated with Country and Detection Signal filter inputs and the `confidence_reason` field added to the results table.
 
 ### Documentation
 
-A **Grafana Integration** wiki page was added covering datasource setup, dashboard import, variable configuration, all API endpoints, panel descriptions, and Nginx `Authorization` header passthrough requirements.
-
-The **API Reference** wiki page was updated to document the three new aggregation endpoints, expand the `/export/json` filter table to include `visitor=` and `known=1`, clarify that date-filtered exports bypass the confidence threshold, move the Nginx header passthrough note into the Authentication section, and add the full feed format table.
-
-The **Tuning Guide** wiki page was updated to add Country Rules and IP Overrides sections.
-
-### Admin Tab Reorder
-
-The tab order was changed to reflect a more logical progression from investigative to configuration tabs:
-
-**Dashboard | Tokens | Skip Patterns | ASN Rules | Country Rules | IP Overrides | Settings**
-
-### Bug Fixes
-
-Dashboard filters (`ip`, `path`, `visitor`, `known`, `date_from`, `date_to`) were not being passed through to the CSV and JSON export links on the admin dashboard. The `handleExport()` function in `router.php` was refactored to use a shared `parseExportFilters()` helper, ensuring active dashboard filters are correctly applied to both export formats.
-
-The threat feed query used a `HAVING hit_count >= ?` clause with a bound parameter. SQLite PDO does not reliably evaluate bound parameters in HAVING clauses when the alias references an aggregate — the query always returned empty. Fixed by interpolating the validated integer directly: `HAVING COUNT(*) >= {$minHits}`.
-
-The threat feed time window comparison used `clicked_at >= datetime('now', '-N hours')`. Timestamps are stored with a timezone offset (e.g. `2026-04-13T20:13:06-04:00`) which SQLite compares as strings rather than datetimes, causing the comparison to fail silently. Fixed by switching to `clicked_at_unix_ms >= (strftime('%s','now') - N * 3600) * 1000`, which is timezone-independent integer arithmetic.
-
-The webhook deduplication check in `shouldSendAlert()` was counting the click that had just been stored by `logClick()` against itself, causing `shouldSendAlert()` to always return false after the first bot hit from any IP. Fixed by finding the most recent bot click ID for the IP and excluding it from the count, so only prior hits within the 5-minute window are considered.
+A Grafana Integration wiki page was added. The API Reference and Tuning Guide wiki pages were updated.
 
 ---
 
 ## [2.3.1] — April 12, 2026
 
-### GitHub Actions & Pre-built Image
+### Infrastructure
 
-A GitHub Actions workflow (`docker.yml`) was added. It builds and pushes the Docker image to `ghcr.io/veddegre/signaltrace` on every push to `main` and on version tags. Pushing `v2.3.1` publishes both `ghcr.io/veddegre/signaltrace:2.3.1` and `ghcr.io/veddegre/signaltrace:latest`.
+A GitHub Actions workflow was added at `.github/workflows/docker-image.yml`. On every push to `main`, the workflow builds the Docker image and publishes it to `ghcr.io/veddegre/signaltrace:latest`. A pre-built image path was added to `setup.sh` as the default installation option. A `docker-compose.prebuilt.yml` override file was added.
 
-`docker-compose.prebuilt.yml` was added as a Compose override that nulls out the `build` directive and sets the image to `ghcr.io/veddegre/signaltrace:latest`. Used with:
+---
+
+## [2.3.0] — April 11, 2026
+
+### Demo Infrastructure
+
+A live demo instance was added at `trysignaltrace.com/admin`. An optional demo banner (`includes/demo-banner.php`) displays when `define('DEMO_MODE', true)` is set in `config.local.php`. A marketing website was added at `www.trysignaltrace.com`.
+
+---
+
+## [2.2.0] — April 9, 2026
+
+### Threat Feed — Multiple Formats and IPv6
+
+Eight feed endpoints now available across IPv4 and IPv6 in plain text, Nginx deny, iptables, and CIDR formats. IPv6 addresses are normalized to canonical compressed form. A feed preview count and all endpoint URLs were added to the Settings tab.
+
+### Threat Feed — IP Validation and Minimum Hits
+
+IP addresses are now validated before inclusion in feed output. A minimum hits threshold was added — an IP must be seen at least N times within the window before appearing in any feed.
+
+### IP Overrides
+
+A new **IP Overrides** tab was added. Overrides bypass scoring entirely and pin an IP to always-block (bot, score 0) or always-allow (human, score 100). Block/Allow buttons appear in the activity feed details row.
+
+### Country Rules
+
+A new **Country Rules** tab was added. Rules apply a configurable score penalty by 2-letter ISO country code. Affect scoring only — do not suppress IPs from the threat feed.
+
+### Behaviorally Flagged IPs Panel
+
+A panel on the Dashboard tab shows IPs that triggered burst, rapid-repeat, or multi-token-scan signals in the last 24 hours.
+
+### Webhook Improvements
+
+A **Webhook Payload Template** field was added with `{{placeholder}}` syntax. Templates are validated on save. `{{country}}` and `{{triggers}}` were added to default payloads.
+
+### Dashboard — Bulk Delete by Filter
+
+A Bulk Delete section appears when any filter is active, allowing deletion of all matching clicks in one action.
+
+### Dashboard — Top Tokens Panel
+
+A Show Top Tokens checkbox was added to the filter bar.
+
+### Scoring
+
+Sec-Fetch and Sec-CH-UA checks are now browser-aware (Safari excluded from Sec-Fetch penalties; Client Hints penalty only applies to Chromium UAs). Self-referrer penalty added. Datacenter IP detection broadened.
+
+### Token and ASN Management
+
+Per-token and per-ASN exclude-from-feed flags added. ASN rules can now be edited in place.
+
+### Exports and SIEM Integration
+
+CSV export added at `/export/csv`. Both export endpoints now require authentication and are filter-aware. Export API token added for automation. Export settings configurable from Settings tab.
+
+### Admin UI
+
+Dark mode added with OS preference detection and manual toggle. Mobile-responsive layout at 1100px, 700px, and 480px breakpoints. Paginated activity feed. Per-IP summary panel. Configurable auto-refresh. Stylesheet extracted to `admin.css`.
+
+### Security
+
+CSRF tokens on all admin POST forms. Admin login rate limiting with configurable threshold and lockout. Constant-time username comparison. XFF spoofing protection. Strengthened redirect validation. `ensureColumn()` SQL injection fix. Webhook SSRF protection. Security response headers. `display_errors` disabled.
+
+### Schema
+
+`asn_rules` table, `auth_failures` table, `exclude_from_feed` on links and asn_rules, `clicked_at_unix_ms` and `event_type` on clicks, nine new indexes, all default settings keys.
+
+---
+
+## [1.0.0] — April 2, 2026
+
+Custom token tracking with redirect support, full request logging, visitor fingerprinting, tracking pixel support, confidence scoring across four labels, bot signature detection, path-based risk detection, behavioral detection (rapid repeat, burst, multi-token scan), ASN-based scoring rules, skip patterns for noise filtering, admin dashboard with filtering and cleanup tools, threat feed at `/feed/ips.txt`, JSON export, GeoIP enrichment via MaxMind, SQLite backend, HTTP Basic Auth admin.
