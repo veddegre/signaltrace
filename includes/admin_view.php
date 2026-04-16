@@ -504,7 +504,14 @@ function renderAdminPage(
             <?php endif; ?>
 
             <?php if (!empty($behavioralFlags)): ?>
-            <h2>Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
+            <?php $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1'; ?>
+            <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
+                <h2 style="margin:0;">Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
+                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_behavioral' => $hideBehavioral ? null : '1'])) ?>">
+                    <?= $hideBehavioral ? 'Show' : 'Hide' ?>
+                </a>
+            </div>
+            <?php if (!$hideBehavioral): ?>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -518,12 +525,16 @@ function renderAdminPage(
                         <th>Lowest Score</th>
                         <th>First Seen</th>
                         <th>Last Seen</th>
+                        <th>Actions</th>
                     </tr>
                     <?php foreach ($behavioralFlags as $flag): ?>
-                        <?php $flagIp = (string) ($flag['ip'] ?? ''); ?>
+                        <?php
+                        $flagIp = (string) ($flag['ip'] ?? '');
+                        $existingMode = $ipOverrideMap[$flagIp] ?? null;
+                        ?>
                         <tr>
                             <td class="mono ip-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp, 'show_all' => '1'])) ?>">
                                     <?= h($flagIp) ?>
                                 </a>
                             </td>
@@ -536,10 +547,32 @@ function renderAdminPage(
                             <td><?= h((string) ($flag['lowest_score'] ?? '')) ?></td>
                             <td><?= h((string) ($flag['first_seen'] ?? '')) ?></td>
                             <td><?= h((string) ($flag['last_seen'] ?? '')) ?></td>
+                            <td class="actions-col">
+                                <?php if ($existingMode === null): ?>
+                                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                        <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
+                                        <input type="hidden" name="mode" value="block">
+                                        <input type="hidden" name="notes" value="Added from behavioral flags">
+                                        <button type="submit" class="danger-button">Block</button>
+                                    </form>
+                                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                        <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
+                                        <input type="hidden" name="mode" value="allow">
+                                        <input type="hidden" name="notes" value="Added from behavioral flags">
+                                        <button type="submit" class="warning-button">Allow</button>
+                                    </form>
+                                <?php else: ?>
+                                    <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                                        <?= h($existingMode) ?>
+                                    </span>
+                                    <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </table>
             </div>
+            <?php endif; ?>
             <?php endif; ?>
 
             <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
@@ -553,10 +586,10 @@ function renderAdminPage(
                         <div><span class="mono">Distinct tokens:</span> <?= (int) ($ipSummary['distinct_tokens'] ?? 0) ?></div>
                     </div>
                     <div>
-                        <div><span class="mono">Bot hits:</span>          <?= (int) ($ipSummary['bot_count']          ?? 0) ?></div>
-                        <div><span class="mono">Suspicious hits:</span>   <?= (int) ($ipSummary['suspicious_count']   ?? 0) ?></div>
-                        <div><span class="mono">Likely-human hits:</span> <?= (int) ($ipSummary['likely_human_count'] ?? 0) ?></div>
-                        <div><span class="mono">Human hits:</span>        <?= (int) ($ipSummary['human_count']        ?? 0) ?></div>
+                        <div><span class="mono">Bot hits:</span>        <?= (int) ($ipSummary['bot_count']        ?? 0) ?></div>
+                        <div><span class="mono">Suspicious hits:</span> <?= (int) ($ipSummary['suspicious_count']   ?? 0) ?></div>
+                        <div><span class="mono">Uncertain hits:</span>  <?= (int) ($ipSummary['uncertain_count']    ?? 0) ?></div>
+                        <div><span class="mono">Human hits:</span>      <?= (int) ($ipSummary['human_count']        ?? 0) ?></div>
                     </div>
                     <div>
                         <div><span class="mono">Org:</span>     <?= h((string) ($ipSummary['ip_org']     ?? '—')) ?></div>
@@ -593,11 +626,11 @@ function renderAdminPage(
                         <?php
                         $confidenceLabel = (string) ($c['confidence_label'] ?? '');
                         $badgeClass = match ($confidenceLabel) {
-                            'human'        => 'badge badge-human',
-                            'likely-human' => 'badge badge-likely-human',
-                            'suspicious'   => 'badge badge-suspicious',
-                            'bot'          => 'badge badge-bot',
-                            default        => 'badge',
+                            'human'      => 'badge badge-human',
+                            'uncertain'  => 'badge badge-uncertain',
+                            'suspicious' => 'badge badge-suspicious',
+                            'bot'        => 'badge badge-bot',
+                            default      => 'badge',
                         };
                         $detailsId    = 'details-' . $i;
                         $rowToken     = (string) ($c['token'] ?? '');
@@ -863,6 +896,14 @@ function renderAdminPage(
 	            <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
 	        </div>
 
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="include_in_token_webhook" value="1" <?= ((int) ($editLink['include_in_token_webhook'] ?? 0) === 1) ? 'checked' : '' ?>>
+	                <span>Fire token webhook on hit</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">When enabled, a webhook fires each time this token is hit (deduped per visitor per 5 minutes). Requires a Token Webhook URL in Settings.</p>
+	        </div>
+
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 	            <button type="submit">Save Changes</button>
 	            <form method="get" action="/admin" class="inline-action-form">
@@ -891,6 +932,14 @@ function renderAdminPage(
                     <p class="muted" style="margin: 4px 0 0 0;">IPs that hit this token will never appear in the feed, even if classified as suspicious or bot.</p>
                 </div>
 
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="include_in_token_webhook" value="1">
+                        <span>Fire token webhook on hit</span>
+                    </label>
+                    <p class="muted" style="margin: 4px 0 0 0;">When enabled, a webhook fires each time this token is hit (deduped per visitor per 5 minutes). Requires a Token Webhook URL in Settings.</p>
+                </div>
+
                 <button type="submit">Create Token</button>
             </form>
 
@@ -905,6 +954,7 @@ function renderAdminPage(
                         <th>Active</th>
 			<th>Clicks</th>
                         <th>Excl. Feed</th>
+                        <th>Token Webhook</th>
                         <th>Path URL</th>
                         <th>Pixel URL</th>
                         <th class="actions-col">Actions</th>
@@ -933,6 +983,13 @@ function renderAdminPage(
 		    <td>
 		        <?php if ((int) ($link['exclude_from_feed'] ?? 0) === 1): ?>
 		            <span class="badge badge-suspicious" title="IPs hitting this token are excluded from the threat feed">Yes</span>
+		        <?php else: ?>
+		            No
+		        <?php endif; ?>
+		    </td>
+		    <td>
+		        <?php if ((int) ($link['include_in_token_webhook'] ?? 0) === 1): ?>
+		            <span class="badge badge-human" title="Token webhook fires on hit">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
@@ -1447,10 +1504,10 @@ function renderAdminPage(
 
                         <label for="threat_feed_min_confidence">Minimum confidence to include</label>
                         <select id="threat_feed_min_confidence" name="threat_feed_min_confidence">
-                            <option value="human" <?= $threatFeedMinConfidence === 'human' ? 'selected' : '' ?>>human</option>
-                            <option value="likely-human" <?= $threatFeedMinConfidence === 'likely-human' ? 'selected' : '' ?>>likely-human</option>
+                            <option value="human"      <?= $threatFeedMinConfidence === 'human'      ? 'selected' : '' ?>>human</option>
+                            <option value="uncertain"  <?= $threatFeedMinConfidence === 'uncertain'  ? 'selected' : '' ?>>uncertain</option>
                             <option value="suspicious" <?= $threatFeedMinConfidence === 'suspicious' ? 'selected' : '' ?>>suspicious</option>
-                            <option value="bot" <?= $threatFeedMinConfidence === 'bot' ? 'selected' : '' ?>>bot</option>
+                            <option value="bot"        <?= $threatFeedMinConfidence === 'bot'        ? 'selected' : '' ?>>bot</option>
                         </select>
 
                         <label for="threat_feed_min_hits">Minimum hits before adding to feed</label>
