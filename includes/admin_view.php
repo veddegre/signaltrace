@@ -1,6 +1,90 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Maps raw confidence_reason signal names to human-readable labels.
+ * Returns the friendly label, or null if the signal is unknown (caller
+ * should fall back to displaying the raw name).
+ */
+function signalLabel(string $signal): ?string
+{
+    if (str_starts_with($signal, 'path:'))             return 'High-risk path (' . substr($signal, 5) . ')';
+    if (str_starts_with($signal, 'country_penalty:'))  return 'Country penalty (' . substr($signal, 16) . ')';
+    if (str_starts_with($signal, 'asn_rule:'))         return 'ASN rule match (' . substr($signal, 9) . ')';
+    if (str_starts_with($signal, 'ip_override:'))      return 'IP override (' . substr($signal, 12) . ')';
+    if (str_starts_with($signal, 'ua:'))               return 'User-agent signal (' . substr($signal, 3) . ')';
+
+    static $map = [
+        'get_request'              => 'GET request',
+        'browser_ua'               => 'Browser-like user-agent',
+        'sec_fetch_navigate'       => 'Sec-Fetch navigation headers present',
+        'accept_language_present'  => 'Accept-Language header present',
+        'referer_present'          => 'Referer header present',
+        'accept_missing'           => 'Missing Accept header',
+        'accept_language_missing'  => 'Missing Accept-Language header',
+        'accept_encoding_missing'  => 'Missing Accept-Encoding header',
+        'accept_wildcard'          => 'Accept: */* (no content preference)',
+        'sec_fetch_missing'        => 'Missing Sec-Fetch headers',
+        'sec_fetch_incomplete'     => 'Incomplete Sec-Fetch headers',
+        'sec_fetch_inconsistent'   => 'Contradictory Sec-Fetch headers',
+        'sec_ch_ua_missing'        => 'Missing Sec-CH-UA (Client Hints)',
+        'browser_ua_unsupported'   => 'Browser UA with no supporting headers (likely spoofed)',
+        'known_automation_ua'      => 'Known automation user-agent',
+        'post_request'             => 'POST request',
+        'no_referer'               => 'No Referer header',
+        'host_raw_ip'              => 'Raw IP address in Host header',
+        'bot_signal'               => 'Bot-like request pattern',
+        'exploit_like_query'       => 'Exploit-like query string',
+        'hosting_provider_ip'      => 'Hosting / datacenter IP range',
+        'hosting_provider'         => 'Hosting / datacenter IP range',
+        'backbone_network'         => 'Backbone / transit network',
+        'burst_activity'           => 'Burst activity (many requests in short window)',
+        'rapid_repeat'             => 'Rapid repeat requests',
+        'fast_repeat'              => 'Fast repeat requests',
+        'multi_token_scan'         => 'Multi-token scan (hit multiple paths)',
+        'self_referer_root'        => 'Request from own domain (self-referrer)',
+        'self_referer'             => 'Request from own domain (self-referrer)',
+    ];
+
+    return $map[$signal] ?? null;
+}
+
+/**
+ * Renders a confidence_reason string as compact signal tags.
+ * Friendly label is shown; raw signal name appears as a tooltip on hover.
+ */
+function renderSignalReasons(string $reasons): string
+{
+    if ($reasons === '') return '<span class="muted">—</span>';
+
+    $signals = array_map('trim', explode(',', $reasons));
+    $parts   = [];
+
+    foreach ($signals as $signal) {
+        if ($signal === '') continue;
+        $label = signalLabel($signal);
+
+        if (in_array($signal, ['get_request', 'browser_ua', 'sec_fetch_navigate', 'accept_language_present', 'referer_present'], true)) {
+            $class = 'signal-tag signal-tag--positive';
+        } elseif (in_array($signal, ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'], true)) {
+            $class = 'signal-tag signal-tag--behavioral';
+        } elseif (str_starts_with($signal, 'path:') || str_starts_with($signal, 'country_penalty:') || str_starts_with($signal, 'asn_rule:') || str_starts_with($signal, 'ip_override:')) {
+            $class = 'signal-tag signal-tag--rule';
+        } else {
+            $class = 'signal-tag signal-tag--negative';
+        }
+
+        $display = $label ?? $signal;
+        $title   = $label !== null ? h($signal) : '';
+
+        $parts[] = '<span class="' . $class . '"'
+            . ($title !== '' ? ' title="' . $title . '"' : '')
+            . '>' . h($display) . '</span>';
+    }
+
+    return '<div class="signal-tag-list">' . implode('', $parts) . '</div>';
+}
+
 function renderAdminPage(
     string $appName,
     string $baseUrl,
@@ -612,7 +696,7 @@ function renderAdminPage(
                         }
                         ?>
 					<div><span class="mono">Classification:</span> <?= h((string) ($c['confidence_label'] ?? '')) ?> (<?= h((string) ($c['confidence_score'] ?? '')) ?>)</div>
-                                        <div><span class="mono">Reason:</span> <span class="wrap"><?= h((string) ($c['confidence_reason'] ?? '')) ?></span></div>
+                                        <div><span class="mono">Reason:</span> <?= renderSignalReasons((string) ($c['confidence_reason'] ?? '')) ?></div>
                                         <div><span class="mono">First for token:</span> <?= !empty($c['first_for_token']) ? 'Yes' : 'No' ?></div>
                                         <div><span class="mono">Prior events for token:</span> <?= h((string) ($c['prior_events_for_token'] ?? '0')) ?></div>
                                     </div>
