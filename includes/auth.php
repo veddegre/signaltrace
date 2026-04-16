@@ -93,12 +93,6 @@ function verifyCfAccessJwt(): void
         exit('Access denied: invalid or expired Cloudflare Access token.');
     }
 
-    // DEBUG — log the AUD value from the token so we can compare it to config.
-    // Remove this once the audience mismatch is resolved.
-    $tokenAudRaw = $decoded->aud ?? 'not set';
-    error_log('SignalTrace: JWT AUD from token: ' . (is_array($tokenAudRaw) ? implode(', ', $tokenAudRaw) : $tokenAudRaw));
-    error_log('SignalTrace: CF_ACCESS_AUD from config: ' . $aud);
-
     // Verify the audience claim matches this application.
     $tokenAud = $decoded->aud ?? null;
     $audMatches = false;
