@@ -487,6 +487,7 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
 
     if ($link) {
         logClick($pdo, $link, $requestData);
+        maybeFireTokenAlert($pdo, $requestData);
         maybeFireAlert($pdo, $requestData);
         maybeRunAutoCleanup($pdo);
 
@@ -494,6 +495,15 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
         if (!isSafeRedirectUrl($destination)) {
             error_log('SignalTrace: unsafe destination for token ' . $token . ': ' . $destination);
             redirectOr404($unknownPathBehavior, $defaultRedirectUrl);
+        }
+
+        // Rate limit: if this IP has hit this token too many times within the
+        // configured window, return 429 instead of redirecting. The click is
+        // still logged above — rate limiting only affects the redirect response.
+        if (isRedirectRateLimited($pdo, (string) ($requestData['ip'] ?? ''), $token)) {
+            http_response_code(429);
+            header('Retry-After: ' . (int) getSetting($pdo, 'redirect_rate_limit_window', '60'));
+            exit('Too many requests.');
         }
 
         header('Location: ' . $destination, true, 302);
