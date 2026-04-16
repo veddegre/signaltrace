@@ -2,6 +2,16 @@
 
 ---
 
+## [2.5.1] — April 16, 2026
+
+### Bug Fixes
+
+**Cloudflare Access blocking feed and export endpoints** — CF Access JWT verification was running on all paths that called `requireAdminAuth()`, including threat feed endpoints (`/feed/...`) and export endpoints (`/export/...`). These endpoints use token-based authentication and are accessed directly by Splunk, Grafana, firewalls, and other integrations that have no Cloudflare Access session. CF Access verification is now scoped to `/admin` paths only.
+
+**PHP parse error in `exportOverTime()`** — The `AS INTEGER` SQL keyword inside an interpolated string caused a PHP parse error when the function was first loaded. The bucket size calculation is now pre-computed as a plain integer variable before string interpolation.
+
+---
+
 ## [2.5.0] — April 16, 2026
 
 ### Cloudflare Access Integration
