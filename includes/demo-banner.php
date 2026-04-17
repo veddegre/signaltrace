@@ -52,7 +52,6 @@ if ($show_countdown) {
     $secs    = $seconds_remaining % 60;
 }
 ?>
-
 <style>
 .demo-banner {
     position: sticky;
@@ -140,7 +139,6 @@ if ($show_countdown) {
 </div>
 
 <?php if ($show_countdown): ?>
-
 <script>
 (function () {
     const el = document.getElementById('demo-countdown');
@@ -162,5 +160,4 @@ if ($show_countdown) {
     }, 1000);
 })();
 </script>
-
 <?php endif; ?>
