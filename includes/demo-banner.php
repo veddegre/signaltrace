@@ -28,20 +28,26 @@ function demo_get_seconds_until_reset(): ?int {
     $secsUntilNextHour = 3600 - $secondsIntoHour;
 
     if (!file_exists(DEMO_TIMESTAMP_FILE)) {
-        // No timestamp file — fall back to top-of-hour countdown
         return $secsUntilNextHour;
     }
 
-    $last = (int) trim(file_get_contents(DEMO_TIMESTAMP_FILE));
-    if ($last <= 0) {
+    $last = (int) trim(@file_get_contents(DEMO_TIMESTAMP_FILE));
+
+    // If the file couldn't be read, or contains a nonsensical timestamp,
+    // fall back to the top-of-hour countdown.
+    if ($last <= 0 || $last > $now) {
         return $secsUntilNextHour;
     }
 
-    // Seconds until the scheduled reset based on when it last ran
     $secsUntilScheduled = DEMO_RESET_INTERVAL - ($now - $last);
 
-    // Return whichever comes sooner, clamped to 0
-    return max(0, min($secsUntilScheduled, $secsUntilNextHour));
+    // If the scheduled reset is already overdue, fall back to top-of-hour.
+    if ($secsUntilScheduled <= 0) {
+        return $secsUntilNextHour;
+    }
+
+    // Return whichever comes sooner.
+    return min($secsUntilScheduled, $secsUntilNextHour);
 }
 
 $seconds_remaining = demo_get_seconds_until_reset();
@@ -52,6 +58,7 @@ if ($show_countdown) {
     $secs    = $seconds_remaining % 60;
 }
 ?>
+
 <style>
 .demo-banner {
     position: sticky;
@@ -139,6 +146,7 @@ if ($show_countdown) {
 </div>
 
 <?php if ($show_countdown): ?>
+
 <script>
 (function () {
     const el = document.getElementById('demo-countdown');
@@ -160,4 +168,5 @@ if ($show_countdown) {
     }, 1000);
 })();
 </script>
+
 <?php endif; ?>
