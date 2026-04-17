@@ -195,7 +195,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $activeTab): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -218,6 +218,9 @@ function renderAdminPage(
         }
         if ($showAll) {
             $params['show_all'] = '1';
+        }
+        if ($hideBehavioral) {
+            $params['hide_behavioral'] = '1';
         }
 
         if ($activeTab !== '') {
@@ -257,7 +260,7 @@ function renderAdminPage(
             $params['date_to'] = $dateTo;
         }
 
-        return '/expor/json' . (!empty($params) ? '?' . http_build_query($params) : '');
+        return '/export/json' . (!empty($params) ? '?' . http_build_query($params) : '');
     };
 
     $threatFeedUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/feed/ips.txt';
@@ -517,7 +520,6 @@ function renderAdminPage(
         <?php endif; ?>
 
         <?php if (!empty($behavioralFlags) && $ipFilter === ''): ?>
-        <?php $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1'; ?>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
             <h2 style="margin:0;">Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
             <a class="copy-button" href="<?= h($buildAdminUrl(['hide_behavioral' => $hideBehavioral ? null : '1'])) ?>">
@@ -1845,6 +1847,4 @@ function renderAdminPage(
 </body>
 </html>
 <?php
-```
-
 }
