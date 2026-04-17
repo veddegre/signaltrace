@@ -9,6 +9,10 @@
  * countdown to the next reset is shown. If the file does not exist the
  * banner degrades gracefully and shows static text instead.
  *
+ * The countdown uses the sooner of two values:
+ *   1. last_reset_time + DEMO_RESET_INTERVAL (when the cron is next due)
+ *   2. The next top-of-the-hour (so manual resets don't show 60 min countdowns)
+ *
  * This file is safe to include in the repository — it is inert unless
  * DEMO_MODE is explicitly enabled in config.local.php.
  */
@@ -17,12 +21,27 @@ define('DEMO_RESET_INTERVAL', 3600);
 define('DEMO_TIMESTAMP_FILE', __DIR__ . '/../data/.last_reset');
 
 function demo_get_seconds_until_reset(): ?int {
+    $now = time();
+
+    // Seconds until the next top of the hour
+    $secondsIntoHour   = $now % 3600;
+    $secsUntilNextHour = 3600 - $secondsIntoHour;
+
     if (!file_exists(DEMO_TIMESTAMP_FILE)) {
-        return null;
+        // No timestamp file — fall back to top-of-hour countdown
+        return $secsUntilNextHour;
     }
+
     $last = (int) trim(file_get_contents(DEMO_TIMESTAMP_FILE));
-    $remaining = DEMO_RESET_INTERVAL - (time() - $last);
-    return max(0, $remaining);
+    if ($last <= 0) {
+        return $secsUntilNextHour;
+    }
+
+    // Seconds until the scheduled reset based on when it last ran
+    $secsUntilScheduled = DEMO_RESET_INTERVAL - ($now - $last);
+
+    // Return whichever comes sooner, clamped to 0
+    return max(0, min($secsUntilScheduled, $secsUntilNextHour));
 }
 
 $seconds_remaining = demo_get_seconds_until_reset();
@@ -33,6 +52,7 @@ if ($show_countdown) {
     $secs    = $seconds_remaining % 60;
 }
 ?>
+
 <style>
 .demo-banner {
     position: sticky;
@@ -120,6 +140,7 @@ if ($show_countdown) {
 </div>
 
 <?php if ($show_countdown): ?>
+
 <script>
 (function () {
     const el = document.getElementById('demo-countdown');
@@ -141,4 +162,5 @@ if ($show_countdown) {
     }, 1000);
 })();
 </script>
+
 <?php endif; ?>
