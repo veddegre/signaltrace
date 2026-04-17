@@ -2,6 +2,18 @@
 
 ---
 
+## [2.5.3] — April 17, 2026
+
+### Bug Fixes
+
+**Behavioral Flagged IPs panel not staying hidden across pagination** — The `hide_behavioral` parameter was not being preserved in pagination links or the hide/show toggle URL, causing the panel to reappear on page changes and the toggle to reset to page 1. Fixed by capturing `$hideBehavioral` as a variable before the `$buildAdminUrl` closure is defined and including it in the closure's `use` list so all generated URLs carry the parameter consistently.
+
+**Missing spacing below Behavioral Flagged IPs when hidden** — When the behavioral panel was hidden, the Activity heading rendered with no top margin. A consistent spacer is now rendered after the behavioral section regardless of its visibility state.
+
+**Stray backtick parse error in `admin_view.php`** — A backtick was inserted by the GitHub web editor's markdown rendering when committing the file, causing a PHP parse error on line 1848. Fixed in the clean output file. When committing PHP files via the GitHub web interface, use raw file upload rather than the edit view to prevent markdown interpretation.
+
+---
+
 ## [2.5.2] — April 16, 2026
 
 ### Admin View Fixes and Restore Missing Features
