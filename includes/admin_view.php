@@ -266,7 +266,6 @@ function renderAdminPage(
     $threatFeedUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/feed/ips.txt';
     ?>
 
-```
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -407,11 +406,9 @@ function renderAdminPage(
 	    <?php endif; ?>
             </div>
         <?php endif; ?>
-```
 
 <?php if ($tokenFilter !== '' && !$knownOnly && $ipFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
 
-```
 <form method="post" action="/admin/delete-token-clicks" class="inline-form">
     <h2>Token Cleanup</h2>
     <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
@@ -434,13 +431,11 @@ function renderAdminPage(
         </button>
     </div>
 </form>
-```
 
 <?php endif; ?>
 
 <?php if ($ipFilter !== '' && !$knownOnly && $tokenFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
 
-```
 <form method="post" action="/admin/delete-ip-clicks" class="inline-form">
     <h2>IP Cleanup</h2>
     <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
@@ -463,13 +458,11 @@ function renderAdminPage(
         </button>
     </div>
 </form>
-```
 
 <?php endif; ?>
 
 <?php if ($hasActiveFilter): ?>
 
-```
 <form method="post" action="/admin/delete-filtered-clicks" class="inline-form">
     <h2>Bulk Delete</h2>
     <p class="muted">Delete all <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter.</p>
@@ -487,11 +480,9 @@ function renderAdminPage(
         </button>
     </div>
 </form>
-```
 
 <?php endif; ?>
 
-```
     <?php $showTopTokens = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1'; ?>
         <?php if ($showTopTokens): ?>
         <h2>Top Tokens</h2>
