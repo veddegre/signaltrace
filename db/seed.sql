@@ -104,7 +104,7 @@ INSERT INTO clicks (
     1, 0
 ),
 
--- ── Bot clicks ────────────────────────────────────────────────
+-- ── Bot clicks (IPv4) ─────────────────────────────────────────
 
 (
     '/hello.world',
@@ -228,6 +228,89 @@ INSERT INTO clicks (
     1, 'known_automation_ua', 0, 'bot',
     'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, multi_token_scan, burst_activity',
     0, 5
+),
+
+-- ── Bot clicks (IPv6) ─────────────────────────────────────────
+-- Uses RFC 3849 documentation range: 2001:db8::/32
+
+(
+    '/.env',
+    NULL,
+    datetime('now', '-14 minutes'),
+    (strftime('%s', datetime('now', '-14 minutes')) * 1000),
+    '2001:db8::1', '64511', 'Example IPv6 Scanner', 'CN', 'visitor_v6_1',
+    'GET', 'yourdomain.example', 'http', '/.env', '',
+    43210,
+    'python-requests/2.31.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, hosting_provider_ip',
+    1, 0
+),
+(
+    'wp-login.php',
+    NULL,
+    datetime('now', '-29 minutes'),
+    (strftime('%s', datetime('now', '-29 minutes')) * 1000),
+    '2001:db8::2', '64512', 'Example IPv6 Datacenter', 'RU', 'visitor_v6_2',
+    'POST', 'yourdomain.example', 'http', '/wp-login.php', '',
+    55301,
+    'curl/8.1.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'post_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:/wp-login.php',
+    1, 0
+),
+(
+    'phpmyadmin',
+    NULL,
+    datetime('now', '-47 minutes'),
+    (strftime('%s', datetime('now', '-47 minutes')) * 1000),
+    '2001:db8:cafe::1', '64513', 'Example IPv6 Transit', 'DE', 'visitor_v6_3',
+    'GET', 'yourdomain.example', 'http', '/phpmyadmin', '',
+    61109,
+    'Go-http-client/2.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:phpmyadmin',
+    1, 0
+),
+
+-- ── Suspicious IPv6 click ─────────────────────────────────────
+
+(
+    '/invoice',
+    (SELECT id FROM links WHERE token = '/invoice'),
+    datetime('now', '-38 minutes'),
+    (strftime('%s', datetime('now', '-38 minutes')) * 1000),
+    '2001:db8:1234::42', '64514', 'Example IPv6 ISP', 'JP', 'visitor_v6_4',
+    'GET', 'yourdomain.example', 'https', '/invoice', '',
+    52871,
+    'Mozilla/5.0 (X11; Linux x86_64)',
+    '', 'text/html', 'ja,en;q=0.9', 'gzip',
+    '', '', '',
+    0, '', 32, 'suspicious', 'get_request, browser_ua_unsupported, sec_fetch_missing, no_referer, accept_encoding_missing',
+    1, 0
+),
+
+-- ── Human IPv6 click ──────────────────────────────────────────
+
+(
+    '/benefits',
+    (SELECT id FROM links WHERE token = '/benefits'),
+    datetime('now', '-9 minutes'),
+    (strftime('%s', datetime('now', '-9 minutes')) * 1000),
+    '2001:db8:abcd::100', '64515', 'Example IPv6 Broadband', 'FR', 'visitor_v6_5',
+    'GET', 'yourdomain.example', 'https', '/benefits', '',
+    49203,
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/604.1',
+    'https://mail.example.com/', 'text/html,application/xhtml+xml', 'fr-FR,fr;q=0.9', 'gzip, deflate, br',
+    'cross-site', 'navigate', 'document',
+    0, '', 84, 'human', 'get_request, browser_ua, sec_fetch_navigate, referer_present, accept_language_present',
+    1, 0
 );
 
 -- ============================================================
