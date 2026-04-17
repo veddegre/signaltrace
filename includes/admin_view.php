@@ -589,6 +589,7 @@ function renderAdminPage(
         </div>
         <?php endif; ?>
         <?php endif; ?>
+        <div style="margin-bottom: 1.25rem;"></div>
 
         <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
         <div class="ip-summary">
