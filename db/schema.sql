@@ -152,6 +152,11 @@ CREATE INDEX IF NOT EXISTS idx_clicks_event_type       ON clicks(event_type);
 CREATE INDEX IF NOT EXISTS idx_clicks_confidence_label ON clicks(confidence_label);
 CREATE INDEX IF NOT EXISTS idx_clicks_is_bot           ON clicks(is_bot);
 
+-- Compound indexes for high-frequency query patterns
+CREATE INDEX IF NOT EXISTS idx_clicks_feed      ON clicks(event_type, clicked_at_unix_ms, confidence_label);
+CREATE INDEX IF NOT EXISTS idx_clicks_export    ON clicks(confidence_label, clicked_at_unix_ms);
+CREATE INDEX IF NOT EXISTS idx_clicks_ip_time   ON clicks(ip, clicked_at_unix_ms);
+
 -- skip_patterns
 CREATE INDEX IF NOT EXISTS idx_skip_patterns_type      ON skip_patterns(type);
 CREATE INDEX IF NOT EXISTS idx_skip_patterns_active    ON skip_patterns(active);
