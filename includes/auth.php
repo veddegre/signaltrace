@@ -174,10 +174,9 @@ function recordAuthFailure(PDO $pdo, string $ip): void
     ensureAuthTable($pdo);
     $pdo->prepare("INSERT INTO auth_failures (ip, failed_at) VALUES (:ip, :now)")
         ->execute([':ip' => $ip, ':now' => time()]);
-    // Prune rows outside the lockout window so old failures cannot
-    // re-trigger a lockout after the window has expired.
-    $pdo->prepare("DELETE FROM auth_failures WHERE failed_at < :cutoff")
-        ->execute([':cutoff' => time() - AUTH_LOCKOUT_SECS]);
+    // Pruning of expired records is handled probabilistically by
+    // pruneExpiredAuthFailures() via maybeRunAutoCleanup() — not here,
+    // to keep the auth hot path lean under brute-force conditions.
 }
 
 function clearAuthFailures(PDO $pdo, string $ip): void
