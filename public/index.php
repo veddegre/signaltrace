@@ -23,6 +23,12 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 /* ============================================================
    SESSION — only for admin UI routes
    ============================================================ */
+
+// Generate a per-request CSP nonce for admin routes. Generated here so it is
+// available to both demo-banner.php (included below) and renderAdminPage().
+$cspNonce = base64_encode(random_bytes(16));
+$GLOBALS['cspNonce'] = $cspNonce;
+
 if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
     session_start();
     if (defined('DEMO_MODE') && DEMO_MODE) {
@@ -33,14 +39,29 @@ if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
 /* ============================================================
    SECURITY HEADERS
    ============================================================ */
-$dataRoutes = ['/export/json', '/export/csv', '/export/stats', '/export/stats/extended', '/export/by-ip', '/export/by-country', '/export/by-token', '/export/by-org', '/export/by-signal', '/export/behavioral-signals', '/export/over-time', '/feed/ips.txt', '/health'];
+$dataRoutes = ['/export/json', '/export/csv', '/feed/ips.txt', '/health'];
 
 header('X-Content-Type-Options: nosniff');
 
 if (!in_array($path, $dataRoutes, true)) {
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'");
+    if (str_starts_with($path, '/admin')) {
+        // Strict CSP with per-request nonce for the admin panel.
+        // Inline styles are permitted (lower risk than scripts).
+        // Google Fonts allowed for IBM Plex typeface.
+        header("Content-Security-Policy: "
+            . "default-src 'self'; "
+            . "script-src 'nonce-{$cspNonce}'; "
+            . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            . "font-src 'self' https://fonts.gstatic.com; "
+            . "img-src 'self' data:; "
+            . "connect-src 'self'; "
+            . "frame-ancestors 'none';"
+        );
+    } else {
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'");
+    }
 }
 
 /* ============================================================
@@ -154,54 +175,6 @@ if ($path === '/export/csv') {
 }
 
 /* ============================================================
-   AGGREGATION ENDPOINTS (Grafana / no-transform)
-   ============================================================ */
-if ($path === '/export/stats') {
-    requireExportAuth();
-    handleExportStats($pdo);
-}
-
-if ($path === '/export/stats/extended') {
-    requireExportAuth();
-    handleExportStatsExtended($pdo);
-}
-
-if ($path === '/export/by-ip') {
-    requireExportAuth();
-    handleExportByIp($pdo);
-}
-
-if ($path === '/export/by-country') {
-    requireExportAuth();
-    handleExportByCountry($pdo);
-}
-
-if ($path === '/export/by-token') {
-    requireExportAuth();
-    handleExportByToken($pdo);
-}
-
-if ($path === '/export/by-org') {
-    requireExportAuth();
-    handleExportByOrg($pdo);
-}
-
-if ($path === '/export/by-signal') {
-    requireExportAuth();
-    handleExportBySignal($pdo);
-}
-
-if ($path === '/export/behavioral-signals') {
-    requireExportAuth();
-    handleExportBehavioralSignals($pdo);
-}
-
-if ($path === '/export/over-time') {
-    requireExportAuth();
-    handleExportOverTime($pdo);
-}
-
-/* ============================================================
    ADMIN ACTIONS (POST)
    ============================================================ */
 if (handleAdminActions($pdo, $path)) {
@@ -275,15 +248,6 @@ $reserved = [
     '/feed/ipv6.cidr',
     '/export/json',
     '/export/csv',
-    '/export/stats',
-    '/export/stats/extended',
-    '/export/by-ip',
-    '/export/by-country',
-    '/export/by-token',
-    '/export/by-org',
-    '/export/by-signal',
-    '/export/behavioral-signals',
-    '/export/over-time',
 ];
 
 /* ============================================================
