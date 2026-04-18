@@ -58,7 +58,6 @@ if ($show_countdown) {
     $secs    = $seconds_remaining % 60;
 }
 ?>
-
 <style>
 .demo-banner {
     position: sticky;
@@ -146,8 +145,8 @@ if ($show_countdown) {
 </div>
 
 <?php if ($show_countdown): ?>
-
-<script>
+<?php $demoBannerNonce = $GLOBALS['cspNonce'] ?? ''; ?>
+<script nonce="<?= htmlspecialchars($demoBannerNonce, ENT_QUOTES, 'UTF-8') ?>">
 (function () {
     const el = document.getElementById('demo-countdown');
     if (!el) return;
@@ -168,5 +167,4 @@ if ($show_countdown) {
     }, 1000);
 })();
 </script>
-
 <?php endif; ?>
