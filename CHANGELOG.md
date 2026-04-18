@@ -2,6 +2,14 @@
 
 ---
 
+## [2.5.5] — April 18, 2026
+
+### Bug Fixes
+
+**Token webhook per-token opt-in not saving** — The `include_in_token_webhook` checkbox was rendering correctly in both the Create Token and Edit Token forms but the value was never read from POST or written to the database. Fixed by reading the field in `handleCreateLink()` and `handleUpdateLink()` in `admin_actions.php` and passing it through to `createLink()` and `updateLink()` in `db.php`. Also added `include_in_token_webhook` to `$linksColumnDefinitions` so existing installs automatically receive the column via `ALTER TABLE` on next boot rather than throwing a 500 on any token create or update.
+
+---
+
 ## [2.5.4] — April 18, 2026
 
 ### Security Hardening
