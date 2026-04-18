@@ -2,6 +2,20 @@
 
 ---
 
+## [2.5.4] — April 18, 2026
+
+### Security Hardening
+
+**Strict Content-Security-Policy on admin routes** — The admin panel now sends a strict `Content-Security-Policy` header with a per-request cryptographic nonce. `script-src` is restricted to `'nonce-...'` with no `unsafe-inline`, meaning any injected script payload that bypasses output escaping will be refused by the browser. All inline `onclick`, `onsubmit`, and other event handler attributes have been replaced with `data-*` attributes handled by a single delegated event listener block. The nonce is generated in `index.php` and shared with `demo-banner.php` so both script blocks are covered. Non-admin routes (feeds, exports, honeypot paths) retain the existing policy unchanged.
+
+**SQLite busy_timeout** — Added `PRAGMA busy_timeout = 5000` to the PDO initialization block so concurrent write attempts during bot traffic bursts queue gracefully rather than throwing immediate "database is locked" exceptions.
+
+**Auth failure prune moved out of hot path** — `recordAuthFailure()` previously ran a `DELETE` query on every failed login attempt to prune expired lockout records. Under a brute-force attack this amplified I/O on every bad password. Pruning is now handled probabilistically via `maybeRunAutoCleanup()` alongside the existing click retention cleanup, keeping the auth path lean under load.
+
+**Compound indexes for high-traffic queries** — Three new compound indexes added to the `clicks` table: `idx_clicks_feed` covering `(event_type, clicked_at_unix_ms, confidence_label)` for the threat feed query, `idx_clicks_export` covering `(confidence_label, clicked_at_unix_ms)` for export and aggregation endpoints, and `idx_clicks_ip_time` covering `(ip, clicked_at_unix_ms)` for IP summary, rate limiting, and behavioral flag queries.
+
+---
+
 ## [2.5.3] — April 17, 2026
 
 ### Bug Fixes
