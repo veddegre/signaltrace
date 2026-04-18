@@ -506,6 +506,8 @@ function handleCreateLink(PDO $pdo): void
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
+
+    if ($token === '' || $destination === '') {
         http_response_code(400);
         echo 'Path/token and destination are required.';
         exit;
