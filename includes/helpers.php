@@ -1286,6 +1286,20 @@ function webhookPresetTemplate(string $preset, string $type): string
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
 
+        'custom' => json_encode([
+            'event'    => $event,
+            'ip'       => '{{ip}}',
+            'token'    => '{{token}}',
+            'label'    => '{{label}}',
+            'score'    => '{{score}}',
+            'org'      => '{{org}}',
+            'asn'      => '{{asn}}',
+            'country'  => '{{country}}',
+            'ua'       => '{{ua}}',
+            'time'     => '{{time}}',
+            'triggers' => '{{triggers}}',
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+
         default => '',
     };
 }
