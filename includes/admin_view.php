@@ -2200,10 +2200,20 @@ function renderAdminPage(
             /* Inject CSRF into any forms rendered after the initial parse */
             injectCsrf();
 
-            /* Tab restore — URL param beats localStorage */
+            /* Tab restore — URL param beats localStorage.
+               Only restore from localStorage when a tab param was explicitly
+               saved from a previous in-page navigation. Fresh /admin loads
+               (no ?tab= in URL) always start on the dashboard. */
             var urlParams  = new URLSearchParams(window.location.search);
             var tabFromUrl = urlParams.get('tab');
-            var saved      = tabFromUrl || localStorage.getItem('activeTab') || 'dashboard';
+            var saved      = tabFromUrl || (tabFromUrl === null ? null : localStorage.getItem('activeTab')) || 'dashboard';
+            if (!tabFromUrl) {
+                // No tab in URL — only restore localStorage if we came from
+                // an in-page action (referrer is same origin /admin)
+                var ref = document.referrer;
+                var sameOrigin = ref !== '' && ref.indexOf(window.location.origin + '/admin') === 0;
+                saved = sameOrigin ? (localStorage.getItem('activeTab') || 'dashboard') : 'dashboard';
+            }
             showTab(saved);
 
             /* Auto-refresh — only fires when the dashboard tab is active */
