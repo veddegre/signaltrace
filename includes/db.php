@@ -266,6 +266,9 @@ function seedDefaultSettings(PDO $pdo): void
         'export_window_hours'        => '168',
         'export_min_score'           => '0',
         'wildcard_mode'              => '0',
+        'behavioral_window_hours'    => '24',
+        'behavioral_max_rows'        => '25',
+        'behavioral_hidden'          => '0',
     ];
 
     $stmt = $pdo->prepare("
@@ -1374,7 +1377,7 @@ function deleteIpOverride(PDO $pdo, int $id): bool
    rapid_repeat, or multi_token signals, with summary data.
    ====================================================== */
 
-function getBehaviorallyFlaggedIps(PDO $pdo, int $windowHours = 24): array
+function getBehaviorallyFlaggedIps(PDO $pdo, int $windowHours = 24, int $limit = 25): array
 {
     $cutoffMs = (int)(microtime(true) * 1000) - ($windowHours * 3600 * 1000);
 
@@ -1403,10 +1406,79 @@ function getBehaviorallyFlaggedIps(PDO $pdo, int $windowHours = 24): array
           AND ip <> ''
         GROUP BY ip
         ORDER BY total_hits DESC
-        LIMIT 50
+        LIMIT :limit
     ");
-    $stmt->execute([':cutoff' => $cutoffMs]);
+    $stmt->bindValue(':cutoff', $cutoffMs, PDO::PARAM_INT);
+    $stmt->bindValue(':limit',  $limit,    PDO::PARAM_INT);
+    $stmt->execute();
     return $stmt->fetchAll();
+}
+
+/* ======================================================
+   SUBDOMAIN SUMMARY
+   Returns per-subdomain hit counts for wildcard deployments.
+   Filters by date range if provided.
+   ====================================================== */
+
+function getSubdomainSummary(PDO $pdo, string $baseUrl, ?string $dateFrom = null, ?string $dateTo = null): array
+{
+    $sql = "
+        SELECT
+            host,
+            COUNT(*)                    AS total_hits,
+            SUM(CASE WHEN confidence_label = 'bot' THEN 1 ELSE 0 END) AS bot_hits,
+            MIN(clicked_at)             AS first_seen,
+            MAX(clicked_at)             AS last_seen
+        FROM clicks
+        WHERE host IS NOT NULL
+          AND host <> ''
+    ";
+
+    $params = [];
+
+    if ($dateFrom !== null && $dateFrom !== '') {
+        $sql .= " AND substr(clicked_at, 1, 10) >= :dateFrom ";
+        $params[':dateFrom'] = $dateFrom;
+    }
+
+    if ($dateTo !== null && $dateTo !== '') {
+        $sql .= " AND substr(clicked_at, 1, 10) <= :dateTo ";
+        $params[':dateTo'] = $dateTo;
+    }
+
+    $sql .= " GROUP BY host ORDER BY total_hits DESC LIMIT 100 ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    // Extract base domain from base URL for subdomain extraction
+    $baseDomain = strtolower(preg_replace('#^https?://#', '', rtrim($baseUrl, '/')));
+
+    $result = [];
+    foreach ($rows as $row) {
+        $host      = strtolower(preg_replace('/:\d+$/', '', (string) ($row['host'] ?? '')));
+        $subdomain = '';
+
+        if ($host === $baseDomain) {
+            $subdomain = '(root)';
+        } elseif (str_ends_with($host, '.' . $baseDomain)) {
+            $subdomain = substr($host, 0, strlen($host) - strlen('.' . $baseDomain));
+        } else {
+            $subdomain = $host; // external or unrecognised host
+        }
+
+        $result[] = [
+            'host'       => $row['host'],
+            'subdomain'  => $subdomain,
+            'total_hits' => (int) $row['total_hits'],
+            'bot_hits'   => (int) $row['bot_hits'],
+            'first_seen' => (string) $row['first_seen'],
+            'last_seen'  => (string) $row['last_seen'],
+        ];
+    }
+
+    return $result;
 }
 
 /* ======================================================
