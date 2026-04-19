@@ -145,6 +145,7 @@ function initializeDatabase(PDO $pdo): void
 
     $linksColumnDefinitions = [
         'exclude_from_feed'        => 'INTEGER NOT NULL DEFAULT 0',
+        'force_include_in_feed'    => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_email'         => 'INTEGER NOT NULL DEFAULT 0',
     ];
@@ -514,11 +515,11 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false): bool
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, include_in_email, created_at)
-        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :include_in_token_webhook, :include_in_email, :created_at)
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, force_include_in_feed, include_in_token_webhook, include_in_email, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed, :include_in_token_webhook, :include_in_email, :created_at)
     ");
 
     return $stmt->execute([
@@ -526,13 +527,14 @@ function createLink(PDO $pdo, string $token, string $destination, string $descri
         ':destination'             => $destination,
         ':description'             => $description,
         ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
+        ':force_include_in_feed'   => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
         ':include_in_email'        => $includeInEmail ? 1 : 0,
         ':created_at'              => date('c'),
     ]);
 }
 
-function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
@@ -540,6 +542,7 @@ function updateLink(PDO $pdo, int $id, string $token, string $destination, strin
             destination              = :destination,
             description              = :description,
             exclude_from_feed        = :exclude_from_feed,
+            force_include_in_feed    = :force_include_in_feed,
             include_in_token_webhook = :include_in_token_webhook,
             include_in_email         = :include_in_email
         WHERE id = :id
@@ -551,6 +554,7 @@ function updateLink(PDO $pdo, int $id, string $token, string $destination, strin
         ':destination'             => $destination,
         ':description'             => $description,
         ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
+        ':force_include_in_feed'   => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
         ':include_in_email'        => $includeInEmail ? 1 : 0,
     ]);
@@ -948,10 +952,19 @@ function getThreatFeedRows(PDO $pdo): array
           AND c.confidence_label IS NOT NULL
           AND c.confidence_label <> ''
           AND c.confidence_score IS NOT NULL
-          AND c.confidence_label IN ($placeholders)
           AND ar.id IS NULL
           AND io.id IS NULL
-          AND (lk.id IS NULL OR lk.exclude_from_feed = 0)
+          AND (
+              -- Normal threshold path: exclude_from_feed not set and label meets threshold
+              (
+                  (lk.id IS NULL OR lk.exclude_from_feed = 0)
+                  AND (lk.id IS NULL OR lk.force_include_in_feed = 0)
+                  AND c.confidence_label IN ($placeholders)
+              )
+              OR
+              -- Force-include path: token is flagged, override threshold entirely
+              (lk.force_include_in_feed = 1)
+          )
         GROUP BY c.ip
         HAVING COUNT(*) >= {$minHits}
 
@@ -1045,6 +1058,299 @@ function getThreatFeedCount(PDO $pdo): array
 function getThreatFeedIps(PDO $pdo): array
 {
     return getThreatFeedIpv4($pdo);
+}
+
+/**
+ * Returns enriched threat feed rows for intel format exports (MISP, STIX).
+ * Includes classification, score, org, country, first/last seen per IP.
+ * Applies the same window and min-hits filtering as getThreatFeedRows() but
+ * caps the minimum confidence at 'suspicious' — uncertain and human IPs are
+ * excluded since these formats are consumed by systems that act automatically.
+ */
+function getThreatFeedEnriched(PDO $pdo): array
+{
+    $enabled = getSetting($pdo, 'threat_feed_enabled', '1');
+    if ($enabled !== '1') {
+        return [];
+    }
+
+    $windowHours   = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
+    $minConfidence = strtolower((string) getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
+    $minHits       = max(1, (int) getSetting($pdo, 'threat_feed_min_hits', '1'));
+
+    // Intel formats cap at suspicious — uncertain/human excluded unless force_include_in_feed
+    $allowedLabels = match ($minConfidence) {
+        'bot'   => ['bot'],
+        default => ['suspicious', 'bot'],
+    };
+
+    $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
+
+    $sql = "
+        SELECT
+            c.ip,
+            COUNT(*)                    AS hit_count,
+            MIN(c.clicked_at)           AS first_seen,
+            MAX(c.clicked_at)           AS last_seen,
+            MAX(c.confidence_label)     AS confidence_label,
+            MIN(c.confidence_score)     AS lowest_score,
+            MAX(c.ip_org)               AS ip_org,
+            MAX(c.ip_country)           AS ip_country,
+            'feed'                      AS source
+        FROM clicks c
+        LEFT JOIN asn_rules ar
+            ON ar.asn = c.ip_asn
+           AND ar.active = 1
+           AND ar.exclude_from_feed = 1
+        LEFT JOIN links lk
+            ON lk.id = c.link_id
+        LEFT JOIN ip_overrides io
+            ON io.ip = c.ip
+           AND io.active = 1
+           AND io.mode = 'allow'
+        WHERE c.ip IS NOT NULL
+          AND c.ip <> ''
+          AND c.event_type = 'click'
+          AND c.clicked_at_unix_ms >= (strftime('%s', 'now') - ? * 3600) * 1000
+          AND c.confidence_label IS NOT NULL
+          AND c.confidence_label <> ''
+          AND c.confidence_score IS NOT NULL
+          AND ar.id IS NULL
+          AND io.id IS NULL
+          AND (
+              -- Normal threshold path (capped at suspicious for intel formats)
+              (
+                  (lk.id IS NULL OR lk.exclude_from_feed = 0)
+                  AND (lk.id IS NULL OR lk.force_include_in_feed = 0)
+                  AND c.confidence_label IN ($placeholders)
+              )
+              OR
+              -- Force-include path: bypass threshold but cap at suspicious for intel
+              (
+                  lk.force_include_in_feed = 1
+                  AND c.confidence_label IN ($placeholders)
+              )
+          )
+        GROUP BY c.ip
+        HAVING COUNT(*) >= {$minHits}
+
+        UNION
+
+        SELECT
+            io.ip,
+            1                           AS hit_count,
+            io.created_at               AS first_seen,
+            io.created_at               AS last_seen,
+            'bot'                       AS confidence_label,
+            0                           AS lowest_score,
+            NULL                        AS ip_org,
+            NULL                        AS ip_country,
+            'override'                  AS source
+        FROM ip_overrides io
+        WHERE io.active = 1
+          AND io.mode = 'block'
+          AND io.ip IS NOT NULL
+          AND io.ip <> ''
+
+        ORDER BY ip ASC
+    ";
+
+    $params = array_merge([$windowHours], $allowedLabels, $allowedLabels);
+    $stmt   = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Builds a MISP event JSON export from the current threat feed.
+ * Returns a MISP-compatible event array ready for json_encode().
+ */
+function buildMispExport(PDO $pdo): array
+{
+    $rows    = getThreatFeedEnriched($pdo);
+    $appName = (string) getSetting($pdo, 'app_name', 'SignalTrace');
+    $now     = date('Y-m-d');
+
+    // Determine worst classification across all rows for event threat level
+    $worstLevel = '4'; // undefined
+    foreach ($rows as $row) {
+        $label = (string) ($row['confidence_label'] ?? '');
+        if ($label === 'bot')                             { $worstLevel = '1'; break; }
+        if ($label === 'suspicious' && $worstLevel !== '1') { $worstLevel = '2'; }
+        if ($label === 'uncertain'  && !in_array($worstLevel, ['1','2'], true)) { $worstLevel = '3'; }
+    }
+
+    $attributes = [];
+    foreach ($rows as $row) {
+        $ip = trim((string) ($row['ip'] ?? ''));
+        if ($ip === '') continue;
+
+        $packed = @inet_pton($ip);
+        if ($packed === false) continue;
+        $ipNorm = inet_ntop($packed) ?: $ip;
+
+        $label   = (string) ($row['confidence_label'] ?? 'suspicious');
+        $score   = (int)    ($row['lowest_score']     ?? 0);
+        $hits    = (int)    ($row['hit_count']        ?? 1);
+        $org     = (string) ($row['ip_org']           ?? '');
+        $country = (string) ($row['ip_country']       ?? '');
+        $source  = (string) ($row['source']           ?? 'feed');
+
+        // Normalise timestamps to RFC3339 UTC as MISP expects
+        $firstRaw = (string) ($row['first_seen'] ?? '');
+        $lastRaw  = (string) ($row['last_seen']  ?? '');
+        $firstTs  = $firstRaw !== '' ? gmdate('Y-m-d\TH:i:s\Z', strtotime($firstRaw)) : gmdate('Y-m-d\TH:i:s\Z');
+        $lastTs   = $lastRaw  !== '' ? gmdate('Y-m-d\TH:i:s\Z', strtotime($lastRaw))  : gmdate('Y-m-d\TH:i:s\Z');
+
+        $comment = "Classification: {$label} | Score: {$score} | Hits: {$hits}";
+        if ($org     !== '') $comment .= " | Org: {$org}";
+        if ($country !== '') $comment .= " | Country: {$country}";
+        if ($source === 'override') $comment .= " | Source: manual block";
+
+        $attributes[] = [
+            'type'         => 'ip-src',
+            'category'     => 'Network activity',
+            'value'        => $ipNorm,
+            'comment'      => $comment,
+            'first_seen'   => $firstTs,
+            'last_seen'    => $lastTs,
+            'to_ids'       => true,
+            'distribution' => 0,
+        ];
+    }
+
+    return [
+        'Event' => [
+            'info'             => "{$appName} Threat Feed — " . date('Y-m-d H:i:s T'),
+            'threat_level_id'  => $worstLevel,
+            'analysis'         => '2',   // completed
+            'distribution'     => '0',   // your organisation only
+            'date'             => $now,
+            'Attribute'        => $attributes,
+            'Orgc'             => [
+                'name' => $appName,
+                'uuid' => '00000000-0000-0000-0000-000000000000',
+            ],
+        ],
+    ];
+}
+
+/**
+ * Generates a UUIDv5 (namespace + name based) for stable deterministic STIX IDs.
+ * Uses the DNS namespace (6ba7b810-9dad-11d1-80b4-00c04fd430c8).
+ */
+function stixUuidV5(string $name): string
+{
+    // DNS namespace UUID bytes
+    $ns = hex2bin('6ba7b8109dad11d180b400c04fd430c8');
+    $hash = sha1($ns . $name);
+    // Set version (5) and variant bits per RFC 4122
+    return sprintf(
+        '%08s-%04s-%04x-%04x-%12s',
+        substr($hash, 0, 8),
+        substr($hash, 8, 4),
+        (hexdec(substr($hash, 12, 4)) & 0x0fff) | 0x5000,
+        (hexdec(substr($hash, 16, 4)) & 0x3fff) | 0x8000,
+        substr($hash, 20, 12)
+    );
+}
+
+/**
+ * Builds a STIX 2.1 bundle from the current threat feed.
+ * Returns a STIX bundle array ready for json_encode().
+ */
+function buildStixExport(PDO $pdo): array
+{
+    $rows    = getThreatFeedEnriched($pdo);
+    $appName = (string) getSetting($pdo, 'app_name', 'SignalTrace');
+    $now     = gmdate('Y-m-d\TH:i:s\Z');
+    $windowHours = max(1, (int) getSetting($pdo, 'threat_feed_window_hours', '168'));
+
+    // Identity object — the producer
+    $identityId = 'identity--' . stixUuidV5('signaltrace-identity');
+    $identity   = [
+        'type'           => 'identity',
+        'spec_version'   => '2.1',
+        'id'             => $identityId,
+        'name'           => $appName,
+        'identity_class' => 'system',
+        'created'        => $now,
+        'modified'       => $now,
+    ];
+
+    $objects = [$identity];
+    $seen    = [];
+
+    foreach ($rows as $row) {
+        $ip = trim((string) ($row['ip'] ?? ''));
+        if ($ip === '' || isset($seen[$ip])) continue;
+        $seen[$ip] = true;
+
+        $packed = @inet_pton($ip);
+        if ($packed === false) continue;
+        $isV6   = strlen($packed) === 16;
+        $ipNorm = inet_ntop($packed) ?: $ip;
+
+        $label   = (string) ($row['confidence_label'] ?? 'suspicious');
+        $score   = (int)    ($row['lowest_score']     ?? 0);
+        $firstRaw = (string) ($row['first_seen'] ?? '');
+        $lastRaw  = (string) ($row['last_seen']  ?? '');
+
+        // RFC3339 UTC timestamps
+        $validFrom  = $firstRaw !== ''
+            ? gmdate('Y-m-d\TH:i:s\Z', strtotime($firstRaw))
+            : $now;
+        $validUntil = $lastRaw !== ''
+            ? gmdate('Y-m-d\TH:i:s\Z', strtotime('+' . $windowHours . ' hours', strtotime($lastRaw)))
+            : gmdate('Y-m-d\TH:i:s\Z', strtotime('+' . $windowHours . ' hours'));
+
+        $addrType = $isV6 ? 'ipv6-addr' : 'ipv4-addr';
+        $pattern  = "[{$addrType}:value = '{$ipNorm}']";
+
+        // STIX confidence 0-100, aligned to common convention
+        $confidence = match ($label) {
+            'bot'        => 85,
+            'suspicious' => 50,
+            'uncertain'  => 15,
+            default      => 15,
+        };
+
+        // UUIDv5 — deterministic and stable across exports for the same IP
+        $indicatorId = 'indicator--' . stixUuidV5('signaltrace-indicator-' . $ipNorm);
+
+        $objects[] = [
+            'type'             => 'indicator',
+            'spec_version'     => '2.1',
+            'id'               => $indicatorId,
+            'created_by_ref'   => $identityId,
+            'created'          => $validFrom,
+            'modified'         => $validFrom,
+            'name'             => "Malicious IP: {$ipNorm}",
+            'description'      => "Detected by {$appName}. Classification: {$label}. Score: {$score}.",
+            'pattern'          => $pattern,
+            'pattern_type'     => 'stix',
+            'valid_from'       => $validFrom,
+            'valid_until'      => $validUntil,
+            'confidence'       => $confidence,
+            'indicator_types'  => ['malicious-activity'],
+        ];
+    }
+
+    // Bundle UUID is random (UUIDv4) — bundles are single-use envelopes
+    $bundleUuid = sprintf('bundle--%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+        mt_rand(0, 0xffff),
+        mt_rand(0, 0x0fff) | 0x4000,
+        mt_rand(0, 0x3fff) | 0x8000,
+        mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+    );
+
+    return [
+        'type'         => 'bundle',
+        'id'           => $bundleUuid,
+        'spec_version' => '2.1',
+        'objects'      => $objects,
+    ];
 }
 
 /**
