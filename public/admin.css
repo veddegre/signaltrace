@@ -532,6 +532,13 @@ button[type="submit"]:hover {
 .danger-button:hover  { background: var(--danger-hover)  !important; border-color: var(--danger-hover)  !important; }
 .warning-button:hover { background: var(--warning-hover) !important; border-color: var(--warning-hover) !important; }
 
+.btn-small {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .copy-button {
     display: inline-flex;
     align-items: center;
