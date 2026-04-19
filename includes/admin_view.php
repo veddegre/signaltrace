@@ -918,7 +918,7 @@ function renderAdminPage(
                                     </div>
 
                                     <div class="detail-box shodan-box" data-ip="<?= h($rowIp) ?>">
-                                        <strong>Shodan InternetDB</strong>
+                                        <strong>IP Reputation</strong>
                                         <div class="shodan-loading muted" style="font-size:0.8125rem;">Loading…</div>
                                         <div class="shodan-content" style="display:none;"></div>
                                     </div>
@@ -2214,6 +2214,12 @@ function renderAdminPage(
 
             var html = '';
 
+            // ── Single rescan button at the top ───────────────
+            html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">';
+            html += '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);">Sources: Shodan InternetDB · AbuseIPDB</span>';
+            html += '<button type="button" class="copy-button rescan-btn" style="font-size:0.7rem;">Rescan</button>';
+            html += '</div>';
+
             // ── Shodan InternetDB section ──────────────────────
             var ports     = data.ports     || [];
             var vulns     = data.vulns     || [];
@@ -2221,10 +2227,7 @@ function renderAdminPage(
             var hostnames = data.hostnames || [];
             var hasShod   = ports.length > 0 || vulns.length > 0 || tags.length > 0 || hostnames.length > 0;
 
-            html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">';
-            html += '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);">Shodan InternetDB</span>';
-            html += '<button type="button" class="copy-button rescan-btn" data-source="shodan" style="font-size:0.7rem;">Rescan</button>';
-            html += '</div>';
+            html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-bottom:4px;">Shodan InternetDB</div>';
 
             if (!hasShod && data.not_found) {
                 html += '<div class="muted" style="font-size:0.8125rem;margin-bottom:0.75rem;">No data in Shodan for this IP.</div>';
@@ -2263,10 +2266,7 @@ function renderAdminPage(
 
             // ── AbuseIPDB section ──────────────────────────────
             var hasAbuse = typeof data.abuse_score !== 'undefined' && data.abuse_score !== null;
-            html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);margin-bottom:4px;">';
-            html += '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);">AbuseIPDB</span>';
-            html += '<button type="button" class="copy-button rescan-btn" data-source="abuse" style="font-size:0.7rem;">Rescan</button>';
-            html += '</div>';
+            html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);margin-bottom:4px;">AbuseIPDB</div>';
 
             if (!hasAbuse) {
                 html += '<div class="muted" style="font-size:0.8125rem;">No AbuseIPDB data — API key not configured or daily limit reached.</div>';
