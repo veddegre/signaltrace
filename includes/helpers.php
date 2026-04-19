@@ -1433,3 +1433,97 @@ function fireTestWebhook(string $url, string $template, string $type): array
 
     return ['ok' => false, 'message' => "Endpoint returned HTTP $httpCode. Check the URL and try again."];
 }
+
+/* ======================================================
+   IP ENRICHMENT — Shodan InternetDB
+   ====================================================== */
+
+/**
+ * Returns true if an IP is private, loopback, or otherwise not suitable
+ * for external enrichment lookups.
+ */
+function isPrivateIp(string $ip): bool
+{
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        return true;
+    }
+    return !filter_var($ip, FILTER_VALIDATE_IP,
+        FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+}
+
+/**
+ * Fetches enrichment data for an IP from Shodan InternetDB (no API key required)
+ * and caches the result in the ip_enrichment table. Returns the cached or freshly
+ * fetched enrichment row, or null if the IP is private or the fetch fails.
+ *
+ * - Returns immediately from cache if already fetched (including 404 not_found entries)
+ * - Skips private/loopback/reserved IPs entirely
+ * - On 404: stores not_found=1 so we never retry
+ * - On network error: logs and returns null without caching (will retry next time)
+ *
+ * @return array|null  Keys: ip, ports, vulns, tags, hostnames, not_found, fetched_at
+ *                     All data keys are decoded from JSON. null on skip or failure.
+ */
+function fetchAndCacheEnrichment(PDO $pdo, string $ip): ?array
+{
+    if (isPrivateIp($ip)) {
+        return null;
+    }
+
+    // Return from cache if already fetched
+    $cached = getEnrichment($pdo, $ip);
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $url = 'https://internetdb.shodan.io/' . urlencode($ip);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_TIMEOUT_MS        => 5000,
+        CURLOPT_CONNECTTIMEOUT_MS => 3000,
+        CURLOPT_HTTPHEADER        => ['Accept: application/json'],
+        CURLOPT_USERAGENT         => 'SignalTrace/1.0',
+        CURLOPT_FOLLOWLOCATION    => false,
+    ]);
+
+    $body     = (string) curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    if ($error !== '') {
+        error_log("SignalTrace enrichment: curl error for $ip — $error");
+        return null;
+    }
+
+    if ($httpCode === 404) {
+        // IP not in Shodan — cache as not_found so we skip it in future
+        $row = ['ports' => null, 'vulns' => null, 'tags' => null, 'hostnames' => null, 'not_found' => 1];
+        saveEnrichment($pdo, $ip, $row);
+        return getEnrichment($pdo, $ip);
+    }
+
+    if ($httpCode !== 200) {
+        error_log("SignalTrace enrichment: unexpected HTTP $httpCode for $ip");
+        return null;
+    }
+
+    $data = json_decode($body, true);
+    if (!is_array($data)) {
+        error_log("SignalTrace enrichment: invalid JSON for $ip");
+        return null;
+    }
+
+    $row = [
+        'ports'     => json_encode($data['ports']     ?? []),
+        'vulns'     => json_encode($data['vulns']     ?? []),
+        'tags'      => json_encode($data['tags']      ?? []),
+        'hostnames' => json_encode($data['hostnames'] ?? []),
+        'not_found' => 0,
+    ];
+
+    saveEnrichment($pdo, $ip, $row);
+    return getEnrichment($pdo, $ip);
+}
