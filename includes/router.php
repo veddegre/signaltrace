@@ -492,7 +492,9 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     if ($link) {
         logClick($pdo, $link, $requestData);
         maybeFireTokenAlert($pdo, $requestData);
+        maybeFireTokenEmailAlert($pdo, $requestData);
         maybeFireAlert($pdo, $requestData);
+        maybeFireEmailAlert($pdo, $requestData);
         maybeRunAutoCleanup($pdo);
 
         $destination = (string) ($link['destination'] ?? '');
@@ -521,6 +523,7 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     ], $requestData);
 
     maybeFireAlert($pdo, $requestData);
+    maybeFireEmailAlert($pdo, $requestData);
     maybeRunAutoCleanup($pdo);
 
     redirectOr404($unknownPathBehavior, $defaultRedirectUrl);
