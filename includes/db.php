@@ -208,6 +208,18 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_code ON country_rules(country_code)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_country_rules_active ON country_rules(active)");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ip_enrichment (
+            ip          TEXT PRIMARY KEY,
+            ports       TEXT,
+            vulns       TEXT,
+            tags        TEXT,
+            hostnames   TEXT,
+            not_found   INTEGER NOT NULL DEFAULT 0,
+            fetched_at  TEXT NOT NULL
+        )
+    ");
+
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
 }
@@ -2287,13 +2299,14 @@ function exportBehavioralSignals(
     [$where, $params] = buildExportWhere($pdo, $manualFilters, $dateFrom, $dateTo, $fromMs, $toMs);
 
     $behavioralSignals = ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'];
-    $likeClauses = implode(' OR ', array_map(
-        fn($s) => "c.confidence_reason LIKE :sig_$s",
-        $behavioralSignals
-    ));
 
+    // Use positional placeholders to avoid mixing with named placeholders
+    // that buildExportWhere may have already added when manualFilters is true.
+    $likeClauses = implode(' OR ', array_fill(0, count($behavioralSignals), 'c.confidence_reason LIKE ?'));
+
+    // Append signal LIKE values to the params array as positional values.
     foreach ($behavioralSignals as $s) {
-        $params[":sig_$s"] = "%$s%";
+        $params[] = "%$s%";
     }
 
     $stmt = $pdo->prepare("
@@ -2358,4 +2371,53 @@ function exportOverTime(
 
     $stmt->execute($params);
     return $stmt->fetchAll();
+}
+
+/* ======================================================
+   IP ENRICHMENT (Shodan InternetDB)
+   ====================================================== */
+
+/**
+ * Returns cached enrichment data for an IP, or null if not yet fetched.
+ * not_found=1 means the API returned 404 — don't retry these.
+ *
+ * @return array|null  Row with keys: ip, ports, vulns, tags, hostnames, not_found, fetched_at
+ */
+function getEnrichment(PDO $pdo, string $ip): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM ip_enrichment WHERE ip = :ip LIMIT 1");
+    $stmt->execute([':ip' => $ip]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/**
+ * Saves enrichment data to the cache. Upserts on conflict.
+ *
+ * @param array $data  Keys: ports (JSON string), vulns (JSON string),
+ *                     tags (JSON string), hostnames (JSON string), not_found (int)
+ */
+function saveEnrichment(PDO $pdo, string $ip, array $data): void
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO ip_enrichment (ip, ports, vulns, tags, hostnames, not_found, fetched_at)
+        VALUES (:ip, :ports, :vulns, :tags, :hostnames, :not_found, :fetched_at)
+        ON CONFLICT(ip) DO UPDATE SET
+            ports      = excluded.ports,
+            vulns      = excluded.vulns,
+            tags       = excluded.tags,
+            hostnames  = excluded.hostnames,
+            not_found  = excluded.not_found,
+            fetched_at = excluded.fetched_at
+    ");
+
+    $stmt->execute([
+        ':ip'         => $ip,
+        ':ports'      => $data['ports']     ?? null,
+        ':vulns'      => $data['vulns']     ?? null,
+        ':tags'       => $data['tags']      ?? null,
+        ':hostnames'  => $data['hostnames'] ?? null,
+        ':not_found'  => (int) ($data['not_found'] ?? 0),
+        ':fetched_at' => date('Y-m-d H:i:s'),
+    ]);
 }
