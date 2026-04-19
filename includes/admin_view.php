@@ -2265,13 +2265,14 @@ function renderAdminPage(
             }
 
             // ── AbuseIPDB section ──────────────────────────────
-            var hasAbuse = typeof data.abuse_score !== 'undefined' && data.abuse_score !== null;
+            var hasAbuse = data.abuse_score !== undefined && data.abuse_score !== null && data.abuse_score !== '';
             html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);margin-bottom:4px;">AbuseIPDB</div>';
 
             if (!hasAbuse) {
                 html += '<div class="muted" style="font-size:0.8125rem;">No AbuseIPDB data — API key not configured or daily limit reached.</div>';
             } else {
                 var score = parseInt(data.abuse_score, 10);
+                if (isNaN(score)) score = 0;
                 var scoreColor = score >= 75 ? 'var(--bot)' : score >= 25 ? 'var(--suspicious)' : 'var(--human)';
                 html += '<div><span class="mono">Abuse confidence:</span> <strong style="color:' + scoreColor + '">' + score + '% likelihood of malicious activity</strong></div>';
                 html += '<div><span class="mono">Total reports:</span> ' + escHtml(String(data.abuse_reports || 0)) + '</div>';
