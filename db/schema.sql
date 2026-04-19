@@ -215,12 +215,6 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('subdomains_hidden',         '0'),
     ('email_enabled',             '0'),
     ('email_to',                  ''),
-    ('email_from',                ''),
-    ('email_smtp_host',           ''),
-    ('email_smtp_port',           '587'),
-    ('email_smtp_user',           ''),
-    ('email_smtp_pass',           ''),
-    ('email_smtp_encryption',     'tls'),
     ('email_threshold',           'bot'),
     ('email_dedup_minutes',       '60');
 
