@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS links (
     description               TEXT,
     active                    INTEGER NOT NULL DEFAULT 1,
     exclude_from_feed         INTEGER NOT NULL DEFAULT 0,
+    force_include_in_feed     INTEGER NOT NULL DEFAULT 0,
     include_in_token_webhook  INTEGER NOT NULL DEFAULT 0,
     include_in_email          INTEGER NOT NULL DEFAULT 0,
     created_at                TEXT    NOT NULL
