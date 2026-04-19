@@ -219,11 +219,6 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleTestWebhook($pdo, 'token');
             return true;
 
-        case '/admin/webhook-preset':
-            requireAdminAuth();
-            handleWebhookPreset();
-            return true;
-
         default:
             return false;
     }
