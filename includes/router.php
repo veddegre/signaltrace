@@ -179,6 +179,16 @@ function handleExport(PDO $pdo, string $format): void
         $f['toMs'],
     );
 
+    // Rename 'host' to 'request_host' to avoid collision with Splunk's built-in
+    // host metadata field, which would shadow the JSON value at index time.
+    $rows = array_map(function (array $row): array {
+        if (array_key_exists('host', $row)) {
+            $row['request_host'] = $row['host'];
+            unset($row['host']);
+        }
+        return $row;
+    }, $rows);
+
     if ($format === 'csv') {
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="signaltrace-export-' . date('Ymd-His') . '.csv"');
