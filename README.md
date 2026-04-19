@@ -8,11 +8,13 @@
   <img src="https://img.shields.io/badge/PHP-8.1%2B-blue" alt="PHP"> 
   <img src="https://img.shields.io/badge/Database-SQLite-lightgrey" alt="SQLite"> 
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License"> 
+  <img src="https://img.shields.io/badge/Email-PHPMailer-orange" alt="PHPMailer">
+  <img src="https://img.shields.io/badge/Intel-MISP%20%7C%20STIX%202.1-purple" alt="Threat Intel">
   <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker-image.yml/badge.svg" alt="Docker Build">
 </p>
 
 <p align="center">
-  SignalTrace Tracking & Analysis for honeypots, links, and request intelligence.
+  Self-hosted honeypot, link tracker, and threat intelligence platform with real-time bot scoring, SIEM integration, and structured threat feed export.
 </p>
 
 <p align="center">
@@ -23,11 +25,11 @@ SignalTrace is a self-hosted tracking and analysis platform for honeypot deploym
 
 No external services required. One PHP app, one SQLite database, one Apache vhost.
 
-Includes built-in Splunk dashboards, a Grafana dashboard, and SIEM-ready export endpoints.
+Includes built-in Splunk dashboards, a Grafana dashboard, SIEM-ready export endpoints, MISP and STIX 2.1 threat intel exports, and optional email alerting via SMTP.
 
 **Project Website:** [www.trysignaltrace.com](https://www.trysignaltrace.com)
 
------
+---
 
 ## Demo
 
@@ -35,14 +37,14 @@ A quick look at real-time scoring, behavioral detection, and threat feed generat
 
 https://github.com/user-attachments/assets/d9f85e24-fdff-4ebf-ba0a-2546e9bb3b12
 
------
+---
 
 ## Live Demo
 
 A live instance is running at [trysignaltrace.com/admin](https://trysignaltrace.com/admin) and capturing real traffic. Every scanner, bot, and automated probe that hits it is scored in real time.
 
-- **Username:** `demo`
-- **Password:** `trysignaltrace`
+* **Username:** `demo`
+* **Password:** `trysignaltrace`
 
 *Note: The demo resets every 60 minutes. All data is sample/live traffic only — no real credentials or sensitive data are present.*
 
@@ -64,19 +66,19 @@ Every hit gets a 0–100 human-likelihood score with named signal reasons. The b
 
 **Use cases:** phishing simulations, honeypot deployments, recon detection, link tracking, and threat feed generation.
 
------
+---
 
 ## How it works (high-level)
 
 SignalTrace processes every request in real time:
 
 1. Request is logged and enriched (IP, ASN, headers)
-1. Detection signals are applied
-1. A score (0–100) is calculated
-1. Classification is assigned (bot → human)
-1. Results are immediately available via dashboard, feed, or API
+2. Detection signals are applied
+3. A score (0–100) is calculated
+4. Classification is assigned (bot → human)
+5. Results are immediately available via dashboard, feed, or API
 
------
+---
 
 ## Screenshots
 
@@ -168,12 +170,11 @@ chmod +x setup.sh
 ```
 
 The script walks through all configuration and starts the container. When prompted for install type, select:
+* **Option 1** — pulls the pre-built image from `ghcr.io/veddegre/signaltrace:latest`, no build step required
+* **Option 2** — builds the image locally from the Dockerfile, useful if you want to modify the image or pin to a specific commit
+* **Option 3** — full manual install on Ubuntu + Apache, see [Manual Installation](#manual-installation-ubuntu--apache) below
 
-- **Option 1** — pulls the pre-built image from `ghcr.io/veddegre/signaltrace:latest`, no build step required
-- **Option 2** — builds the image locally from the Dockerfile, useful if you want to modify the image or pin to a specific commit
-- **Option 3** — full manual install on Ubuntu + Apache, see [Manual Installation](#manual-installation-ubuntu--apache) below
-
------
+---
 
 ### Without setup.sh
 
@@ -188,19 +189,27 @@ curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/.env.exam
 
 Edit `.env` and fill in the values:
 
-|Variable                         |Required   |Description                                       |
-|---------------------------------|-----------|--------------------------------------------------|
-|`SIGNALTRACE_ADMIN_USERNAME`     |✅          |Admin login username                              |
-|`SIGNALTRACE_ADMIN_PASSWORD_HASH`|✅          |Bcrypt hash of your admin password                |
-|`SIGNALTRACE_PORT`               |✅          |Host port to expose SignalTrace on (e.g. `80`)    |
-|`SIGNALTRACE_VISITOR_HASH_SALT`  |✅          |Random salt for visitor fingerprinting            |
-|`MAXMIND_ACCOUNT_ID`             |Recommended|MaxMind account ID for GeoIP enrichment           |
-|`MAXMIND_LICENSE_KEY`            |Recommended|MaxMind license key                               |
-|`SIGNALTRACE_EXPORT_API_TOKEN`   |Optional   |Token for Splunk/automation export endpoints      |
-|`SIGNALTRACE_TRUSTED_PROXY_IP`   |Optional   |IP of your reverse proxy if running behind one    |
-|`AUTH_MAX_FAILURES`              |Optional   |Failed logins before lockout (default: 5)         |
-|`AUTH_LOCKOUT_SECS`              |Optional   |Lockout duration in seconds (default: 900)        |
-|`SELF_REFERER_DOMAIN`            |Optional   |Your domain — requests from it get a score penalty|
+| Variable | Required | Description |
+|---|---|---|
+| `SIGNALTRACE_ADMIN_USERNAME` | ✅ | Admin login username |
+| `SIGNALTRACE_ADMIN_PASSWORD_HASH` | ✅ | Bcrypt hash of your admin password |
+| `SIGNALTRACE_PORT` | ✅ | Host port to expose SignalTrace on (e.g. `80`) |
+| `SIGNALTRACE_VISITOR_HASH_SALT` | ✅ | Random salt for visitor fingerprinting |
+| `MAXMIND_ACCOUNT_ID` | Recommended | MaxMind account ID for GeoIP enrichment |
+| `MAXMIND_LICENSE_KEY` | Recommended | MaxMind license key |
+| `SIGNALTRACE_EXPORT_API_TOKEN` | Optional | Token for Splunk/automation export endpoints |
+| `SIGNALTRACE_TRUSTED_PROXY_IP` | Optional | IP of your reverse proxy if running behind one |
+| `AUTH_MAX_FAILURES` | Optional | Failed logins before lockout (default: 5) |
+| `AUTH_LOCKOUT_SECS` | Optional | Lockout duration in seconds (default: 900) |
+| `SELF_REFERER_DOMAIN` | Optional | Your domain — requests from it get a score penalty |
+| `CF_ACCESS_ENABLED` | Optional | Set to `true` to enable Cloudflare Access JWT verification |
+| `CF_ACCESS_AUD` | Optional | Cloudflare Access AUD token (required when CF_ACCESS_ENABLED=true) |
+| `CF_ACCESS_TEAM_DOMAIN` | Optional | Cloudflare team domain (required when CF_ACCESS_ENABLED=true) |
+| `DEMO_MODE` | Optional | Set to `true` to enable the demo banner and lock sensitive settings |
+| `DEMO_ADMIN_USERNAME` | Optional | Display-only username shown in the demo banner |
+| `DEMO_ADMIN_PASSWORD` | Optional | Display-only password shown in the demo banner |
+
+> **Email alerting:** SMTP credentials are not stored in `.env` or the database — they are kept exclusively in `config.local.php` to prevent exposure through the admin UI or a database read. The entrypoint will write them as PHP constants if you set `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_ENCRYPTION`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, and `EMAIL_SMTP_FROM` as environment variables. Alternatively, mount a `config.local.php` with those constants into the container. See the [Email Alerting wiki page](https://github.com/veddegre/signaltrace/wiki/Email-Alerting) for details.
 
 Generate the required secrets:
 
@@ -227,7 +236,7 @@ Or build from source:
 docker compose up -d
 ```
 
------
+---
 
 ### Updating
 
@@ -250,7 +259,7 @@ The SQLite database and GeoIP databases are stored in named Docker volumes and p
 
 **Notes**
 
-The Docker image is based on Ubuntu 24.04. The MaxMind PPA is used to install `geoipupdate`. The Apache config includes the `Authorization` header fix required for Bearer token auth — you don’t need to add anything manually if you’re using Docker.
+The Docker image is based on Ubuntu 24.04. The MaxMind PPA is used to install `geoipupdate`. The Apache config includes the `Authorization` header fix required for Bearer token auth — you don't need to add anything manually if you're using Docker.
 
 On Proxmox LXC containers, the `security_opt: apparmor=unconfined` setting in `docker-compose.yml` is required for the container runtime to function correctly.
 
@@ -264,19 +273,20 @@ chmod +x setup.sh
 sudo ./setup.sh
 ```
 
-Select option 2 (Manual) when prompted. The script will:
-
-- Install Apache, PHP, SQLite, Composer, and geoipupdate
-- Clone the repository to `/var/www/signaltrace`
-- Walk through all configuration options
-- Install PHP dependencies via Composer
-- Configure `/etc/GeoIP.conf` and download the MaxMind databases
-- Initialise the SQLite database, with an option to load sample data
-- Set correct `www-data` ownership on all files
-- Configure and restart Apache
-- Optionally configure HTTPS via Let’s Encrypt
+Select option 3 (Manual) when prompted. The script will:
+* Install Apache, PHP, SQLite, Composer, and geoipupdate
+* Clone the repository to `/var/www/signaltrace`
+* Walk through all configuration options including optional email SMTP setup
+* Install PHP dependencies via Composer
+* Configure `/etc/GeoIP.conf` and download the MaxMind databases
+* Initialise the SQLite database, with an option to load sample data
+* Set hardened file ownership — `root:www-data` with `640` permissions on application files, `660` on the database, `770` on the data directory
+* Configure and restart Apache
+* Optionally configure HTTPS via Let's Encrypt
 
 When the script finishes, SignalTrace is running.
+
+If an existing `config.local.php` is found, the script will prompt before overwriting it — allowing you to preserve your current configuration or selectively update it.
 
 > [!WARNING]
 > The manual install is designed for a fresh Ubuntu server with no existing web services. It will install and configure Apache and disable the default site. Do not run it on a server already hosting other websites.
@@ -285,13 +295,13 @@ If you have already cloned the repository manually, you can run `setup.sh` from 
 
 ## Configuration Tuning
 
-The setup script prompts for all configuration including optional tuning values — auth lockout threshold and duration, self-referrer domain penalty, reverse proxy IP, and export API token. You don’t need to edit any files manually after running it.
+The setup script prompts for all configuration including optional tuning values — auth lockout threshold and duration, self-referrer domain penalty, reverse proxy IP, and export API token. You don't need to edit any files manually after running it.
 
 If you need to change a value after the initial setup, edit `includes/config.local.php` directly (manual install) or update `.env` and restart the container (Docker). The available settings and their defaults are documented in `includes/config.local.php.example`.
 
 ## HTTPS
 
-For manual installs, the setup script offers to configure HTTPS via Let’s Encrypt at the end of the install process. Your domain must be pointed at the server before running certbot.
+For manual installs, the setup script offers to configure HTTPS via Let's Encrypt at the end of the install process. Your domain must be pointed at the server before running certbot.
 
 To add HTTPS after the initial install, or to renew manually:
 
@@ -312,31 +322,38 @@ sudo certbot renew --dry-run
 
 ## Threat Feed
 
-The threat feed requires admin authentication and outputs deduplicated IPs classified at or above your configured confidence threshold. IPv4 and IPv6 are served as separate feeds to avoid confusing tools that expect one address family.
+The threat feed requires admin authentication and outputs deduplicated IPs classified at or above your configured confidence threshold. IPv4 and IPv6 are served as separate feeds to avoid confusing tools that expect one address family. Intel format exports include both IPv4 and IPv6 in a single file.
 
 **IPv4 feeds:**
 
-|Endpoint            |Format                                  |
-|--------------------|----------------------------------------|
-|`/feed/ips.txt`     |One IP per line                         |
-|`/feed/ips.nginx`   |`deny 1.2.3.4;` blocks                  |
-|`/feed/ips.iptables`|iptables-restore compatible filter block|
-|`/feed/ips.cidr`    |CIDR notation with `/32` suffix         |
+| Endpoint | Format |
+|---|---|
+| `/feed/ips.txt` | One IP per line |
+| `/feed/ips.nginx` | `deny 1.2.3.4;` blocks |
+| `/feed/ips.iptables` | iptables-restore compatible filter block |
+| `/feed/ips.cidr` | CIDR notation with `/32` suffix |
 
 **IPv6 feeds:**
 
-|Endpoint             |Format                                   |
-|---------------------|-----------------------------------------|
-|`/feed/ipv6.txt`     |One IP per line (normalized)             |
-|`/feed/ipv6.nginx`   |`deny 2001:db8::1;` blocks               |
-|`/feed/ipv6.iptables`|ip6tables-restore compatible filter block|
-|`/feed/ipv6.cidr`    |CIDR notation with `/128` suffix         |
+| Endpoint | Format |
+|---|---|
+| `/feed/ipv6.txt` | One IP per line (normalized) |
+| `/feed/ipv6.nginx` | `deny 2001:db8::1;` blocks |
+| `/feed/ipv6.iptables` | ip6tables-restore compatible filter block |
+| `/feed/ipv6.cidr` | CIDR notation with `/128` suffix |
+
+**Threat intel formats (bot and suspicious only):**
+
+| Endpoint | Format |
+|---|---|
+| `/feed/misp.json` | Full MISP event with `ip-src` attributes, RFC3339 timestamps, per-IP enrichment |
+| `/feed/stix.json` | STIX 2.1 bundle with `indicator` objects, UUIDv5 stable IDs, STIX pattern syntax |
 
 All feed URLs and a live count of IPs currently in the feed are shown in the Settings tab.
 
-Feed behaviour is configured in Settings: time window, minimum confidence threshold, minimum hit count before an IP appears. Individual tokens and ASN rules can each be flagged to suppress their hits from feed output. Allowed IP overrides are also excluded. Blocked IP overrides always appear regardless of threshold or hit count.
+Feed behaviour is configured in Settings: time window, minimum confidence threshold, minimum hit count before an IP appears. MISP and STIX exports are additionally capped at bot and suspicious regardless of the minimum confidence setting — uncertain and human IPs are excluded from these formats since they feed into platforms that act automatically. Individual tokens and ASN rules can each be flagged to suppress their hits from feed output. Tokens can also be marked "Always include in feed" — any hit on those tokens goes into the plain text feeds regardless of classification, and into the intel formats at suspicious or above. Allowed IP overrides are excluded. Blocked IP overrides always appear regardless of threshold or hit count.
 
-See the [Threat Feed Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Threat-Feed-Integration) for consuming feed endpoints with iptables, Nginx, pfSense, and fail2ban.
+See the [Threat Feed Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Threat-Feed-Integration) for consuming feed endpoints with iptables, Nginx, pfSense, and fail2ban, and the [Threat Intel Export wiki page](https://github.com/veddegre/signaltrace/wiki/Threat-Intel-Export) for MISP and STIX import examples.
 
 ## SIEM and Splunk Integration
 
@@ -356,9 +373,8 @@ SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=$1
 If SignalTrace runs behind a reverse proxy, set `TRUSTED_PROXY_IP` in `config.local.php` so client IPs are recorded correctly. See the [Behind a Reverse Proxy wiki page](https://github.com/veddegre/signaltrace/wiki/Behind-a-Reverse-Proxy) for full details.
 
 Then poll either export endpoint on a schedule:
-
-- `https://yourdomain.example/export/json`
-- `https://yourdomain.example/export/csv`
+* `https://yourdomain.example/export/json`
+* `https://yourdomain.example/export/csv`
 
 Authenticate with a header (recommended, not logged by Apache):
 
@@ -366,7 +382,7 @@ Authenticate with a header (recommended, not logged by Apache):
 Authorization: Bearer your-generated-token
 ```
 
-Or with a query parameter if your tooling doesn’t support custom headers (note this appears in access logs):
+Or with a query parameter if your tooling doesn't support custom headers (note this appears in access logs):
 
 `https://yourdomain.example/export/csv?api_key=your-generated-token`
 
@@ -377,9 +393,8 @@ When polled with no filters, the export applies the configured confidence thresh
 A ready-to-use Splunk integration is included under `splunk/signaltrace/`. Copy the folder into your Splunk `etc/apps/` directory and restart Splunk. Configure the scripted input in `bin/signaltrace_fetch.sh` with your SignalTrace URL and API token.
 
 The app includes two Dashboard Studio dashboards:
-
-- **SignalTrace — Overview:** (`dashboards/signaltrace_overview.json`) Designed for SOC screen display. Always shows the last 24 hours with no inputs. Panels cover stat cards, events over time, confidence distribution, top IPs, traffic by country, top ASN organisations, top tokens, top bot tokens, top detection signals, and behavioral signal hits.
-- **SignalTrace — Event Investigation:** (`dashboards/signaltrace_events.json`) Designed for hands-on investigation. Includes a time range picker, token/path filter, IP filter, classification dropdown, country filter, and detection signal/reason filter. The results table includes confidence reason signals and returns up to 200 results.
+* **SignalTrace — Overview:** (`dashboards/signaltrace_overview.json`) Designed for SOC screen display. Always shows the last 24 hours with no inputs. Panels cover stat cards, events over time, confidence distribution, top IPs, traffic by country, top ASN organisations, top tokens, top bot tokens, top detection signals, and behavioral signal hits.
+* **SignalTrace — Event Investigation:** (`dashboards/signaltrace_events.json`) Designed for hands-on investigation. Includes a time range picker, token/path filter, IP filter, classification dropdown, country filter, and detection signal/reason filter. The results table includes confidence reason signals and returns up to 200 results.
 
 See the [Splunk Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Splunk-Integration) for full setup instructions.
 
@@ -417,22 +432,26 @@ See the [IP Overrides & Country Rules wiki page](https://github.com/veddegre/sig
 
 ## Features at a Glance
 
-- **Tracking:** custom tokens with redirect, full request logging, visitor fingerprinting, tracking pixel, GeoIP enrichment.
-- **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow actions, date range filtering, classification badges with scores, bulk delete by filter, filter state preserved across row actions, dark mode, mobile layout.
-- **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions. Raw signal names preserved in tooltips for cross-referencing with exports and the wiki.
-- **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, per-token webhook opt-in, pixel URL generation.
-- **ASN rules:** scoring penalties, feed exclusion, edit in place.
-- **Country rules:** per-country score penalties by ISO code, affects scoring only.
-- **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
-- **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals in the last 24 hours. Hide/show toggle. Clicking an IP forces show-all and collapses the panel.
-- **Skip patterns:** exact, contains, and prefix matching to suppress known noise. Add directly from the activity feed.
-- **Threat feed:** eight endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, and CIDR formats. Minimum hit count threshold. Feed preview count in Settings.
-- **Redirect rate limiting:** known token redirects are rate limited per IP per token to prevent the honeypot from being used as an HTTP flood origin. Count and window configurable in Settings. Set to 0 to disable.
-- **Cleanup tools:** delete by token, by IP, by current filter, or selectively remove unknown-token hits.
-- **Data retention:** configurable retention window with manual trigger and automatic probabilistic cleanup.
-- **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold (bot, suspicious, uncertain, or all). Deduplicates per IP per 5 minutes. Custom JSON payload templates with `{{placeholder}}` syntax. Auto-detects Slack/Discord format.
-- **Token webhook:** fires when a known tracked token is hit, regardless of classification. Per-token opt-in. Deduplicates per visitor per token per 5 minutes. Separate URL and payload template from the threat webhook.
-- **Cloudflare Access:** optional identity layer using Cloudflare Zero Trust. Verifies the JWT injected by Cloudflare before allowing access to the admin panel. Bypassed in demo mode. Requires `firebase/php-jwt`.
+* **Tracking:** custom tokens with redirect, full request logging, visitor fingerprinting, tracking pixel, GeoIP enrichment.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow actions, date range filtering, classification badges with scores, bulk delete by filter, filter state preserved across row actions, dark mode, mobile layout.
+* **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions. Raw signal names preserved in tooltips for cross-referencing with exports and the wiki.
+* **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, per-token force-include in feed, per-token webhook opt-in, per-token email alert opt-in, pixel URL generation.
+* **ASN rules:** scoring penalties, feed exclusion, edit in place.
+* **Country rules:** per-country score penalties by ISO code, affects scoring only.
+* **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
+* **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals within a configurable window. Configurable max rows and default visibility. Hide/show toggle. Clicking an IP forces show-all and collapses the panel.
+* **Wildcard DNS mode:** when enabled, extracts the subdomain prefix from each request's Host header and shows it as a column in the activity feed and a filter in the filter bar. A subdomain activity summary panel shows hit counts, bot hits, and first/last seen per subdomain.
+* **Skip patterns:** exact, contains, and prefix matching to suppress known noise. Add directly from the activity feed.
+* **Threat feed:** ten endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, CIDR, MISP event, and STIX 2.1 formats. Minimum hit count threshold. Feed preview count in Settings.
+* **MISP export:** full MISP event with `ip-src` attributes, RFC3339 timestamps, per-IP comments with classification and enrichment. Threat level derived from worst classification in the batch. Bot and suspicious only.
+* **STIX 2.1 export:** bundle with `indicator` objects, UUIDv5 stable IDs, `ipv4-addr`/`ipv6-addr` pattern types, confidence values mapped to STIX convention, `valid_from`/`valid_until` in RFC3339 UTC. Bot and suspicious only.
+* **Redirect rate limiting:** known token redirects are rate limited per IP per token to prevent the honeypot from being used as an HTTP flood origin. Count and window configurable in Settings. Set to 0 to disable.
+* **Cleanup tools:** delete by token, by IP, by current filter, or selectively remove unknown-token hits.
+* **Data retention:** configurable retention window with manual trigger and automatic probabilistic cleanup.
+* **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold (bot, suspicious, uncertain, or all). Deduplicates per IP per 5 minutes. Custom JSON payload templates with `{{placeholder}}` syntax. Auto-detects Slack/Discord format.
+* **Token webhook:** fires when a known tracked token is hit, regardless of classification. Per-token opt-in. Deduplicates per visitor per token per 5 minutes. Separate URL and payload template from the threat webhook.
+* **Email alerting:** sends plain text email alerts via SMTP when threats are detected or canary tokens are hit. Per-token opt-in. Configurable threshold and deduplication window. SMTP credentials stored in `config.local.php` only — never in the database or admin UI.
+* **Cloudflare Access:** optional identity layer using Cloudflare Zero Trust. Verifies the JWT injected by Cloudflare before allowing access to the admin panel. Bypassed in demo mode. Requires `firebase/php-jwt`.
 
 ## Project Structure
 
@@ -512,7 +531,9 @@ The `public/` directory is the only thing Apache needs to serve. Everything else
 
 `config.local.php` is never committed and contains all secrets. Passwords are stored as bcrypt hashes. All SQL uses parameterised queries. URL destinations are validated against an http/https allowlist at both write time and redirect time.
 
-Admin login has rate limiting with a configurable lockout threshold and window. CSRF tokens protect all admin POST forms. Security response headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) are sent on every HTML response. The webhook fires only to validated URLs and blocks private and loopback IP ranges to prevent SSRF. The export API token is compared in constant time.
+Admin login has rate limiting with a configurable lockout threshold and window. CSRF tokens protect all admin POST forms. The admin panel sends a per-request nonce-based Content Security Policy header with all inline event handlers replaced by delegated listeners. Security response headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy) are sent on every HTML response. The webhook fires only to validated URLs and blocks private and loopback IP ranges to prevent SSRF. The export API token is compared in constant time.
+
+SMTP credentials for email alerting are stored exclusively in `config.local.php` as PHP constants — never in the database or the admin UI. This prevents credentials from being exposed through the settings page or a database read.
 
 For deployments that require stronger admin authentication, Cloudflare Access can be added as an optional identity layer using Cloudflare Zero Trust. See the [Cloudflare Access wiki page](https://github.com/veddegre/signaltrace/wiki/Cloudflare-Access) for setup instructions.
 
@@ -529,23 +550,26 @@ For deployments that require stronger admin authentication, Cloudflare Access ca
 - [ ] Add country rules for high-noise regions if applicable
 - [ ] Add IP overrides to permanently block known bad actors or allow your own monitoring IPs
 - [ ] Set feed exclusions on tokens and ASNs that should never appear in your blocklist
+- [ ] Mark canary tokens with "Always include in threat feed" so any hit goes in the feed regardless of classification
 - [ ] Tune the threat feed confidence threshold, time window, and minimum hit count — see the [Tuning Guide](https://github.com/veddegre/signaltrace/wiki/Tuning-Guide) for deployment scenario advice
 - [ ] Set `EXPORT_API_TOKEN` and configure your SIEM integration if applicable
 - [ ] Add a weekly `geoipupdate` cron job
 - [ ] Configure a threat webhook URL and threshold for real-time bot alerts
 - [ ] Configure a token webhook URL for phishing simulation and campaign tracking if needed
+- [ ] Configure email alerting — add `EMAIL_SMTP_*` constants to `config.local.php` and enable in Settings
 - [ ] Review redirect rate limit settings and adjust for your expected traffic volume
+- [ ] Enable Wildcard DNS mode if using a wildcard DNS record to catch subdomain probing
 - [ ] Consider enabling Cloudflare Access for per-user identity and MFA on the admin panel
 
 ## Tech Stack
 
-Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A pre-built Docker image is published to `ghcr.io/veddegre/signaltrace` via GitHub Actions on every push to `main`. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`. A pre-built Grafana dashboard using the Infinity datasource is included under `grafana/`. See the [Webhook Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Webhook-Integration) for configuring Slack, Discord, and custom webhook payloads.
+Ubuntu 24.04, PHP 8.1+, SQLite via PDO, Apache with mod_rewrite, MaxMind GeoLite2. Docker and Docker Compose are supported for containerised deployments with a guided `setup.sh` script. A pre-built Docker image is published to `ghcr.io/veddegre/signaltrace` via GitHub Actions on every push to `main`. A Splunk integration with scripted input and two Dashboard Studio dashboards is included under `splunk/`. A pre-built Grafana dashboard using the Infinity datasource is included under `grafana/`. PHPMailer is used for email alerting. See the [Webhook Integration wiki page](https://github.com/veddegre/signaltrace/wiki/Webhook-Integration) and [Email Alerting wiki page](https://github.com/veddegre/signaltrace/wiki/Email-Alerting) for configuring outbound alerts.
 
 ## Contributing
 
 Contributions are welcome. Read `CONTRIBUTING.md` before opening a pull request.
 
-Found a bug? Use the bug report issue template. Have a feature idea? Open an issue to discuss it before building. Found a security vulnerability? See `SECURITY.md` for responsible disclosure — please don’t open a public issue.
+Found a bug? Use the bug report issue template. Have a feature idea? Open an issue to discuss it before building. Found a security vulnerability? See `SECURITY.md` for responsible disclosure — please don't open a public issue.
 
 If SignalTrace is useful to you, starring the repository on GitHub helps others find it.
 
@@ -563,6 +587,6 @@ MIT
 
 ## Changelog
 
-See <CHANGELOG.md> for version history.
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 > *Most tools try to hide the noise. SignalTrace makes it visible.*
