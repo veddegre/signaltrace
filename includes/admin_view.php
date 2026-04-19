@@ -1672,6 +1672,7 @@ function renderAdminPage(
 		       <option value="discord">Discord</option>
 		       <option value="teams">Microsoft Teams</option>
 		       <option value="pagerduty">PagerDuty</option>
+		       <option value="custom">Custom (generic JSON)</option>
 		   </select>
 		   <p class="muted">Selecting a preset overwrites the template below. Save settings to apply.</p>
 		   <?php endif; ?>
@@ -1717,6 +1718,7 @@ function renderAdminPage(
 		       <option value="discord">Discord</option>
 		       <option value="teams">Microsoft Teams</option>
 		       <option value="pagerduty">PagerDuty</option>
+		       <option value="custom">Custom (generic JSON)</option>
 		   </select>
 		   <p class="muted">Selecting a preset overwrites the template below. Save settings to apply.</p>
 		   <?php endif; ?>
@@ -2279,9 +2281,15 @@ function renderAdminPage(
                         .then(function (data) {
                             if (data.template !== undefined) {
                                 textarea.value = data.template;
+                                // Flash the textarea border to confirm it updated
+                                textarea.style.transition = 'border-color 0.2s';
+                                textarea.style.borderColor = 'var(--human)';
+                                setTimeout(function () {
+                                    textarea.style.borderColor = '';
+                                }, 1200);
+                                // Scroll the textarea into view
+                                textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                             }
-                            // Reset dropdown so it can be selected again
-                            select.value = '';
                         })
                         .catch(function () {
                             select.value = '';
