@@ -1698,45 +1698,37 @@ function renderAdminPage(
 		       <input id="email_to" type="email" name="email_to" value="<?= h((string) getSetting($pdo, 'email_to', '')) ?>" placeholder="alerts@yourdomain.example">
 		   <?php endif; ?>
 
-		   <label for="email_from">From Address</label>
+		   <label for="email_to">Recipient Address</label>
 		   <?php if ($isDemo): ?>
-		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_from', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
+		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_to', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
 		   <?php else: ?>
-		       <input id="email_from" type="email" name="email_from" value="<?= h((string) getSetting($pdo, 'email_from', '')) ?>" placeholder="signaltrace@yourdomain.example">
+		       <input id="email_to" type="email" name="email_to" value="<?= h((string) getSetting($pdo, 'email_to', '')) ?>" placeholder="alerts@yourdomain.example">
 		   <?php endif; ?>
 
-		   <label for="email_smtp_host">SMTP Host</label>
-		   <?php if ($isDemo): ?>
-		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_smtp_host', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
+		   <?php
+		   $smtpConfigured = defined('EMAIL_SMTP_HOST') && EMAIL_SMTP_HOST !== ''
+		                  && defined('EMAIL_SMTP_USER') && EMAIL_SMTP_USER !== ''
+		                  && defined('EMAIL_SMTP_PASS') && EMAIL_SMTP_PASS !== '';
+		   ?>
+		   <label>SMTP Configuration</label>
+		   <?php if ($smtpConfigured): ?>
+		   <div style="padding: 0.75rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.75rem;">
+		       <p class="muted" style="margin-bottom: 0.5rem;">SMTP credentials are configured in <code>config.local.php</code>.</p>
+		       <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+		           <span class="badge badge-human">Host: <?= h((string) EMAIL_SMTP_HOST) ?></span>
+		           <span class="badge badge-human">Port: <?= defined('EMAIL_SMTP_PORT') ? (int) EMAIL_SMTP_PORT : 587 ?></span>
+		           <span class="badge badge-human">Encryption: <?= defined('EMAIL_SMTP_ENCRYPTION') ? h((string) EMAIL_SMTP_ENCRYPTION) : 'tls' ?></span>
+		           <span class="badge badge-human">User: <?= h((string) EMAIL_SMTP_USER) ?></span>
+		           <span class="badge badge-human">From: <?= defined('EMAIL_SMTP_FROM') && EMAIL_SMTP_FROM !== '' ? h((string) EMAIL_SMTP_FROM) : '(same as user)' ?></span>
+		           <span class="badge badge-human">Password: ••••••••</span>
+		       </div>
+		   </div>
 		   <?php else: ?>
-		       <input id="email_smtp_host" type="text" name="email_smtp_host" value="<?= h((string) getSetting($pdo, 'email_smtp_host', '')) ?>" placeholder="smtp.yourdomain.example">
+		   <div style="padding: 0.75rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.75rem;">
+		       <span class="badge badge-suspicious">Not configured</span>
+		       <p class="muted" style="margin-top: 0.5rem; margin-bottom: 0;">SMTP credentials must be set in <code>config.local.php</code> — they are not stored in the database. Define <code>EMAIL_SMTP_HOST</code>, <code>EMAIL_SMTP_PORT</code>, <code>EMAIL_SMTP_ENCRYPTION</code>, <code>EMAIL_SMTP_USER</code>, <code>EMAIL_SMTP_PASS</code>, and <code>EMAIL_SMTP_FROM</code> as constants. See <code>config.local.php.example</code> for the format. Email alerting will not send until these are configured.</p>
+		   </div>
 		   <?php endif; ?>
-
-		   <label for="email_smtp_port">SMTP Port</label>
-		   <input id="email_smtp_port" type="number" min="1" max="65535" name="email_smtp_port" value="<?= h((string) getSetting($pdo, 'email_smtp_port', '587')) ?>" <?= $isDemo ? 'disabled' : '' ?>>
-
-		   <label for="email_smtp_encryption">Encryption</label>
-		   <?php $emailEncryption = (string) getSetting($pdo, 'email_smtp_encryption', 'tls'); ?>
-		   <select id="email_smtp_encryption" name="email_smtp_encryption" <?= $isDemo ? 'disabled' : '' ?>>
-		       <option value="tls"  <?= $emailEncryption === 'tls'  ? 'selected' : '' ?>>TLS (STARTTLS, port 587)</option>
-		       <option value="ssl"  <?= $emailEncryption === 'ssl'  ? 'selected' : '' ?>>SSL (port 465)</option>
-		       <option value="none" <?= $emailEncryption === 'none' ? 'selected' : '' ?>>None (port 25, not recommended)</option>
-		   </select>
-
-		   <label for="email_smtp_user">SMTP Username</label>
-		   <?php if ($isDemo): ?>
-		       <div class="demo-locked-field">(not configurable in demo mode)</div>
-		   <?php else: ?>
-		       <input id="email_smtp_user" type="text" name="email_smtp_user" value="<?= h((string) getSetting($pdo, 'email_smtp_user', '')) ?>" placeholder="username or email address" autocomplete="off">
-		   <?php endif; ?>
-
-		   <label for="email_smtp_pass">SMTP Password</label>
-		   <?php if ($isDemo): ?>
-		       <div class="demo-locked-field">(not configurable in demo mode)</div>
-		   <?php else: ?>
-		       <input id="email_smtp_pass" type="password" name="email_smtp_pass" value="<?= h((string) getSetting($pdo, 'email_smtp_pass', '')) ?>" placeholder="leave blank to keep existing" autocomplete="new-password">
-		   <?php endif; ?>
-		   <p class="muted">Leave the password field blank to keep the existing value. It will only be updated when a new value is entered.</p>
 
 		   <label for="email_threshold">Alert Threshold</label>
 		   <?php $emailThreshold = (string) getSetting($pdo, 'email_threshold', 'bot'); ?>
