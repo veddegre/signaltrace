@@ -1300,9 +1300,8 @@ function buildStixExport(PDO $pdo): array
         $validFrom  = $firstRaw !== ''
             ? gmdate('Y-m-d\TH:i:s\Z', strtotime($firstRaw))
             : $now;
-        $validUntil = $lastRaw !== ''
-            ? gmdate('Y-m-d\TH:i:s\Z', strtotime('+' . $windowHours . ' hours', strtotime($lastRaw)))
-            : gmdate('Y-m-d\TH:i:s\Z', strtotime('+' . $windowHours . ' hours'));
+        // valid_until = now + window, so the indicator stays fresh for one feed cycle
+        $validUntil = gmdate('Y-m-d\TH:i:s\Z', time() + ($windowHours * 3600));
 
         $addrType = $isV6 ? 'ipv6-addr' : 'ipv4-addr';
         $pattern  = "[{$addrType}:value = '{$ipNorm}']";
