@@ -455,6 +455,14 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'export_window_hours',     (string) $exportWindowHoursInput);
     setSetting($pdo, 'export_min_score',        (string) $exportMinScoreInput);
 
+    // AbuseIPDB — only update the key if a new one was submitted
+    $abuseKeyInput   = trim((string) ($_POST['abuseipdb_api_key']   ?? ''));
+    $abuseLimitInput = max(0, min(9999, (int) ($_POST['abuseipdb_daily_limit'] ?? 500)));
+    if ($abuseKeyInput !== '') {
+        setSetting($pdo, 'abuseipdb_api_key', $abuseKeyInput);
+    }
+    setSetting($pdo, 'abuseipdb_daily_limit', (string) $abuseLimitInput);
+
     header('Location: /admin', true, 302);
     exit;
 }
