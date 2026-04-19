@@ -1129,13 +1129,13 @@ function fireEmailAlert(PDO $pdo, array $requestData, string $type = 'threat'): 
         return;
     }
 
-    $emailTo         = trim((string) getSetting($pdo, 'email_to',              ''));
-    $emailFrom       = trim((string) getSetting($pdo, 'email_from',            ''));
-    $smtpHost        = trim((string) getSetting($pdo, 'email_smtp_host',       ''));
-    $smtpPort        = max(1, (int)   getSetting($pdo, 'email_smtp_port',       '587'));
-    $smtpUser        = trim((string) getSetting($pdo, 'email_smtp_user',       ''));
-    $smtpPass        = trim((string) getSetting($pdo, 'email_smtp_pass',       ''));
-    $smtpEncryption  = trim((string) getSetting($pdo, 'email_smtp_encryption', 'tls'));
+    $emailTo        = trim((string) getSetting($pdo, 'email_to', ''));
+    $emailFrom      = defined('EMAIL_SMTP_FROM')       ? (string) EMAIL_SMTP_FROM       : '';
+    $smtpHost       = defined('EMAIL_SMTP_HOST')       ? (string) EMAIL_SMTP_HOST       : '';
+    $smtpPort       = defined('EMAIL_SMTP_PORT')       ? (int)    EMAIL_SMTP_PORT       : 587;
+    $smtpUser       = defined('EMAIL_SMTP_USER')       ? (string) EMAIL_SMTP_USER       : '';
+    $smtpPass       = defined('EMAIL_SMTP_PASS')       ? (string) EMAIL_SMTP_PASS       : '';
+    $smtpEncryption = defined('EMAIL_SMTP_ENCRYPTION') ? (string) EMAIL_SMTP_ENCRYPTION : 'tls';
 
     if ($emailTo === '' || $smtpHost === '') {
         return;
