@@ -665,7 +665,7 @@ function handleEnrichmentRescan(PDO $pdo): void
         exit;
     }
 
-    fetchAndCacheAbuseIpDb($pdo, $ip);
+    fetchAndCacheAbuseIpDb($pdo, $ip, true);
     $result = getEnrichment($pdo, $ip);
 
     echo json_encode(decodeEnrichmentRow($result) + ['cached' => false]);
