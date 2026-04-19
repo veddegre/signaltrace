@@ -50,6 +50,38 @@ function signalLabel(string $signal): ?string
 }
 
 /**
+ * Extracts the subdomain prefix from a host value given the configured base URL.
+ * e.g. host='vpn.gvsu.site', baseUrl='https://gvsu.site' → 'vpn'
+ * Returns empty string if host matches the base domain or cannot be parsed.
+ */
+function extractSubdomain(string $host, string $baseUrl): string
+{
+    if ($host === '' || $baseUrl === '') {
+        return '';
+    }
+
+    // Strip scheme and trailing slash from base URL to get bare domain.
+    $baseDomain = strtolower(preg_replace('#^https?://#', '', rtrim($baseUrl, '/')));
+
+    // Strip port from host if present.
+    $host = strtolower(preg_replace('/:\d+$/', '', $host));
+
+    // If host matches base domain exactly, no subdomain.
+    if ($host === $baseDomain) {
+        return '';
+    }
+
+    // If host ends with .baseDomain, the prefix is the subdomain.
+    $suffix = '.' . $baseDomain;
+    if (str_ends_with($host, $suffix)) {
+        return substr($host, 0, strlen($host) - strlen($suffix));
+    }
+
+    // Host doesn't relate to base domain — show full host.
+    return $host;
+}
+
+/**
  * Renders a confidence_reason string as compact signal tags.
  * Friendly label is shown; raw signal name appears as a tooltip on hover.
  */
@@ -107,6 +139,7 @@ function renderAdminPage(
     array $asnRules,
     string $refreshUrl,
     ?array $ipSummary = null,
+    string $hostFilter = '',
 ): void {
     $pdo       = db();
     $csrfToken = generateCsrfToken();
@@ -121,11 +154,13 @@ function renderAdminPage(
     $exportMinConf    = (string) getSetting($pdo, 'export_min_confidence', 'suspicious');
     $exportWinHours   = (string) getSetting($pdo, 'export_window_hours', '168');
     $exportMinScore   = (string) getSetting($pdo, 'export_min_score', '0');
+    $wildcardMode     = getSetting($pdo, 'wildcard_mode', '0') === '1';
 
     $dateFrom       = trim((string) ($_GET['date_from'] ?? ''));
     $dateTo         = trim((string) ($_GET['date_to']   ?? ''));
     $showAll        = isset($_GET['show_all'])        && $_GET['show_all']        === '1';
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
+    $hostFilter     = trim((string) ($_GET['host']    ?? ''));
 
     $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
@@ -155,8 +190,9 @@ function renderAdminPage(
         $tokenFilter !== ''
         || $ipFilter !== ''
         || $visitorFilter !== ''
-    || $knownOnly
-    || $showAll
+        || $hostFilter !== ''
+        || $knownOnly
+        || $showAll
         || $dateFrom !== ''
         || $dateTo !== ''
     );
@@ -195,7 +231,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $activeTab): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -221,6 +257,9 @@ function renderAdminPage(
         }
         if ($hideBehavioral) {
             $params['hide_behavioral'] = '1';
+        }
+        if ($hostFilter !== '') {
+            $params['host'] = $hostFilter;
         }
 
         if ($activeTab !== '') {
@@ -314,6 +353,9 @@ function renderAdminPage(
 	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Filter by token or path">
 	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="Filter by IP">
 	                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Filter by visitor hash">
+	                <?php if ($wildcardMode): ?>
+	                <input type="text" name="host" value="<?= h($hostFilter) ?>" placeholder="Filter by subdomain or host" class="hide-mobile">
+	                <?php endif; ?>
 	                <label class="date-filter-label">
 	                    <span class="date-filter-hint">📅 From</span>
 	                    <input type="date" name="date_from" value="<?= h($dateFrom) ?>">
@@ -347,6 +389,7 @@ function renderAdminPage(
                     if ($tokenFilter   !== '') $exportParams['token']    = $tokenFilter;
                     if ($ipFilter      !== '') $exportParams['ip']       = $ipFilter;
                     if ($visitorFilter !== '') $exportParams['visitor']  = $visitorFilter;
+                    if ($hostFilter    !== '') $exportParams['host']     = $hostFilter;
                     if ($knownOnly)            $exportParams['known']    = '1';
                     if ($dateFrom      !== '') $exportParams['date_from'] = $dateFrom;
                     if ($dateTo        !== '') $exportParams['date_to']   = $dateTo;
@@ -378,6 +421,13 @@ function renderAdminPage(
                         <span class="filter-pill">
                             visitor: <?= h($visitorFilter) ?>
                             <a href="<?= h($buildAdminUrl(['visitor' => null])) ?>">×</a>
+                        </span>
+                    <?php endif; ?>
+
+                    <?php if ($hostFilter !== ''): ?>
+                        <span class="filter-pill">
+                            host: <?= h($hostFilter) ?>
+                            <a href="<?= h($buildAdminUrl(['host' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
@@ -648,6 +698,7 @@ function renderAdminPage(
                         <th class="time-col">Time</th>
                         <th class="type-col">Type</th>
                         <th class="token-col">Token / Path</th>
+                        <?php if ($wildcardMode): ?><th class="hide-mobile">Subdomain</th><?php endif; ?>
                         <th class="ip-col">IP</th>
                         <th>Org</th>
                         <th class="classification-col">Classification</th>
@@ -669,6 +720,8 @@ function renderAdminPage(
                         $rowIp        = (string) ($c['ip'] ?? '');
                         $rowVisitor   = (string) ($c['visitor_hash'] ?? '');
                         $rowUa        = (string) ($c['user_agent'] ?? '');
+                        $rowHost      = (string) ($c['host'] ?? '');
+                        $subdomain    = $wildcardMode ? extractSubdomain($rowHost, $baseUrl) : '';
 
                         // Display timestamp from unix_ms if available, fall back to clicked_at string.
                         $tsMs      = $c['clicked_at_unix_ms'] ?? null;
@@ -684,6 +737,15 @@ function renderAdminPage(
                                     <?= h($rowToken) ?>
                                 </a>
                             </td>
+                            <?php if ($wildcardMode): ?>
+                            <td class="mono hide-mobile">
+                                <?php if ($subdomain !== ''): ?>
+                                    <a class="table-link mono-link" href="<?= h($buildAdminUrl(['host' => $rowHost])) ?>"><?= h($subdomain) ?></a>
+                                <?php else: ?>
+                                    <span class="muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <?php endif; ?>
                             <td class="mono ip-col">
                                 <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $rowIp])) ?>">
                                     <?= h($rowIp) ?>
@@ -702,7 +764,7 @@ function renderAdminPage(
                             </td>
                         </tr>
                         <tr id="<?= h($detailsId) ?>" class="details-row">
-                            <td colspan="7" class="details-cell">
+                            <td colspan="<?= $wildcardMode ? 8 : 7 ?>" class="details-cell">
                                 <div class="details-grid">
                                     <div class="detail-box">
                                         <strong>Identity</strong>
@@ -1418,11 +1480,16 @@ function renderAdminPage(
 			        <input type="checkbox" name="pixel_enabled" value="1" <?= $pixelEnabled ? 'checked' : '' ?>>
 			        <span>Pixel enabled</span>
 			 </label>
-                         <label style="display: inline-flex; align-items: center; gap: 6px;">
+                         <label style="display: inline-flex; align-items: center; gap: 6px; margin-right: 16px;">
 			        <input type="checkbox" name="noise_filter_enabled" value="1" <?= $noiseFilterEnabled ? 'checked' : '' ?>>
 			        <span>Noise filter enabled</span>
 		         </label>
+                         <label style="display: inline-flex; align-items: center; gap: 6px;">
+			        <input type="checkbox" name="wildcard_mode" value="1" <?= $wildcardMode ? 'checked' : '' ?>>
+			        <span>Wildcard DNS mode</span>
+		         </label>
 		   </div>
+                   <p class="muted">Wildcard DNS mode shows a Subdomain column in the activity table and enables host/subdomain filtering. Enable this when using a wildcard DNS record to capture traffic across multiple subdomains.</p>
 
 		   <label for="display_min_score">Minimum Display Score</label>
 		   <input id="display_min_score" type="number"  min="0" max="100" name="display_min_score" value="<?= h((string) getSetting($pdo, 'display_min_score', '20')) ?>">
