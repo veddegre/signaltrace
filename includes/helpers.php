@@ -1004,3 +1004,182 @@ function fireTokenWebhookAlert(PDO $pdo, array $requestData): void
     curl_exec($ch);
     curl_close($ch);
 }
+
+/* ======================================================
+   EMAIL ALERTING
+   Fires when a hit meets the configured email threshold,
+   or when a known token with include_in_email=1 is hit.
+   Deduplicates per IP with a configurable window (default 60 min).
+   Uses PHPMailer for reliable SMTP delivery.
+   ====================================================== */
+
+/**
+ * Checks threshold and dedup, then fires an email alert for
+ * unknown-path hits that meet the configured classification threshold.
+ */
+function maybeFireEmailAlert(PDO $pdo, array $requestData): void
+{
+    if (getSetting($pdo, 'email_enabled', '0') !== '1') {
+        return;
+    }
+
+    $emailTo = trim((string) getSetting($pdo, 'email_to', ''));
+    if ($emailTo === '') {
+        return;
+    }
+
+    // Only fires for unknown-path hits (no link_id).
+    // Known token hits are handled by maybeFireTokenEmailAlert().
+    $linkId = $requestData['link_id'] ?? null;
+    if ($linkId !== null && $linkId !== '') {
+        return;
+    }
+
+    $threshold = strtolower((string) getSetting($pdo, 'email_threshold', 'bot'));
+    $label     = strtolower((string) ($requestData['confidence_label'] ?? ''));
+
+    $meetsThreshold = match ($threshold) {
+        'bot'       => $label === 'bot',
+        'suspicious'=> in_array($label, ['bot', 'suspicious'], true),
+        'uncertain' => in_array($label, ['bot', 'suspicious', 'uncertain'], true),
+        'all'       => true,
+        default     => $label === 'bot',
+    };
+
+    if (!$meetsThreshold) {
+        return;
+    }
+
+    $ip           = (string) ($requestData['ip'] ?? '');
+    $dedupMinutes = max(1, (int) getSetting($pdo, 'email_dedup_minutes', '60'));
+
+    if (isEmailDedupBlocked($pdo, 'threat_' . $ip, $dedupMinutes)) {
+        return;
+    }
+
+    fireEmailAlert($pdo, $requestData, 'threat');
+    recordEmailDedup($pdo, 'threat_' . $ip);
+}
+
+/**
+ * Fires an email alert when a known token with include_in_email=1 is hit.
+ * Fires on any hit regardless of classification. Deduplicates per token+IP.
+ */
+function maybeFireTokenEmailAlert(PDO $pdo, array $requestData): void
+{
+    if (getSetting($pdo, 'email_enabled', '0') !== '1') {
+        return;
+    }
+
+    $emailTo = trim((string) getSetting($pdo, 'email_to', ''));
+    if ($emailTo === '') {
+        return;
+    }
+
+    $token  = (string) ($requestData['request_uri'] ?? '');
+    $linkId = $requestData['link_id'] ?? null;
+    if ($linkId === null || $linkId === '') {
+        return;
+    }
+
+    // Check if this token has email opted in.
+    $stmt = $pdo->prepare("SELECT include_in_email FROM links WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => (int) $linkId]);
+    $row = $stmt->fetch();
+    if (!$row || (int) ($row['include_in_email'] ?? 0) !== 1) {
+        return;
+    }
+
+    $ip           = (string) ($requestData['ip'] ?? '');
+    $dedupMinutes = max(1, (int) getSetting($pdo, 'email_dedup_minutes', '60'));
+    $dedupKey     = 'token_email_' . md5($token . '_' . $ip);
+
+    if (isEmailDedupBlocked($pdo, $dedupKey, $dedupMinutes)) {
+        return;
+    }
+
+    fireEmailAlert($pdo, $requestData, 'token');
+    recordEmailDedup($pdo, $dedupKey);
+}
+
+/**
+ * Builds and sends the plain text email via PHPMailer/SMTP.
+ * $type is 'threat' or 'token' — affects the subject line.
+ */
+function fireEmailAlert(PDO $pdo, array $requestData, string $type = 'threat'): void
+{
+    if (!class_exists('\PHPMailer\PHPMailer\PHPMailer')) {
+        error_log('SignalTrace: PHPMailer not found — run composer update.');
+        return;
+    }
+
+    $emailTo         = trim((string) getSetting($pdo, 'email_to',              ''));
+    $emailFrom       = trim((string) getSetting($pdo, 'email_from',            ''));
+    $smtpHost        = trim((string) getSetting($pdo, 'email_smtp_host',       ''));
+    $smtpPort        = max(1, (int)   getSetting($pdo, 'email_smtp_port',       '587'));
+    $smtpUser        = trim((string) getSetting($pdo, 'email_smtp_user',       ''));
+    $smtpPass        = trim((string) getSetting($pdo, 'email_smtp_pass',       ''));
+    $smtpEncryption  = trim((string) getSetting($pdo, 'email_smtp_encryption', 'tls'));
+
+    if ($emailTo === '' || $smtpHost === '') {
+        return;
+    }
+
+    $ip      = (string) ($requestData['ip']               ?? '');
+    $token   = (string) ($requestData['request_uri']      ?? '');
+    $label   = (string) ($requestData['confidence_label'] ?? '');
+    $score   = (int)    ($requestData['confidence_score'] ?? 0);
+    $org     = (string) ($requestData['ip_org']           ?? '');
+    $asn     = (string) ($requestData['ip_asn']           ?? '');
+    $country = (string) ($requestData['ip_country']       ?? '');
+    $ua      = mb_substr(preg_replace('/[\x00-\x1f\x7f]/', '', (string) ($requestData['user_agent'] ?? '')), 0, 300);
+    $reasons = (string) ($requestData['confidence_reason'] ?? '');
+    $host    = (string) ($requestData['host']              ?? '');
+    $method  = (string) ($requestData['request_method']    ?? '');
+    $time    = date('Y-m-d H:i:s T');
+    $appName = (string) getSetting($pdo, 'app_name', 'SignalTrace');
+
+    $subject = $type === 'token'
+        ? "[{$appName}] Token hit: {$token} from {$ip}"
+        : "[{$appName}] {$label} detected: {$ip}";
+
+    $body = implode("\n", [
+        $type === 'token' ? "Token hit detected by {$appName}." : "Threat alert from {$appName}.",
+        '',
+        "Time:          {$time}",
+        "IP:            {$ip}",
+        "Host:          {$host}",
+        "Method:        {$method}",
+        "Token / Path:  {$token}",
+        "Classification:{$label} (score: {$score})",
+        "Org:           {$org}",
+        "ASN:           AS{$asn}",
+        "Country:       {$country}",
+        "Signals:       {$reasons}",
+        "User-Agent:    {$ua}",
+    ]);
+
+    try {
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host       = $smtpHost;
+        $mail->Port       = $smtpPort;
+        $mail->SMTPAuth   = $smtpUser !== '';
+        $mail->Username   = $smtpUser;
+        $mail->Password   = $smtpPass;
+        $mail->SMTPSecure = match ($smtpEncryption) {
+            'ssl'  => \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS,
+            'none' => '',
+            default => \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS,
+        };
+        $mail->setFrom($emailFrom !== '' ? $emailFrom : $emailTo, $appName);
+        $mail->addAddress($emailTo);
+        $mail->Subject = $subject;
+        $mail->Body    = $body;
+        $mail->isHTML(false);
+        $mail->Timeout = 5;
+        $mail->send();
+    } catch (\Throwable $e) {
+        error_log('SignalTrace: email alert failed — ' . $e->getMessage());
+    }
+}
