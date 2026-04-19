@@ -1538,7 +1538,7 @@ function fetchAndCacheEnrichment(PDO $pdo, string $ip): ?array
  *                     abuse_country, abuse_isp, abuse_usage_type, abuse_domain
  *                     null if API key not set, limit reached, private IP, or fetch fails.
  */
-function fetchAndCacheAbuseIpDb(PDO $pdo, string $ip): ?array
+function fetchAndCacheAbuseIpDb(PDO $pdo, string $ip, bool $force = false): ?array
 {
     if (isPrivateIp($ip)) {
         return null;
@@ -1565,7 +1565,7 @@ function fetchAndCacheAbuseIpDb(PDO $pdo, string $ip): ?array
         setSetting($pdo, 'abuseipdb_reset_date', $today);
     }
 
-    if ($usedToday >= $dailyLimit) {
+    if ($usedToday >= $dailyLimit && !$force) {
         return null;
     }
 
