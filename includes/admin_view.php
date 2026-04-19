@@ -161,6 +161,7 @@ function renderAdminPage(
     $showAll        = isset($_GET['show_all'])        && $_GET['show_all']        === '1';
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
     $hostFilter     = trim((string) ($_GET['host']    ?? ''));
+    $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
 
     $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
@@ -204,10 +205,18 @@ function renderAdminPage(
     $threatFeedMinHits = (string) (getSetting($pdo, 'threat_feed_min_hits', '1') ?? '1');
     $dataRetentionDays = (string) (getSetting($pdo, 'data_retention_days', '0') ?? '0');
 
+    $behavioralWindowHours = max(1, (int) getSetting($pdo, 'behavioral_window_hours', '24'));
+    $behavioralMaxRows     = max(1, (int) getSetting($pdo, 'behavioral_max_rows', '25'));
+    $behavioralHidden      = getSetting($pdo, 'behavioral_hidden', '0') === '1';
+
     $ipOverrides       = getIpOverrides($pdo);
-    $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, 24);
+    $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, $behavioralWindowHours, $behavioralMaxRows);
     $ipOverrideMap     = getActiveIpOverrideMap($pdo);
     $countryRules      = getCountryRules($pdo);
+
+    $subdomainSummary  = $wildcardMode
+        ? getSubdomainSummary($pdo, $baseUrl, $dateFrom !== '' ? $dateFrom : null, $dateTo !== '' ? $dateTo : null)
+        : [];
 
     $editOverrideId = (int) ($_GET['edit_override_id'] ?? 0);
     $editOverride   = null;
@@ -231,7 +240,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $activeTab): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -257,6 +266,9 @@ function renderAdminPage(
         }
         if ($hideBehavioral) {
             $params['hide_behavioral'] = '1';
+        }
+        if ($hideSubdomains) {
+            $params['hide_subdomains'] = '1';
         }
         if ($hostFilter !== '') {
             $params['host'] = $hostFilter;
@@ -563,13 +575,26 @@ function renderAdminPage(
             <?php endif; ?>
 
             <?php if (!empty($behavioralFlags) && $ipFilter === ''): ?>
+            <?php
+            // Hidden state: URL param overrides the settings default.
+            // ?hide_behavioral=1 forces hidden; ?hide_behavioral=0 forces shown.
+            // If neither is set, fall back to the settings default.
+            if (isset($_GET['hide_behavioral'])) {
+                $showBehavioralPanel = $_GET['hide_behavioral'] !== '1';
+            } else {
+                $showBehavioralPanel = !$behavioralHidden;
+            }
+            $windowLabel = $behavioralWindowHours >= 24
+                ? ($behavioralWindowHours / 24 === 1 ? 'last 24h' : 'last ' . (int)($behavioralWindowHours / 24) . 'd')
+                : 'last ' . $behavioralWindowHours . 'h';
+            ?>
             <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
-                <h2 style="margin:0;">Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(last 24h)</span></h2>
-                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_behavioral' => $hideBehavioral ? null : '1'])) ?>">
-                    <?= $hideBehavioral ? 'Show' : 'Hide' ?>
+                <h2 style="margin:0;">Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(<?= h($windowLabel) ?>)</span></h2>
+                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_behavioral' => $showBehavioralPanel ? '1' : '0'])) ?>">
+                    <?= $showBehavioralPanel ? 'Hide' : 'Show' ?>
                 </a>
             </div>
-            <?php if (!$hideBehavioral): ?>
+            <?php if ($showBehavioralPanel): ?>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -633,6 +658,48 @@ function renderAdminPage(
             <?php endif; ?>
             <?php endif; ?>
             <div style="margin-bottom: 1.25rem;"></div>
+
+            <?php if ($wildcardMode && !empty($subdomainSummary) && $ipFilter === ''): ?>
+            <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
+                <h2 style="margin:0;">Subdomain Activity <?php if ($dateFrom !== '' || $dateTo !== ''): ?><span class="muted" style="font-size:0.8rem;font-weight:400;">(filtered range)</span><?php else: ?><span class="muted" style="font-size:0.8rem;font-weight:400;">(all time)</span><?php endif; ?></h2>
+                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_subdomains' => $hideSubdomains ? null : '1'])) ?>">
+                    <?= $hideSubdomains ? 'Show' : 'Hide' ?>
+                </a>
+            </div>
+            <?php if (!$hideSubdomains): ?>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <tr>
+                        <th>Subdomain</th>
+                        <th>Hits</th>
+                        <th>Bot Hits</th>
+                        <th class="hide-mobile">First Seen</th>
+                        <th class="hide-mobile">Last Seen</th>
+                    </tr>
+                    <?php foreach ($subdomainSummary as $sub): ?>
+                        <tr>
+                            <td class="mono">
+                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['host' => $sub['host']])) ?>">
+                                    <?= h($sub['subdomain']) ?>
+                                </a>
+                            </td>
+                            <td><?= (int) $sub['total_hits'] ?></td>
+                            <td>
+                                <?php if ($sub['bot_hits'] > 0): ?>
+                                    <span class="badge badge-bot"><?= (int) $sub['bot_hits'] ?></span>
+                                <?php else: ?>
+                                    —
+                                <?php endif; ?>
+                            </td>
+                            <td class="hide-mobile"><?= h((string) $sub['first_seen']) ?></td>
+                            <td class="hide-mobile"><?= h((string) $sub['last_seen']) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+            <div style="margin-bottom: 1.25rem;"></div>
+            <?php endif; ?>
 
             <?php if ($ipSummary !== null && (int) ($ipSummary['total_hits'] ?? 0) > 0): ?>
             <div class="ip-summary">
@@ -1504,6 +1571,22 @@ function renderAdminPage(
 		   <label for="auto_refresh_secs">Auto-Refresh Interval (seconds)</label>
 		   <input id="auto_refresh_secs" type="number" min="0" name="auto_refresh_secs" value="<?= h((string) $autoRefreshSecs) ?>">
 		   <p class="muted">Reload the dashboard after this many seconds. Set to 0 to disable.</p>
+
+		   <label for="behavioral_window_hours">Behavioral Flags Window (hours)</label>
+		   <input id="behavioral_window_hours" type="number" min="1" max="168" name="behavioral_window_hours" value="<?= h((string) $behavioralWindowHours) ?>">
+		   <p class="muted">How far back to look for burst, rapid-repeat, and multi-token signals. Default 24h.</p>
+
+		   <label for="behavioral_max_rows">Behavioral Flags Max Rows</label>
+		   <input id="behavioral_max_rows" type="number" min="1" max="200" name="behavioral_max_rows" value="<?= h((string) $behavioralMaxRows) ?>">
+		   <p class="muted">Maximum number of IPs shown in the Behaviorally Flagged IPs panel. Default 25.</p>
+
+		   <div style="margin-bottom: 12px; margin-top: 4px;">
+		       <label style="display: inline-flex; align-items: center; gap: 6px;">
+		           <input type="checkbox" name="behavioral_hidden" value="1" <?= $behavioralHidden ? 'checked' : '' ?>>
+		           <span>Hide Behavioral Flags panel by default</span>
+		       </label>
+		       <p class="muted" style="margin-top: 4px;">When enabled, the panel starts collapsed on page load. You can still expand it manually.</p>
+		   </div>
 
 		   <label for="webhook_url">Threat Webhook URL</label>
 		   <?php if ($isDemo): ?>
