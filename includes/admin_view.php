@@ -1656,9 +1656,25 @@ function renderAdminPage(
 		   <?php if ($isDemo): ?>
 		       <div class="demo-locked-field"><?= h($webhookUrl) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
 		   <?php else: ?>
-		       <input id="webhook_url" type="url" name="webhook_url" value="<?= h($webhookUrl) ?>" placeholder="https://hooks.slack.com/...">
+		       <div style="display:flex;gap:0.5rem;align-items:center;">
+		           <input id="webhook_url" type="url" name="webhook_url" value="<?= h($webhookUrl) ?>" placeholder="https://hooks.slack.com/..." style="flex:1;">
+		           <button type="button" class="btn-small" id="test-threat-webhook" <?= $webhookUrl === '' ? 'disabled' : '' ?>>Test</button>
+		       </div>
+		       <span id="test-threat-webhook-result" style="font-size:0.8125rem;margin-top:4px;display:none;"></span>
 		   <?php endif; ?>
-		   <p class="muted">Fires when an unknown-path hit meets the threshold below. Slack/Discord URLs auto-detected; others receive generic JSON.</p>
+		   <p class="muted">Fires when an unknown-path hit meets the threshold below. Use the preset dropdown to populate a template for your platform.</p>
+
+		   <label for="webhook_preset">Threat Webhook Platform Preset</label>
+		   <?php if (!$isDemo): ?>
+		   <select id="webhook_preset" data-type="threat" data-target="webhook_template">
+		       <option value="">— select a preset to load a template —</option>
+		       <option value="slack">Slack</option>
+		       <option value="discord">Discord</option>
+		       <option value="teams">Microsoft Teams</option>
+		       <option value="pagerduty">PagerDuty</option>
+		   </select>
+		   <p class="muted">Selecting a preset overwrites the template below. Save settings to apply.</p>
+		   <?php endif; ?>
 
 		   <label for="webhook_template">Threat Webhook Payload Template (optional)</label>
 		   <?php if ($isDemo): ?>
@@ -1667,7 +1683,7 @@ function renderAdminPage(
 		       <textarea id="webhook_template" name="webhook_template" rows="8" style="font-family: var(--font-mono); font-size: 0.8125rem; width: 100%; resize: vertical;" placeholder='{"event": "signaltrace_alert", "ip": "{{ip}}", "label": "{{label}}", "score": {{score}}}'><?= h($webhookTemplate) ?></textarea>
 		   <?php endif; ?>
 		   <p class="muted">
-		       JSON template with placeholders. When set, overrides Slack/Discord auto-detection.<br>
+		       JSON template with placeholders. When set, overrides auto-detection.<br>
 		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
 		   </p>
 
@@ -1685,9 +1701,25 @@ function renderAdminPage(
 		   <?php if ($isDemo): ?>
 		       <div class="demo-locked-field"><?= h($tokenWebhookUrl) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
 		   <?php else: ?>
-		       <input id="token_webhook_url" type="url" name="token_webhook_url" value="<?= h($tokenWebhookUrl) ?>" placeholder="https://hooks.slack.com/...">
+		       <div style="display:flex;gap:0.5rem;align-items:center;">
+		           <input id="token_webhook_url" type="url" name="token_webhook_url" value="<?= h($tokenWebhookUrl) ?>" placeholder="https://hooks.slack.com/..." style="flex:1;">
+		           <button type="button" class="btn-small" id="test-token-webhook" <?= $tokenWebhookUrl === '' ? 'disabled' : '' ?>>Test</button>
+		       </div>
+		       <span id="test-token-webhook-result" style="font-size:0.8125rem;margin-top:4px;display:none;"></span>
 		   <?php endif; ?>
-		   <p class="muted">Fires when any known tracked token is hit, regardless of classification. Deduplicates per visitor per token per 5 minutes. Does not fire for unknown honeypot paths.</p>
+		   <p class="muted">Fires when any known tracked token is hit, regardless of classification. Deduplicates per visitor per token per 5 minutes.</p>
+
+		   <label for="token_webhook_preset">Token Webhook Platform Preset</label>
+		   <?php if (!$isDemo): ?>
+		   <select id="token_webhook_preset" data-type="token" data-target="token_webhook_template">
+		       <option value="">— select a preset to load a template —</option>
+		       <option value="slack">Slack</option>
+		       <option value="discord">Discord</option>
+		       <option value="teams">Microsoft Teams</option>
+		       <option value="pagerduty">PagerDuty</option>
+		   </select>
+		   <p class="muted">Selecting a preset overwrites the template below. Save settings to apply.</p>
+		   <?php endif; ?>
 
 		   <label for="token_webhook_template">Token Webhook Payload Template (optional)</label>
 		   <?php if ($isDemo): ?>
@@ -2182,6 +2214,80 @@ function renderAdminPage(
                     }
                 }, refreshSecs * 1000);
             }
+
+            /* ── Webhook test buttons ─────────────────────────────────── */
+            function setupWebhookTest(btnId, resultId, endpoint) {
+                var btn = document.getElementById(btnId);
+                var result = document.getElementById(resultId);
+                if (!btn || !result) return;
+
+                // Enable/disable based on URL field value
+                var urlInput = btnId === 'test-threat-webhook'
+                    ? document.getElementById('webhook_url')
+                    : document.getElementById('token_webhook_url');
+
+                if (urlInput) {
+                    urlInput.addEventListener('input', function () {
+                        btn.disabled = urlInput.value.trim() === '';
+                    });
+                }
+
+                btn.addEventListener('click', function () {
+                    btn.disabled = true;
+                    btn.textContent = 'Sending…';
+                    result.style.display = 'none';
+
+                    var csrf = document.querySelector('input[name="csrf_token"]');
+                    var fd = new FormData();
+                    if (csrf) fd.append('csrf_token', csrf.value);
+
+                    fetch(endpoint, { method: 'POST', body: fd })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            result.textContent = data.message;
+                            result.style.display = 'block';
+                            result.style.color = data.ok ? 'var(--human)' : 'var(--bot)';
+                        })
+                        .catch(function () {
+                            result.textContent = 'Request failed — check the browser console.';
+                            result.style.display = 'block';
+                            result.style.color = 'var(--bot)';
+                        })
+                        .finally(function () {
+                            btn.disabled = false;
+                            btn.textContent = 'Test';
+                        });
+                });
+            }
+
+            setupWebhookTest('test-threat-webhook', 'test-threat-webhook-result', '/admin/test-threat-webhook');
+            setupWebhookTest('test-token-webhook',  'test-token-webhook-result',  '/admin/test-token-webhook');
+
+            /* ── Webhook preset dropdowns ─────────────────────────────── */
+            document.querySelectorAll('select[data-type]').forEach(function (select) {
+                select.addEventListener('change', function () {
+                    var preset = select.value;
+                    var type   = select.dataset.type;
+                    var target = select.dataset.target;
+                    if (!preset || !target) return;
+
+                    var textarea = document.getElementById(target);
+                    if (!textarea) return;
+
+                    fetch('/admin/webhook-preset?preset=' + encodeURIComponent(preset) + '&type=' + encodeURIComponent(type))
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (data.template !== undefined) {
+                                textarea.value = data.template;
+                            }
+                            // Reset dropdown so it can be selected again
+                            select.value = '';
+                        })
+                        .catch(function () {
+                            select.value = '';
+                        });
+                });
+            });
         });
         </script>
     </div><!-- /.page-body -->
