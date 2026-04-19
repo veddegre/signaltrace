@@ -298,6 +298,7 @@ function handleSaveSettings(PDO $pdo): void
     $unknownPathBehaviorInput  = trim((string) ($_POST['unknown_path_behavior'] ?? 'redirect'));
     $pixelEnabledInput         = isset($_POST['pixel_enabled'])       ? '1' : '0';
     $noiseFilterEnabledInput   = isset($_POST['noise_filter_enabled']) ? '1' : '0';
+    $wildcardModeInput         = isset($_POST['wildcard_mode'])        ? '1' : '0';
     $displayMinScoreInput      = trim((string) ($_POST['display_min_score']   ?? '20'));
     $pageSizeInput             = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
     $autoRefreshInput          = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
@@ -411,6 +412,7 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'unknown_path_behavior',   $unknownPathBehaviorInput);
     setSetting($pdo, 'pixel_enabled',           $pixelEnabledInput);
     setSetting($pdo, 'noise_filter_enabled',    $noiseFilterEnabledInput);
+    setSetting($pdo, 'wildcard_mode',           $wildcardModeInput);
     setSetting($pdo, 'display_min_score',       $displayMinScoreInput);
     setSetting($pdo, 'page_size',               (string) $pageSizeInput);
     setSetting($pdo, 'auto_refresh_secs',       (string) $autoRefreshInput);
