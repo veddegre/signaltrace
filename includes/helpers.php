@@ -761,6 +761,10 @@ function fireWebhookAlert(PDO $pdo, array $requestData, array $triggerReasons): 
  */
 function maybeFireAlert(PDO $pdo, array $requestData): void
 {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        return;
+    }
+
     // If this is a known token hit, the token webhook handles it instead.
     if (!empty($requestData['link_id'])) {
         return;
@@ -838,6 +842,10 @@ function shouldSendAlert(PDO $pdo, string $ip): bool
  */
 function maybeFireTokenAlert(PDO $pdo, array $requestData): void
 {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        return;
+    }
+
     // Only fires for known tokens.
     if (empty($requestData['link_id'])) {
         return;
@@ -1019,6 +1027,10 @@ function fireTokenWebhookAlert(PDO $pdo, array $requestData): void
  */
 function maybeFireEmailAlert(PDO $pdo, array $requestData): void
 {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        return;
+    }
+
     if (getSetting($pdo, 'email_enabled', '0') !== '1') {
         return;
     }
@@ -1067,6 +1079,10 @@ function maybeFireEmailAlert(PDO $pdo, array $requestData): void
  */
 function maybeFireTokenEmailAlert(PDO $pdo, array $requestData): void
 {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        return;
+    }
+
     if (getSetting($pdo, 'email_enabled', '0') !== '1') {
         return;
     }
