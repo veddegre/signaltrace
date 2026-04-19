@@ -2308,7 +2308,7 @@ function renderAdminPage(
                     content.style.display = 'none';
                     delete box.dataset.loaded;
 
-                    fetch('/admin/enrichment/rescan?ip=' + encodeURIComponent(ip), { method: 'POST' })
+                    fetch('/admin/enrichment/rescan?ip=' + encodeURIComponent(ip))
                         .then(function(r) { return r.json(); })
                         .then(function(data) { renderEnrichment(box, ip, data, loadingEl, content); })
                         .catch(function() {
