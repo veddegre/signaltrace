@@ -2192,92 +2192,7 @@ function renderAdminPage(
 
             fetch('/admin/enrichment?ip=' + encodeURIComponent(ip))
                 .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (loading) loading.style.display = 'none';
-                    if (!content) return;
-
-                    if (data.private) {
-                        content.innerHTML = '<span class="muted" style="font-size:0.8125rem;">Private or reserved IP — no enrichment available.</span>';
-                        content.style.display = '';
-                        return;
-                    }
-
-                    var html = '';
-
-                    // ── Shodan InternetDB section ──────────────────────
-                    var ports     = data.ports     || [];
-                    var vulns     = data.vulns     || [];
-                    var tags      = data.tags      || [];
-                    var hostnames = data.hostnames || [];
-                    var hasShod   = ports.length > 0 || vulns.length > 0 || tags.length > 0 || hostnames.length > 0;
-
-                    html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-bottom:4px;">Shodan InternetDB</div>';
-
-                    if (!hasShod && data.not_found) {
-                        html += '<div class="muted" style="font-size:0.8125rem;margin-bottom:0.75rem;">No data in Shodan for this IP.</div>';
-                    } else {
-                        if (hostnames.length > 0) {
-                            html += '<div><span class="mono">Hostnames:</span> ' + escHtml(hostnames.join(', ')) + '</div>';
-                        }
-                        if (ports.length > 0) {
-                            html += '<div><span class="mono">Open ports:</span> ';
-                            html += ports.map(function(p) {
-                                return '<span class="badge badge-uncertain">' + escHtml(String(p)) + '</span>';
-                            }).join(' ');
-                            html += '</div>';
-                        } else {
-                            html += '<div><span class="mono">Open ports:</span> <span class="muted">none</span></div>';
-                        }
-                        if (vulns.length > 0) {
-                            html += '<div><span class="mono">CVEs:</span> ';
-                            html += vulns.map(function(v) {
-                                return '<a class="copy-button" href="https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(v) + '" target="_blank" rel="noopener">' + escHtml(v) + '</a>';
-                            }).join(' ');
-                            html += '</div>';
-                        }
-                        if (tags.length > 0) {
-                            html += '<div><span class="mono">Tags:</span> ';
-                            html += tags.map(function(t) {
-                                return '<span class="badge badge-suspicious">' + escHtml(t) + '</span>';
-                            }).join(' ');
-                            html += '</div>';
-                        }
-                    }
-
-                    if (data.fetched_at) {
-                        html += '<div style="margin-top:4px;"><span class="muted" style="font-size:0.75rem;">Fetched: ' + escHtml(data.fetched_at) + (data.cached ? ' (cached)' : '') + '</span></div>';
-                    }
-
-                    // ── AbuseIPDB section ──────────────────────────────
-                    var hasAbuse = typeof data.abuse_score !== 'undefined' && data.abuse_score !== null;
-                    html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);margin-bottom:4px;">AbuseIPDB</div>';
-
-                    if (!hasAbuse) {
-                        html += '<div class="muted" style="font-size:0.8125rem;">No AbuseIPDB data — API key not configured or daily limit reached.</div>';
-                    } else {
-                        var score = parseInt(data.abuse_score, 10);
-                        var scoreColor = score >= 75 ? 'var(--bot)' : score >= 25 ? 'var(--suspicious)' : 'var(--human)';
-                        html += '<div><span class="mono">Abuse confidence:</span> <strong style="color:' + scoreColor + '">' + score + '% likelihood of malicious activity</strong></div>';
-                        html += '<div><span class="mono">Total reports:</span> ' + escHtml(String(data.abuse_reports || 0)) + '</div>';
-                        if (data.abuse_last_reported) {
-                            html += '<div><span class="mono">Last reported:</span> ' + escHtml(data.abuse_last_reported) + '</div>';
-                        }
-                        if (data.abuse_isp) {
-                            html += '<div><span class="mono">ISP:</span> ' + escHtml(data.abuse_isp) + '</div>';
-                        }
-                        if (data.abuse_usage_type) {
-                            html += '<div><span class="mono">Usage type:</span> ' + escHtml(data.abuse_usage_type) + '</div>';
-                        }
-                        if (data.abuse_domain) {
-                            html += '<div><span class="mono">Domain:</span> ' + escHtml(data.abuse_domain) + '</div>';
-                        }
-                        html += '<div style="margin-top:4px;"><a class="copy-button" href="https://www.abuseipdb.com/check/' + encodeURIComponent(ip) + '" target="_blank" rel="noopener">View on AbuseIPDB</a></div>';
-                        html += '<div style="margin-top:4px;"><span class="muted" style="font-size:0.75rem;">' + (data.cached ? 'Cached' : 'Freshly fetched') + '</span></div>';
-                    }
-
-                    content.innerHTML = html;
-                    content.style.display = '';
-                })
+                .then(function(data) { renderEnrichment(box, ip, data, loading, content); })
                 .catch(function() {
                     if (loading) loading.style.display = 'none';
                     if (content) {
@@ -2285,6 +2200,125 @@ function renderAdminPage(
                         content.style.display = '';
                     }
                 });
+        }
+
+        function renderEnrichment(box, ip, data, loading, content) {
+            if (loading) loading.style.display = 'none';
+            if (!content) return;
+
+            if (data.private) {
+                content.innerHTML = '<span class="muted" style="font-size:0.8125rem;">Private or reserved IP — no enrichment available.</span>';
+                content.style.display = '';
+                return;
+            }
+
+            var html = '';
+
+            // ── Shodan InternetDB section ──────────────────────
+            var ports     = data.ports     || [];
+            var vulns     = data.vulns     || [];
+            var tags      = data.tags      || [];
+            var hostnames = data.hostnames || [];
+            var hasShod   = ports.length > 0 || vulns.length > 0 || tags.length > 0 || hostnames.length > 0;
+
+            html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">';
+            html += '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);">Shodan InternetDB</span>';
+            html += '<button type="button" class="copy-button rescan-btn" data-source="shodan" style="font-size:0.7rem;">Rescan</button>';
+            html += '</div>';
+
+            if (!hasShod && data.not_found) {
+                html += '<div class="muted" style="font-size:0.8125rem;margin-bottom:0.75rem;">No data in Shodan for this IP.</div>';
+            } else {
+                if (hostnames.length > 0) {
+                    html += '<div><span class="mono">Hostnames:</span> ' + escHtml(hostnames.join(', ')) + '</div>';
+                }
+                if (ports.length > 0) {
+                    html += '<div><span class="mono">Open ports:</span> ';
+                    html += ports.map(function(p) {
+                        return '<span class="badge badge-uncertain">' + escHtml(String(p)) + '</span>';
+                    }).join(' ');
+                    html += '</div>';
+                } else {
+                    html += '<div><span class="mono">Open ports:</span> <span class="muted">none</span></div>';
+                }
+                if (vulns.length > 0) {
+                    html += '<div><span class="mono">CVEs:</span> ';
+                    html += vulns.map(function(v) {
+                        return '<a class="copy-button" href="https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(v) + '" target="_blank" rel="noopener">' + escHtml(v) + '</a>';
+                    }).join(' ');
+                    html += '</div>';
+                }
+                if (tags.length > 0) {
+                    html += '<div><span class="mono">Tags:</span> ';
+                    html += tags.map(function(t) {
+                        return '<span class="badge badge-suspicious">' + escHtml(t) + '</span>';
+                    }).join(' ');
+                    html += '</div>';
+                }
+            }
+
+            if (data.fetched_at) {
+                html += '<div style="margin-top:4px;"><span class="muted" style="font-size:0.75rem;">Fetched: ' + escHtml(data.fetched_at) + (data.cached ? ' (cached)' : '') + '</span></div>';
+            }
+
+            // ── AbuseIPDB section ──────────────────────────────
+            var hasAbuse = typeof data.abuse_score !== 'undefined' && data.abuse_score !== null;
+            html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);margin-bottom:4px;">';
+            html += '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);">AbuseIPDB</span>';
+            html += '<button type="button" class="copy-button rescan-btn" data-source="abuse" style="font-size:0.7rem;">Rescan</button>';
+            html += '</div>';
+
+            if (!hasAbuse) {
+                html += '<div class="muted" style="font-size:0.8125rem;">No AbuseIPDB data — API key not configured or daily limit reached.</div>';
+            } else {
+                var score = parseInt(data.abuse_score, 10);
+                var scoreColor = score >= 75 ? 'var(--bot)' : score >= 25 ? 'var(--suspicious)' : 'var(--human)';
+                html += '<div><span class="mono">Abuse confidence:</span> <strong style="color:' + scoreColor + '">' + score + '% likelihood of malicious activity</strong></div>';
+                html += '<div><span class="mono">Total reports:</span> ' + escHtml(String(data.abuse_reports || 0)) + '</div>';
+                if (data.abuse_last_reported) {
+                    html += '<div><span class="mono">Last reported:</span> ' + escHtml(data.abuse_last_reported) + '</div>';
+                }
+                if (data.abuse_isp) {
+                    html += '<div><span class="mono">ISP:</span> ' + escHtml(data.abuse_isp) + '</div>';
+                }
+                if (data.abuse_usage_type) {
+                    html += '<div><span class="mono">Usage type:</span> ' + escHtml(data.abuse_usage_type) + '</div>';
+                }
+                if (data.abuse_domain) {
+                    html += '<div><span class="mono">Domain:</span> ' + escHtml(data.abuse_domain) + '</div>';
+                }
+                html += '<div style="margin-top:4px;display:flex;gap:0.5rem;align-items:center;">';
+                html += '<a class="copy-button" href="https://www.abuseipdb.com/check/' + encodeURIComponent(ip) + '" target="_blank" rel="noopener">View on AbuseIPDB</a>';
+                if (data.fetched_at) {
+                    html += '<span class="muted" style="font-size:0.75rem;">Fetched: ' + escHtml(data.fetched_at) + (data.cached ? ' (cached)' : '') + '</span>';
+                }
+                html += '</div>';
+            }
+
+            content.innerHTML = html;
+            content.style.display = '';
+
+            // Wire up rescan buttons
+            content.querySelectorAll('.rescan-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    btn.textContent = 'Rescanning…';
+                    btn.disabled = true;
+                    var loadingEl = box.querySelector('.shodan-loading');
+                    if (loadingEl) { loadingEl.style.display = ''; }
+                    content.style.display = 'none';
+                    delete box.dataset.loaded;
+
+                    fetch('/admin/enrichment/rescan?ip=' + encodeURIComponent(ip), { method: 'POST' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) { renderEnrichment(box, ip, data, loadingEl, content); })
+                        .catch(function() {
+                            btn.textContent = 'Rescan';
+                            btn.disabled = false;
+                            if (loadingEl) loadingEl.style.display = 'none';
+                            content.style.display = '';
+                        });
+                });
+            });
         }
 
         function escHtml(str) {
