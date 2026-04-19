@@ -1836,6 +1836,50 @@ function renderAdminPage(
 		   </div>
 		   <?php endif; ?>
 
+		   <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+		   <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 1rem;">IP Enrichment</strong>
+
+		   <?php
+		   $abuseKey      = (string) getSetting($pdo, 'abuseipdb_api_key', '');
+		   $abuseLimit    = (string) getSetting($pdo, 'abuseipdb_daily_limit', '500');
+		   $abuseKeySet   = $abuseKey !== '';
+		   ?>
+
+		   <label>AbuseIPDB API Key</label>
+		   <?php if ($isDemo): ?>
+		       <div class="demo-locked-field">••••••••<span class="demo-lock-note">Not configurable in demo mode</span></div>
+		   <?php else: ?>
+		       <?php if ($abuseKeySet): ?>
+		       <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:4px;">
+		           <span class="mono" style="flex:1; padding: 7px 10px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); font-size:0.8125rem;">••••••••<?= h(substr($abuseKey, -4)) ?></span>
+		           <button type="button" class="btn-small" id="abuseipdb-change-key">Change Key</button>
+		       </div>
+		       <div id="abuseipdb-key-input" style="display:none;">
+		           <input type="password" name="abuseipdb_api_key" id="abuseipdb_api_key" value="" placeholder="Paste new API key" autocomplete="off">
+		           <p class="muted" style="margin-top:4px;">Leave blank to keep the existing key.</p>
+		       </div>
+		       <?php else: ?>
+		       <input type="password" name="abuseipdb_api_key" id="abuseipdb_api_key" value="" placeholder="Your AbuseIPDB v2 API key" autocomplete="off">
+		       <p class="muted">Get a free key at <a href="https://www.abuseipdb.com/register" target="_blank" rel="noopener">abuseipdb.com</a>. Free tier allows 1,000 checks per day. Leave blank to disable AbuseIPDB enrichment.</p>
+		       <?php endif; ?>
+		   <?php endif; ?>
+
+		   <label for="abuseipdb_daily_limit">AbuseIPDB Daily Lookup Limit</label>
+		   <input id="abuseipdb_daily_limit" type="number" min="0" max="9999" name="abuseipdb_daily_limit" value="<?= h($abuseLimit) ?>">
+		   <p class="muted">Maximum AbuseIPDB lookups per day. Once reached, new IPs will show Shodan data only until the next UTC midnight reset. Set to 0 to disable. Free tier limit is 1,000/day.</p>
+
+		   <?php
+		   $abuseUsedToday = (int) getSetting($pdo, 'abuseipdb_used_today', '0');
+		   $abuseResetDate = (string) getSetting($pdo, 'abuseipdb_reset_date', '');
+		   if ($abuseKeySet): ?>
+		   <div style="padding: 0.5rem 0.75rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8125rem; color: var(--text-sec);">
+		       Today's usage: <strong><?= $abuseUsedToday ?></strong> / <?= h($abuseLimit) ?> lookups
+		       <?php if ($abuseResetDate !== ''): ?>
+		       — resets at UTC midnight
+		       <?php endif; ?>
+		   </div>
+		   <?php endif; ?>
+
                     <button type="submit">Save Settings</button>
                 </form>
 
@@ -2158,50 +2202,76 @@ function renderAdminPage(
                         return;
                     }
 
-                    if (data.not_found && !data.ports && !data.vulns && !data.tags) {
-                        content.innerHTML = '<span class="muted" style="font-size:0.8125rem;">No data in Shodan InternetDB for this IP.</span>';
-                        content.style.display = '';
-                        return;
-                    }
-
                     var html = '';
+
+                    // ── Shodan InternetDB section ──────────────────────
                     var ports     = data.ports     || [];
                     var vulns     = data.vulns     || [];
                     var tags      = data.tags      || [];
                     var hostnames = data.hostnames || [];
+                    var hasShod   = ports.length > 0 || vulns.length > 0 || tags.length > 0 || hostnames.length > 0;
 
-                    if (hostnames.length > 0) {
-                        html += '<div><span class="mono">Hostnames:</span> ' + escHtml(hostnames.join(', ')) + '</div>';
-                    }
+                    html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-bottom:4px;">Shodan InternetDB</div>';
 
-                    if (ports.length > 0) {
-                        html += '<div><span class="mono">Open ports:</span> ';
-                        html += ports.map(function(p) {
-                            return '<span class="badge badge-uncertain">' + escHtml(String(p)) + '</span>';
-                        }).join(' ');
-                        html += '</div>';
+                    if (!hasShod && data.not_found) {
+                        html += '<div class="muted" style="font-size:0.8125rem;margin-bottom:0.75rem;">No data in Shodan for this IP.</div>';
                     } else {
-                        html += '<div><span class="mono">Open ports:</span> <span class="muted">none</span></div>';
-                    }
-
-                    if (vulns.length > 0) {
-                        html += '<div><span class="mono">CVEs:</span> ';
-                        html += vulns.map(function(v) {
-                            return '<a class="copy-button" href="https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(v) + '" target="_blank" rel="noopener">' + escHtml(v) + '</a>';
-                        }).join(' ');
-                        html += '</div>';
-                    }
-
-                    if (tags.length > 0) {
-                        html += '<div><span class="mono">Tags:</span> ';
-                        html += tags.map(function(t) {
-                            return '<span class="badge badge-suspicious">' + escHtml(t) + '</span>';
-                        }).join(' ');
-                        html += '</div>';
+                        if (hostnames.length > 0) {
+                            html += '<div><span class="mono">Hostnames:</span> ' + escHtml(hostnames.join(', ')) + '</div>';
+                        }
+                        if (ports.length > 0) {
+                            html += '<div><span class="mono">Open ports:</span> ';
+                            html += ports.map(function(p) {
+                                return '<span class="badge badge-uncertain">' + escHtml(String(p)) + '</span>';
+                            }).join(' ');
+                            html += '</div>';
+                        } else {
+                            html += '<div><span class="mono">Open ports:</span> <span class="muted">none</span></div>';
+                        }
+                        if (vulns.length > 0) {
+                            html += '<div><span class="mono">CVEs:</span> ';
+                            html += vulns.map(function(v) {
+                                return '<a class="copy-button" href="https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(v) + '" target="_blank" rel="noopener">' + escHtml(v) + '</a>';
+                            }).join(' ');
+                            html += '</div>';
+                        }
+                        if (tags.length > 0) {
+                            html += '<div><span class="mono">Tags:</span> ';
+                            html += tags.map(function(t) {
+                                return '<span class="badge badge-suspicious">' + escHtml(t) + '</span>';
+                            }).join(' ');
+                            html += '</div>';
+                        }
                     }
 
                     if (data.fetched_at) {
-                        html += '<div style="margin-top:6px;"><span class="muted" style="font-size:0.75rem;">Fetched: ' + escHtml(data.fetched_at) + (data.cached ? ' (cached)' : '') + '</span></div>';
+                        html += '<div style="margin-top:4px;"><span class="muted" style="font-size:0.75rem;">Fetched: ' + escHtml(data.fetched_at) + (data.cached ? ' (cached)' : '') + '</span></div>';
+                    }
+
+                    // ── AbuseIPDB section ──────────────────────────────
+                    var hasAbuse = typeof data.abuse_score !== 'undefined' && data.abuse_score !== null;
+                    html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-top:0.75rem;margin-bottom:4px;">AbuseIPDB</div>';
+
+                    if (!hasAbuse) {
+                        html += '<div class="muted" style="font-size:0.8125rem;">No AbuseIPDB data — API key not configured or daily limit reached.</div>';
+                    } else {
+                        var score = parseInt(data.abuse_score, 10);
+                        var scoreColor = score >= 75 ? 'var(--bot)' : score >= 25 ? 'var(--suspicious)' : 'var(--human)';
+                        html += '<div><span class="mono">Confidence score:</span> <strong style="color:' + scoreColor + '">' + score + '%</strong></div>';
+                        html += '<div><span class="mono">Total reports:</span> ' + escHtml(String(data.abuse_reports || 0)) + '</div>';
+                        if (data.abuse_last_reported) {
+                            html += '<div><span class="mono">Last reported:</span> ' + escHtml(data.abuse_last_reported) + '</div>';
+                        }
+                        if (data.abuse_isp) {
+                            html += '<div><span class="mono">ISP:</span> ' + escHtml(data.abuse_isp) + '</div>';
+                        }
+                        if (data.abuse_usage_type) {
+                            html += '<div><span class="mono">Usage type:</span> ' + escHtml(data.abuse_usage_type) + '</div>';
+                        }
+                        if (data.abuse_domain) {
+                            html += '<div><span class="mono">Domain:</span> ' + escHtml(data.abuse_domain) + '</div>';
+                        }
+                        html += '<div style="margin-top:4px;"><a class="copy-button" href="https://www.abuseipdb.com/check/' + encodeURIComponent(ip) + '" target="_blank" rel="noopener">View on AbuseIPDB</a></div>';
                     }
 
                     content.innerHTML = html;
@@ -2378,6 +2448,20 @@ function renderAdminPage(
 
             setupWebhookTest('test-threat-webhook', 'test-threat-webhook-result', '/admin/test-threat-webhook');
             setupWebhookTest('test-token-webhook',  'test-token-webhook-result',  '/admin/test-token-webhook');
+
+            /* ── AbuseIPDB change key toggle ──────────────────────────── */
+            var changeKeyBtn = document.getElementById('abuseipdb-change-key');
+            if (changeKeyBtn) {
+                changeKeyBtn.addEventListener('click', function () {
+                    var input = document.getElementById('abuseipdb-key-input');
+                    if (input) {
+                        input.style.display = '';
+                        changeKeyBtn.style.display = 'none';
+                        var field = document.getElementById('abuseipdb_api_key');
+                        if (field) field.focus();
+                    }
+                });
+            }
 
             /* ── Webhook preset dropdowns ─────────────────────────────── */
             document.querySelectorAll('select[data-type]').forEach(function (select) {
