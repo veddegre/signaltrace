@@ -2250,7 +2250,7 @@ function renderAdminPage(
 
                     // ── AbuseIPDB section ──────────────────────────────
                     var hasAbuse = typeof data.abuse_score !== 'undefined' && data.abuse_score !== null;
-                    html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-top:0.75rem;margin-bottom:4px;">AbuseIPDB</div>';
+                    html += '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-sec);margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);margin-bottom:4px;">AbuseIPDB</div>';
 
                     if (!hasAbuse) {
                         html += '<div class="muted" style="font-size:0.8125rem;">No AbuseIPDB data — API key not configured or daily limit reached.</div>';
@@ -2272,6 +2272,7 @@ function renderAdminPage(
                             html += '<div><span class="mono">Domain:</span> ' + escHtml(data.abuse_domain) + '</div>';
                         }
                         html += '<div style="margin-top:4px;"><a class="copy-button" href="https://www.abuseipdb.com/check/' + encodeURIComponent(ip) + '" target="_blank" rel="noopener">View on AbuseIPDB</a></div>';
+                        html += '<div style="margin-top:4px;"><span class="muted" style="font-size:0.75rem;">' + (data.cached ? 'Cached' : 'Freshly fetched') + '</span></div>';
                     }
 
                     content.innerHTML = html;
