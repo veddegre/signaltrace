@@ -494,21 +494,60 @@ EMAIL_SMTP_ENCRYPTION="tls"
 
 if [ "$INSTALL_TYPE" = "3" ]; then
     _existing_smtp_host=$(read_existing_php "EMAIL_SMTP_HOST")
+
     echo -e "${BOLD}── Email Alerting (optional) ────────────────────────────────${RESET}"
-    echo "  SignalTrace can send email alerts when threats are detected."
-    echo "  SMTP credentials are stored in config.local.php (not the database)"
-    echo "  so they are never exposed through the admin UI."
     echo ""
+    echo -e "${YELLOW}${BOLD}Security notice:${RESET}"
+    echo "  SMTP credentials give anyone who has them the ability to send email"
+    echo "  on your behalf. They will be written to config.local.php and stored"
+    echo "  on disk in plain text — do not use credentials shared with other"
+    echo "  services, and restrict file access to root:www-data (640)."
+    echo "  SignalTrace never stores these credentials in the database or exposes"
+    echo "  them through the admin UI."
+    echo ""
+
     if [ -n "$_existing_smtp_host" ]; then
         echo -e "  ${CYAN}Existing SMTP host: ${_existing_smtp_host}${RESET}"
-        read -r -p "  Reconfigure email alerting? [y/N] " do_email
-    else
-        read -r -p "  Configure email alerting? [y/N] " do_email
-    fi
-    if [[ "$do_email" =~ ^[Yy]$ ]]; then
         echo ""
+        echo "  1) Keep existing email configuration"
+        echo "  2) Reconfigure email alerting"
+        echo "  3) Remove email alerting"
+        echo ""
+        read -r -p "  Choice [1]: " email_choice
+        case "${email_choice:-1}" in
+            2) do_email="y" ;;
+            3)
+                echo -e "  ${YELLOW}Email alerting will be removed from config.local.php.${RESET}"
+                echo ""
+                # Leave EMAIL_SMTP_HOST blank so nothing gets written
+                ;;
+            *)
+                EMAIL_SMTP_HOST=$(read_existing_php "EMAIL_SMTP_HOST")
+                EMAIL_SMTP_PORT=$(read_existing_php "EMAIL_SMTP_PORT")
+                EMAIL_SMTP_ENCRYPTION=$(read_existing_php "EMAIL_SMTP_ENCRYPTION")
+                EMAIL_SMTP_USER=$(read_existing_php "EMAIL_SMTP_USER")
+                EMAIL_SMTP_PASS=$(read_existing_php "EMAIL_SMTP_PASS")
+                EMAIL_SMTP_FROM=$(read_existing_php "EMAIL_SMTP_FROM")
+                echo -e "  ${GREEN}Keeping existing email configuration.${RESET}"
+                echo ""
+                do_email="n"
+                ;;
+        esac
+    else
+        echo "  SignalTrace can send email alerts when threats are detected or"
+        echo "  canary tokens are hit. Alerting is disabled by default."
+        echo ""
+        read -r -p "  Configure email alerting? [y/N] " do_email
+        echo ""
+    fi
+
+    if [[ "$do_email" =~ ^[Yy]$ ]]; then
+        echo -e "${BOLD}── SMTP Configuration ───────────────────────────────────────${RESET}"
+        echo ""
+
         _existing_smtp_host=$(read_existing_php "EMAIL_SMTP_HOST")
         echo -e "${CYAN}SMTP host${RESET}"
+        echo "  The hostname of your outbound mail server."
         read -r -p "  Value [${_existing_smtp_host:-smtp.example.com}]: " EMAIL_SMTP_HOST_INPUT
         EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST_INPUT:-$_existing_smtp_host}"
         echo ""
@@ -554,22 +593,16 @@ if [ "$INSTALL_TYPE" = "3" ]; then
 
         _existing_smtp_from=$(read_existing_php "EMAIL_SMTP_FROM")
         echo -e "${CYAN}From address${RESET}"
+        echo "  The address that appears in the From field of alert emails."
         read -r -p "  Value [${_existing_smtp_from:-$EMAIL_SMTP_USER}]: " EMAIL_SMTP_FROM_INPUT
         EMAIL_SMTP_FROM="${EMAIL_SMTP_FROM_INPUT:-${_existing_smtp_from:-$EMAIL_SMTP_USER}}"
         echo ""
 
-        echo -e "${GREEN}Email SMTP credentials will be written to config.local.php.${RESET}"
-        echo "  Alerting must be enabled and configured in the Settings tab after install."
-        echo ""
-    elif [ -n "$_existing_smtp_host" ]; then
-        # Keep existing SMTP values unchanged
-        EMAIL_SMTP_HOST=$(read_existing_php "EMAIL_SMTP_HOST")
-        EMAIL_SMTP_PORT=$(read_existing_php "EMAIL_SMTP_PORT")
-        EMAIL_SMTP_ENCRYPTION=$(read_existing_php "EMAIL_SMTP_ENCRYPTION")
-        EMAIL_SMTP_USER=$(read_existing_php "EMAIL_SMTP_USER")
-        EMAIL_SMTP_PASS=$(read_existing_php "EMAIL_SMTP_PASS")
-        EMAIL_SMTP_FROM=$(read_existing_php "EMAIL_SMTP_FROM")
-        echo -e "  ${GREEN}Keeping existing email configuration.${RESET}"
+        echo -e "${GREEN}SMTP credentials will be written to config.local.php.${RESET}"
+        echo "  After install, go to Settings → Email Alerting to:"
+        echo "  • Enable alerting and set the recipient address"
+        echo "  • Configure the classification threshold (bot, suspicious, etc.)"
+        echo "  • Opt individual canary tokens in to per-hit email alerts"
         echo ""
     fi
 fi
