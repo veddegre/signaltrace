@@ -61,11 +61,7 @@ The panel heading now shows a dynamic window label (e.g. "last 12h", "last 7d").
 
 **Stray backtick parse error** — A backtick was inserted by the GitHub web editor when committing PHP files, causing a parse error. Resolved in the clean output file.
 
-**Demo default redirect loop** — The demo reset script was setting `default_redirect_url` to `https://trysignaltrace.com`, causing every unknown honeypot path to redirect back to itself. Changed to `https://example.com/`.
-
 **Demo countdown using wrong time reference** — The banner countdown now takes the minimum of `last_reset_time + 3600` and the next top-of-the-hour, so manually triggered resets show an accurate countdown rather than a full 60 minutes.
-
-**STIX `valid_until` matching `valid_from`** — `valid_until` was incorrectly calculated as `last_seen + window_hours`. Changed to `now + window_hours` so the indicator expiry is meaningfully different from the observation start date.
 
 ---
 
