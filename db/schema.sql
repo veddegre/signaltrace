@@ -210,7 +210,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('wildcard_mode',             '0'),
     ('behavioral_window_hours',   '24'),
     ('behavioral_max_rows',       '25'),
-    ('behavioral_hidden',         '0');
+    ('behavioral_hidden',         '0'),
+    ('subdomains_hidden',         '0');
 
 -- ============================================================
 -- Default Skip Patterns
