@@ -2273,7 +2273,7 @@ function renderAdminPage(
             } else {
                 var score = parseInt(data.abuse_score, 10);
                 if (isNaN(score)) score = 0;
-                var scoreColor = score >= 75 ? 'var(--bot)' : score >= 25 ? 'var(--suspicious)' : 'var(--human)';
+                var scoreColor = score >= 75 ? 'var(--bot-text)' : score >= 25 ? 'var(--suspicious-text)' : 'var(--human-text)';
                 html += '<div><span class="mono">Abuse confidence:</span> <strong style="color:' + scoreColor + '">' + score + '% likelihood of malicious activity</strong></div>';
                 html += '<div><span class="mono">Total reports:</span> ' + escHtml(String(data.abuse_reports || 0)) + '</div>';
                 if (data.abuse_last_reported) {
