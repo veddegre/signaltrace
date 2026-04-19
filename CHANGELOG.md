@@ -2,6 +2,73 @@
 
 ---
 
+## [2.6.0] — April 18, 2026
+
+### Email Alerting
+
+SignalTrace can now send plain text email alerts via SMTP when threats are detected. SMTP credentials (`EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_ENCRYPTION`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, `EMAIL_SMTP_FROM`) are stored exclusively in `config.local.php` as PHP constants — they are never written to the database or exposed through the admin UI. The Settings tab shows a read-only status panel indicating whether credentials are configured.
+
+Two alert types are supported:
+
+**Threat alerts** fire when an unknown-path hit meets the configured classification threshold (bot, suspicious, uncertain, or all). Deduplicates per IP with a configurable window (default 60 minutes).
+
+**Token alerts** fire when a known token with `include_in_email = 1` is hit, regardless of classification. Deduplicates per IP per token using the same window. Configured per-token via a new checkbox in the Create and Edit token forms, and visible as a column in the token summary table.
+
+Email alerting is completely blocked in demo mode at the function level — no outbound email can be sent regardless of settings.
+
+Requires `phpmailer/phpmailer ^6.9` via Composer (`composer update` after deploying).
+
+### MISP and STIX 2.1 Threat Intel Export
+
+Two new threat feed endpoints export enriched indicator data for consumption by threat intelligence platforms:
+
+- `/feed/misp.json` — MISP event format with `ip-src` attributes, RFC3339 timestamps, per-IP comments including classification, score, hit count, org, and country. Threat level derived from worst classification in the batch.
+- `/feed/stix.json` — STIX 2.1 bundle with `indicator` objects using UUIDv5 (stable across exports for the same IP), correct `ipv4-addr` and `ipv6-addr` pattern types, confidence values mapped to the STIX convention (85/50/15), and `valid_from`/`valid_until` in RFC3339 UTC.
+
+Both endpoints use the same admin Basic Auth or export API token as the existing feed endpoints. Both include IPv4 and IPv6 in a single export.
+
+**Important:** MISP and STIX exports are capped at bot and suspicious classifications regardless of the threat feed minimum confidence setting. Uncertain and human-classified IPs are excluded because these formats are consumed by platforms that act automatically on the data.
+
+### Per-Token Force Include in Feed
+
+Tokens now have a `force_include_in_feed` flag alongside the existing `exclude_from_feed`. When enabled, any IP that hits the token is added to the threat feed regardless of confidence classification — useful for canary tokens where any hit is inherently suspicious. Force-include overrides exclude if both are set. For MISP and STIX exports, force-include tokens are still capped at suspicious. Added to Create and Edit token forms and the token summary table.
+
+### Wildcard DNS Mode
+
+A new **Wildcard DNS mode** setting enables subdomain visibility across the dashboard when a wildcard DNS record is in use. When enabled:
+
+- A **Subdomain** column appears in the activity table showing the subdomain prefix (e.g. `vpn`, `login`, `mail`) extracted from the Host header relative to the configured base URL. Hidden on mobile. Clicking a subdomain filters to all hits from that host.
+- A **host** filter field appears in the filter bar for searching by subdomain or full host value.
+- A **Subdomain Activity** summary panel appears above the activity feed showing hit counts, bot hits, and first/last seen per subdomain. Supports the same hide/show toggle and date range filtering as the behavioral panel.
+
+See the [Wildcard DNS Honeypot wiki page](https://github.com/veddegre/signaltrace/wiki/Wildcard-DNS-Honeypot) for setup instructions including Apache vhost configuration and wildcard TLS certificates.
+
+### Behavioral Flags Panel Improvements
+
+Three new settings control the Behavioral Flagged IPs panel:
+
+- **Behavioral Flags Window** — configurable time window in hours (default 24h, previously hardcoded)
+- **Behavioral Flags Max Rows** — maximum IPs shown in the panel (default 25, previously hardcoded at 50)
+- **Hide Behavioral Flags panel by default** — panel starts collapsed on every page load; can still be expanded manually
+
+The panel heading now shows a dynamic window label (e.g. "last 12h", "last 7d"). Hide/show state is preserved across pagination. A corresponding **Hide Subdomain Activity panel by default** setting was added for the new subdomain panel.
+
+### Bug Fixes
+
+**Behavioral panel not staying hidden across pagination** — `hide_behavioral` was not preserved in pagination links. Fixed by capturing it early and including it in `buildAdminUrl()`.
+
+**Missing spacing below behavioral panel when hidden** — A consistent spacer is now rendered after the behavioral section regardless of visibility state.
+
+**Stray backtick parse error** — A backtick was inserted by the GitHub web editor when committing PHP files, causing a parse error. Resolved in the clean output file.
+
+**Demo default redirect loop** — The demo reset script was setting `default_redirect_url` to `https://trysignaltrace.com`, causing every unknown honeypot path to redirect back to itself. Changed to `https://example.com/`.
+
+**Demo countdown using wrong time reference** — The banner countdown now takes the minimum of `last_reset_time + 3600` and the next top-of-the-hour, so manually triggered resets show an accurate countdown rather than a full 60 minutes.
+
+**STIX `valid_until` matching `valid_from`** — `valid_until` was incorrectly calculated as `last_seen + window_hours`. Changed to `now + window_hours` so the indicator expiry is meaningfully different from the observation start date.
+
+---
+
 ## [2.5.5] — April 18, 2026
 
 ### Bug Fixes
