@@ -915,6 +915,9 @@ tr:hover td { background: var(--surface-alt); }
     .compact-table th.type-col,
     .compact-table td.type-col { display: none; }
 
+    /* Hide wildcard subdomain column and host filter on mobile */
+    .hide-mobile { display: none; }
+
     .compact-table th.time-col,
     .compact-table td.time-col { width: 110px; min-width: 110px; font-size: 0.75rem; }
 
