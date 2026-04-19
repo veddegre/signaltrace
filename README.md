@@ -208,8 +208,14 @@ Edit `.env` and fill in the values:
 | `DEMO_MODE` | Optional | Set to `true` to enable the demo banner and lock sensitive settings |
 | `DEMO_ADMIN_USERNAME` | Optional | Display-only username shown in the demo banner |
 | `DEMO_ADMIN_PASSWORD` | Optional | Display-only password shown in the demo banner |
+| `EMAIL_SMTP_HOST` | Optional | SMTP server hostname — set to enable email alerting |
+| `EMAIL_SMTP_PORT` | Optional | SMTP port (default: 587) |
+| `EMAIL_SMTP_ENCRYPTION` | Optional | SMTP encryption: `tls`, `ssl`, or `none` (default: tls) |
+| `EMAIL_SMTP_USER` | Optional | SMTP username |
+| `EMAIL_SMTP_PASS` | Optional | SMTP password |
+| `EMAIL_SMTP_FROM` | Optional | From address (defaults to `EMAIL_SMTP_USER` if not set) |
 
-> **Email alerting:** SMTP credentials are not stored in `.env` or the database — they are kept exclusively in `config.local.php` to prevent exposure through the admin UI or a database read. The entrypoint will write them as PHP constants if you set `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_ENCRYPTION`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, and `EMAIL_SMTP_FROM` as environment variables. Alternatively, mount a `config.local.php` with those constants into the container. See the [Email Alerting wiki page](https://github.com/veddegre/signaltrace/wiki/Email-Alerting) for details.
+> **Email alerting:** The entrypoint writes `EMAIL_SMTP_*` variables as PHP constants into `config.local.php` inside the container so they are never stored in the database or exposed through the admin UI. Set the variables in `.env` and they will be configured automatically on startup. Enable alerting, set thresholds, and configure the recipient address in the Settings tab after the container starts. See the [Email Alerting wiki page](https://github.com/veddegre/signaltrace/wiki/Email-Alerting) for details.
 
 Generate the required secrets:
 
