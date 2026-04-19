@@ -553,5 +553,85 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     maybeFireEmailAlert($pdo, $requestData);
     maybeRunAutoCleanup($pdo);
 
+    // Background enrichment — fetch Shodan data for this IP if not cached.
+    // Runs after response is sent so it never delays the tracked request.
+    $enrichIp = $requestData['ip'] ?? '';
+    if ($enrichIp !== '' && !isPrivateIp($enrichIp)) {
+        $cached = getEnrichment($pdo, $enrichIp);
+        if ($cached === null) {
+            // Use output buffering + fastcgi_finish_request when available so the
+            // curl fetch happens after the response is flushed to the client.
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+            fetchAndCacheEnrichment($pdo, $enrichIp);
+        }
+    }
+
     redirectOr404($unknownPathBehavior, $defaultRedirectUrl);
+}
+
+/* ======================================================
+   ENRICHMENT — on-demand GET endpoint
+   ====================================================== */
+
+/**
+ * GET /admin/enrichment?ip=1.2.3.4
+ * Returns cached Shodan InternetDB data for the IP, fetching if needed.
+ * Returns JSON with keys: ip, ports, vulns, tags, hostnames, not_found, fetched_at, cached.
+ */
+function handleEnrichment(PDO $pdo): void
+{
+    $ip = trim((string) ($_GET['ip'] ?? ''));
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid or missing IP address.']);
+        exit;
+    }
+
+    if (isPrivateIp($ip)) {
+        http_response_code(200);
+        echo json_encode(['ip' => $ip, 'not_found' => 1, 'private' => true]);
+        exit;
+    }
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+
+    $cached = getEnrichment($pdo, $ip);
+
+    if ($cached !== null) {
+        // Already in cache — decode JSON fields and return immediately
+        echo json_encode(decodeEnrichmentRow($cached) + ['cached' => true]);
+        exit;
+    }
+
+    // Not cached yet — fetch now (on-demand path)
+    $result = fetchAndCacheEnrichment($pdo, $ip);
+
+    if ($result === null) {
+        http_response_code(503);
+        echo json_encode(['error' => 'Enrichment fetch failed. Try again shortly.']);
+        exit;
+    }
+
+    echo json_encode(decodeEnrichmentRow($result) + ['cached' => false]);
+    exit;
+}
+
+/**
+ * Decodes JSON-encoded array fields in an enrichment row for API output.
+ */
+function decodeEnrichmentRow(array $row): array
+{
+    foreach (['ports', 'vulns', 'tags', 'hostnames'] as $field) {
+        if (isset($row[$field]) && is_string($row[$field])) {
+            $decoded = json_decode($row[$field], true);
+            $row[$field] = is_array($decoded) ? $decoded : [];
+        } else {
+            $row[$field] = [];
+        }
+    }
+    return $row;
 }
