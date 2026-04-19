@@ -631,9 +631,46 @@ function handleEnrichment(PDO $pdo): void
 }
 
 /**
- * Decodes JSON-encoded array fields in an enrichment row for API output.
+ * POST /admin/enrichment/rescan?ip=1.2.3.4
+ * Clears cached enrichment for an IP and re-fetches both Shodan and AbuseIPDB.
  */
-function decodeEnrichmentRow(array $row): array
+function handleEnrichmentRescan(PDO $pdo): void
+{
+    $ip = trim((string) ($_GET['ip'] ?? ''));
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid or missing IP address.']);
+        exit;
+    }
+
+    if (isPrivateIp($ip)) {
+        http_response_code(200);
+        echo json_encode(['ip' => $ip, 'not_found' => 1, 'private' => true]);
+        exit;
+    }
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+
+    // Delete existing cache entry so fetch functions don't return early
+    $stmt = $pdo->prepare("DELETE FROM ip_enrichment WHERE ip = :ip");
+    $stmt->execute([':ip' => $ip]);
+
+    // Re-fetch both sources
+    $result = fetchAndCacheEnrichment($pdo, $ip);
+    if ($result === null) {
+        http_response_code(503);
+        echo json_encode(['error' => 'Enrichment fetch failed. Try again shortly.']);
+        exit;
+    }
+
+    fetchAndCacheAbuseIpDb($pdo, $ip);
+    $result = getEnrichment($pdo, $ip);
+
+    echo json_encode(decodeEnrichmentRow($result) + ['cached' => false]);
+    exit;
+}
 {
     foreach (['ports', 'vulns', 'tags', 'hostnames'] as $field) {
         if (isset($row[$field]) && is_string($row[$field])) {
