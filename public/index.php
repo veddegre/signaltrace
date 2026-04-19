@@ -245,6 +245,12 @@ if ($path === '/admin/webhook-preset') {
     exit;
 }
 
+if ($path === '/admin/enrichment') {
+    requireAdminAuth();
+    handleEnrichment($pdo);
+    exit;
+}
+
 /* ============================================================
    PIXEL TRACKING
    ============================================================ */
@@ -301,6 +307,7 @@ $reserved = [
     '/admin/test-threat-webhook',
     '/admin/test-token-webhook',
     '/admin/webhook-preset',
+    '/admin/enrichment',
     '/health',
     '/admin.css',
     '/favicon.ico',
