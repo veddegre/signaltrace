@@ -146,6 +146,7 @@ function initializeDatabase(PDO $pdo): void
     $linksColumnDefinitions = [
         'exclude_from_feed'        => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
+        'include_in_email'         => 'INTEGER NOT NULL DEFAULT 0',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -270,6 +271,16 @@ function seedDefaultSettings(PDO $pdo): void
         'behavioral_max_rows'        => '25',
         'behavioral_hidden'          => '0',
         'subdomains_hidden'          => '0',
+        'email_enabled'              => '0',
+        'email_to'                   => '',
+        'email_from'                 => '',
+        'email_smtp_host'            => '',
+        'email_smtp_port'            => '587',
+        'email_smtp_user'            => '',
+        'email_smtp_pass'            => '',
+        'email_smtp_encryption'      => 'tls',
+        'email_threshold'            => 'bot',
+        'email_dedup_minutes'        => '60',
     ];
 
     $stmt = $pdo->prepare("
@@ -509,42 +520,45 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false): bool
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at)
-        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :include_in_token_webhook, :created_at)
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, include_in_email, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :include_in_token_webhook, :include_in_email, :created_at)
     ");
 
     return $stmt->execute([
-        ':token'                  => $token,
-        ':destination'            => $destination,
-        ':description'            => $description,
-        ':exclude_from_feed'      => $excludeFromFeed ? 1 : 0,
+        ':token'                   => $token,
+        ':destination'             => $destination,
+        ':description'             => $description,
+        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
-        ':created_at'             => date('c'),
+        ':include_in_email'        => $includeInEmail ? 1 : 0,
+        ':created_at'              => date('c'),
     ]);
 }
 
-function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
-        SET token                   = :token,
-            destination             = :destination,
-            description             = :description,
-            exclude_from_feed       = :exclude_from_feed,
-            include_in_token_webhook = :include_in_token_webhook
+        SET token                    = :token,
+            destination              = :destination,
+            description              = :description,
+            exclude_from_feed        = :exclude_from_feed,
+            include_in_token_webhook = :include_in_token_webhook,
+            include_in_email         = :include_in_email
         WHERE id = :id
     ");
 
     return $stmt->execute([
-        ':id'                     => $id,
-        ':token'                  => $token,
-        ':destination'            => $destination,
-        ':description'            => $description,
-        ':exclude_from_feed'      => $excludeFromFeed ? 1 : 0,
+        ':id'                      => $id,
+        ':token'                   => $token,
+        ':destination'             => $destination,
+        ':description'             => $description,
+        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
+        ':include_in_email'        => $includeInEmail ? 1 : 0,
     ]);
 }
 
@@ -1189,6 +1203,24 @@ function pruneExpiredAuthFailures(PDO $pdo): void
     } catch (\Throwable $e) {
         // auth_failures table may not exist on older installs — safe to ignore
     }
+}
+
+/**
+ * Returns true if an email alert has already been sent for this IP
+ * within the configured dedup window, to avoid flooding the inbox.
+ * Uses the settings table as a lightweight key-value store.
+ */
+function isEmailDedupBlocked(PDO $pdo, string $ip, int $dedupMinutes): bool
+{
+    $key  = 'email_dedup_' . md5($ip);
+    $last = (int) getSetting($pdo, $key, '0');
+    return $last > 0 && (time() - $last) < ($dedupMinutes * 60);
+}
+
+function recordEmailDedup(PDO $pdo, string $ip): void
+{
+    $key = 'email_dedup_' . md5($ip);
+    setSetting($pdo, $key, (string) time());
 }
 
 function getAsnRules(PDO $pdo): array
