@@ -882,12 +882,6 @@ function renderAdminPage(
                                         <div><span class="mono">XFF:</span> <?= h((string) ($c['x_forwarded_for'] ?? '')) ?></div>
                                     </div>
 
-                                    <div class="detail-box shodan-box" data-ip="<?= h($rowIp) ?>">
-                                        <strong>Shodan InternetDB</strong>
-                                        <div class="shodan-loading muted" style="font-size:0.8125rem;">Loading…</div>
-                                        <div class="shodan-content" style="display:none;"></div>
-                                    </div>
-
                                     <div class="detail-box">
 					<strong>Scoring</strong>
 					<?php
@@ -906,6 +900,12 @@ function renderAdminPage(
                                         <div><span class="mono">Reason:</span> <?= renderSignalReasons((string) ($c['confidence_reason'] ?? '')) ?></div>
                                         <div><span class="mono">First for token:</span> <?= !empty($c['first_for_token']) ? 'Yes' : 'No' ?></div>
                                         <div><span class="mono">Prior events for token:</span> <?= h((string) ($c['prior_events_for_token'] ?? '0')) ?></div>
+                                    </div>
+
+                                    <div class="detail-box shodan-box" data-ip="<?= h($rowIp) ?>">
+                                        <strong>Shodan InternetDB</strong>
+                                        <div class="shodan-loading muted" style="font-size:0.8125rem;">Loading…</div>
+                                        <div class="shodan-content" style="display:none;"></div>
                                     </div>
 
                                     <div class="detail-box">
