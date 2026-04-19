@@ -208,6 +208,7 @@ function renderAdminPage(
     $behavioralWindowHours = max(1, (int) getSetting($pdo, 'behavioral_window_hours', '24'));
     $behavioralMaxRows     = max(1, (int) getSetting($pdo, 'behavioral_max_rows', '25'));
     $behavioralHidden      = getSetting($pdo, 'behavioral_hidden', '0') === '1';
+    $subdomainsHidden      = getSetting($pdo, 'subdomains_hidden', '0') === '1';
 
     $ipOverrides       = getIpOverrides($pdo);
     $behavioralFlags   = getBehaviorallyFlaggedIps($pdo, $behavioralWindowHours, $behavioralMaxRows);
@@ -660,13 +661,20 @@ function renderAdminPage(
             <div style="margin-bottom: 1.25rem;"></div>
 
             <?php if ($wildcardMode && !empty($subdomainSummary) && $ipFilter === ''): ?>
+            <?php
+            if (isset($_GET['hide_subdomains'])) {
+                $showSubdomainsPanel = $_GET['hide_subdomains'] !== '1';
+            } else {
+                $showSubdomainsPanel = !$subdomainsHidden;
+            }
+            ?>
             <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
                 <h2 style="margin:0;">Subdomain Activity <?php if ($dateFrom !== '' || $dateTo !== ''): ?><span class="muted" style="font-size:0.8rem;font-weight:400;">(filtered range)</span><?php else: ?><span class="muted" style="font-size:0.8rem;font-weight:400;">(all time)</span><?php endif; ?></h2>
-                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_subdomains' => $hideSubdomains ? null : '1'])) ?>">
-                    <?= $hideSubdomains ? 'Show' : 'Hide' ?>
+                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_subdomains' => $showSubdomainsPanel ? '1' : '0'])) ?>">
+                    <?= $showSubdomainsPanel ? 'Hide' : 'Show' ?>
                 </a>
             </div>
-            <?php if (!$hideSubdomains): ?>
+            <?php if ($showSubdomainsPanel): ?>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -1586,6 +1594,14 @@ function renderAdminPage(
 		           <span>Hide Behavioral Flags panel by default</span>
 		       </label>
 		       <p class="muted" style="margin-top: 4px;">When enabled, the panel starts collapsed on page load. You can still expand it manually.</p>
+		   </div>
+
+		   <div style="margin-bottom: 12px; margin-top: 4px;">
+		       <label style="display: inline-flex; align-items: center; gap: 6px;">
+		           <input type="checkbox" name="subdomains_hidden" value="1" <?= $subdomainsHidden ? 'checked' : '' ?>>
+		           <span>Hide Subdomain Activity panel by default</span>
+		       </label>
+		       <p class="muted" style="margin-top: 4px;">When enabled, the subdomain summary starts collapsed on page load. Only applies when Wildcard DNS mode is on.</p>
 		   </div>
 
 		   <label for="webhook_url">Threat Webhook URL</label>
