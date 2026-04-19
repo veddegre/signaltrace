@@ -183,6 +183,15 @@ if (handleAdminActions($pdo, $path)) {
 }
 
 /* ============================================================
+   ADMIN GET ENDPOINTS
+   ============================================================ */
+if ($path === '/admin/webhook-preset') {
+    requireAdminAuth();
+    handleWebhookPreset();
+    exit;
+}
+
+/* ============================================================
    PIXEL TRACKING
    ============================================================ */
 if ($pixelEnabled && preg_match('#^/pixel/(.+)\.gif$#', $path)) {
@@ -233,7 +242,11 @@ $reserved = [
     '/admin/delete-country-rule',
     '/admin/save-threat-feed-settings',
     '/admin/save-retention-settings',
+    '/admin/save-rate-limit-settings',
     '/admin/run-cleanup',
+    '/admin/test-threat-webhook',
+    '/admin/test-token-webhook',
+    '/admin/webhook-preset',
     '/health',
     '/admin.css',
     '/favicon.ico',
