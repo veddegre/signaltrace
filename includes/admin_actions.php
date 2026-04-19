@@ -221,6 +221,7 @@ function handleUpdateLink(PDO $pdo): void
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed       = isset($_POST['exclude_from_feed'])         && $_POST['exclude_from_feed']         === '1';
+    $forceIncludeInFeed    = isset($_POST['force_include_in_feed'])     && $_POST['force_include_in_feed']     === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook'])  && $_POST['include_in_token_webhook']  === '1';
     $includeInEmail        = isset($_POST['include_in_email'])          && $_POST['include_in_email']          === '1';
 
@@ -251,7 +252,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -526,6 +527,7 @@ function handleCreateLink(PDO $pdo): void
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed       = isset($_POST['exclude_from_feed'])        && $_POST['exclude_from_feed']        === '1';
+    $forceIncludeInFeed    = isset($_POST['force_include_in_feed'])    && $_POST['force_include_in_feed']    === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
     $includeInEmail        = isset($_POST['include_in_email'])         && $_POST['include_in_email']         === '1';
 
@@ -549,7 +551,7 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed);
         header('Location: /admin', true, 302);
         exit;
     } catch (Throwable $e) {
