@@ -1,5 +1,11 @@
 # Changelog
 
+--
+
+## [v2.6.1] — April 19, 2026
+
+Fixed README Docker environment variable table — The email alerting note incorrectly stated that SMTP credentials are not stored in .env. Corrected to reflect that EMAIL_SMTP_* variables are set in .env and written by the entrypoint into config.local.php as PHP constants, where they are never stored in the database or exposed through the admin UI.
+
 ---
 
 ## [2.6.0] — April 19, 2026
