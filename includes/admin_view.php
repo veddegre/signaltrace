@@ -1887,6 +1887,7 @@ function renderAdminPage(
 
                         <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-top: 0.75rem; margin-bottom: 0.5rem;">Threat Intel Formats</strong>
                         <p class="muted" style="margin-bottom: 0.5rem;">Full enriched exports with classification, score, org, country, and timestamps. Both IPv4 and IPv6 included. Authenticate with admin Basic Auth or the export API token.</p>
+                        <p class="muted" style="margin-bottom: 0.5rem;"><strong>Note:</strong> MISP and STIX exports are capped at <strong>bot and suspicious</strong> classifications only, regardless of the threat feed minimum confidence setting above. Uncertain and human-classified IPs are excluded from intel formats since these are consumed by platforms that act automatically. Tokens with "Always include in threat feed" enabled are also capped at suspicious for intel formats.</p>
                         <?php
                         $intelFeeds = [
                             'MISP Event'  => '/feed/misp.json',
