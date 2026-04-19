@@ -209,6 +209,21 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleDeleteCountryRule($pdo);
             return true;
 
+        case '/admin/test-threat-webhook':
+            requireAdminAuth();
+            handleTestWebhook($pdo, 'threat');
+            return true;
+
+        case '/admin/test-token-webhook':
+            requireAdminAuth();
+            handleTestWebhook($pdo, 'token');
+            return true;
+
+        case '/admin/webhook-preset':
+            requireAdminAuth();
+            handleWebhookPreset();
+            return true;
+
         default:
             return false;
     }
@@ -1070,5 +1085,54 @@ function handleDeleteCountryRule(PDO $pdo): void
     }
     deleteCountryRule($pdo, $id);
     header('Location: /admin?tab=countries', true, 302);
+    exit;
+}
+
+/**
+ * Fires a test payload to the configured threat or token webhook URL.
+ * Returns JSON with 'ok' (bool) and 'message' (string) for the UI to display.
+ */
+function handleTestWebhook(PDO $pdo, string $type): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'message' => 'Webhook testing is disabled in demo mode.']);
+        exit;
+    }
+
+    $urlKey      = $type === 'token' ? 'token_webhook_url'      : 'webhook_url';
+    $templateKey = $type === 'token' ? 'token_webhook_template' : 'webhook_template';
+
+    $url      = (string) getSetting($pdo, $urlKey, '');
+    $template = trim((string) getSetting($pdo, $templateKey, ''));
+
+    $result = fireTestWebhook($url, $template, $type);
+
+    header('Content-Type: application/json');
+    echo json_encode($result);
+    exit;
+}
+
+/**
+ * Returns a webhook preset template as JSON for a given preset and type.
+ * Called via GET from the preset dropdown in the Settings UI.
+ */
+function handleWebhookPreset(): void
+{
+    $preset = trim((string) ($_GET['preset'] ?? ''));
+    $type   = trim((string) ($_GET['type']   ?? 'threat'));
+
+    if (!in_array($preset, ['slack', 'discord', 'teams', 'pagerduty'], true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Unknown preset.']);
+        exit;
+    }
+
+    if (!in_array($type, ['threat', 'token'], true)) {
+        $type = 'threat';
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode(['template' => webhookPresetTemplate($preset, $type)]);
     exit;
 }
