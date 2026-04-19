@@ -305,15 +305,7 @@ function handleSaveSettings(PDO $pdo): void
     $behavioralHiddenInput      = isset($_POST['behavioral_hidden'])   ? '1' : '0';
     $subdomainsHiddenInput      = isset($_POST['subdomains_hidden'])   ? '1' : '0';
     $emailEnabledInput          = $isDemo ? '0' : (isset($_POST['email_enabled']) ? '1' : '0');
-    $emailToInput               = $isDemo ? (string) getSetting($pdo, 'email_to',             '') : trim((string) ($_POST['email_to']               ?? ''));
-    $emailFromInput             = $isDemo ? (string) getSetting($pdo, 'email_from',           '') : trim((string) ($_POST['email_from']             ?? ''));
-    $emailSmtpHostInput         = $isDemo ? (string) getSetting($pdo, 'email_smtp_host',      '') : trim((string) ($_POST['email_smtp_host']        ?? ''));
-    $emailSmtpPortInput         = $isDemo ? (string) getSetting($pdo, 'email_smtp_port',    '587') : (string) max(1, min(65535, (int) ($_POST['email_smtp_port'] ?? 587)));
-    $emailSmtpUserInput         = $isDemo ? (string) getSetting($pdo, 'email_smtp_user',      '') : trim((string) ($_POST['email_smtp_user']        ?? ''));
-    $emailSmtpPassInput         = $isDemo ? '' : trim((string) ($_POST['email_smtp_pass']     ?? ''));
-    $emailSmtpEncryptionInput   = $isDemo ? (string) getSetting($pdo, 'email_smtp_encryption', 'tls')
-                                    : (in_array(($_POST['email_smtp_encryption'] ?? 'tls'), ['tls', 'ssl', 'none'], true)
-                                        ? $_POST['email_smtp_encryption'] : 'tls');
+    $emailToInput               = $isDemo ? (string) getSetting($pdo, 'email_to', '') : trim((string) ($_POST['email_to'] ?? ''));
     $emailThresholdInput        = $isDemo ? (string) getSetting($pdo, 'email_threshold', 'bot')
                                     : (in_array(($_POST['email_threshold'] ?? 'bot'), ['bot', 'suspicious', 'uncertain', 'all'], true)
                                         ? $_POST['email_threshold'] : 'bot');
@@ -438,15 +430,6 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'subdomains_hidden',        $subdomainsHiddenInput);
     setSetting($pdo, 'email_enabled',            $emailEnabledInput);
     setSetting($pdo, 'email_to',                 $emailToInput);
-    setSetting($pdo, 'email_from',               $emailFromInput);
-    setSetting($pdo, 'email_smtp_host',          $emailSmtpHostInput);
-    setSetting($pdo, 'email_smtp_port',          $emailSmtpPortInput);
-    setSetting($pdo, 'email_smtp_user',          $emailSmtpUserInput);
-    // Only overwrite the stored password if a new value was submitted.
-    if ($emailSmtpPassInput !== '') {
-        setSetting($pdo, 'email_smtp_pass', $emailSmtpPassInput);
-    }
-    setSetting($pdo, 'email_smtp_encryption',    $emailSmtpEncryptionInput);
     setSetting($pdo, 'email_threshold',          $emailThresholdInput);
     setSetting($pdo, 'email_dedup_minutes',      $emailDedupMinutesInput);
     setSetting($pdo, 'display_min_score',       $displayMinScoreInput);
