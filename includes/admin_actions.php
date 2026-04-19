@@ -304,18 +304,20 @@ function handleSaveSettings(PDO $pdo): void
     $behavioralMaxRowsInput     = (string) max(1, min(200, (int) ($_POST['behavioral_max_rows']     ?? 25)));
     $behavioralHiddenInput      = isset($_POST['behavioral_hidden'])   ? '1' : '0';
     $subdomainsHiddenInput      = isset($_POST['subdomains_hidden'])   ? '1' : '0';
-    $emailEnabledInput          = isset($_POST['email_enabled'])       ? '1' : '0';
-    $emailToInput               = trim((string) ($_POST['email_to']               ?? ''));
-    $emailFromInput             = trim((string) ($_POST['email_from']             ?? ''));
-    $emailSmtpHostInput         = trim((string) ($_POST['email_smtp_host']        ?? ''));
-    $emailSmtpPortInput         = (string) max(1, min(65535, (int) ($_POST['email_smtp_port'] ?? 587)));
-    $emailSmtpUserInput         = trim((string) ($_POST['email_smtp_user']        ?? ''));
-    $emailSmtpPassInput         = trim((string) ($_POST['email_smtp_pass']        ?? ''));
-    $emailSmtpEncryptionInput   = in_array(($_POST['email_smtp_encryption'] ?? 'tls'), ['tls', 'ssl', 'none'], true)
-                                    ? $_POST['email_smtp_encryption'] : 'tls';
-    $emailThresholdInput        = in_array(($_POST['email_threshold'] ?? 'bot'), ['bot', 'suspicious', 'uncertain', 'all'], true)
-                                    ? $_POST['email_threshold'] : 'bot';
-    $emailDedupMinutesInput     = (string) max(1, (int) ($_POST['email_dedup_minutes'] ?? 60));
+    $emailEnabledInput          = $isDemo ? '0' : (isset($_POST['email_enabled']) ? '1' : '0');
+    $emailToInput               = $isDemo ? (string) getSetting($pdo, 'email_to',             '') : trim((string) ($_POST['email_to']               ?? ''));
+    $emailFromInput             = $isDemo ? (string) getSetting($pdo, 'email_from',           '') : trim((string) ($_POST['email_from']             ?? ''));
+    $emailSmtpHostInput         = $isDemo ? (string) getSetting($pdo, 'email_smtp_host',      '') : trim((string) ($_POST['email_smtp_host']        ?? ''));
+    $emailSmtpPortInput         = $isDemo ? (string) getSetting($pdo, 'email_smtp_port',    '587') : (string) max(1, min(65535, (int) ($_POST['email_smtp_port'] ?? 587)));
+    $emailSmtpUserInput         = $isDemo ? (string) getSetting($pdo, 'email_smtp_user',      '') : trim((string) ($_POST['email_smtp_user']        ?? ''));
+    $emailSmtpPassInput         = $isDemo ? '' : trim((string) ($_POST['email_smtp_pass']     ?? ''));
+    $emailSmtpEncryptionInput   = $isDemo ? (string) getSetting($pdo, 'email_smtp_encryption', 'tls')
+                                    : (in_array(($_POST['email_smtp_encryption'] ?? 'tls'), ['tls', 'ssl', 'none'], true)
+                                        ? $_POST['email_smtp_encryption'] : 'tls');
+    $emailThresholdInput        = $isDemo ? (string) getSetting($pdo, 'email_threshold', 'bot')
+                                    : (in_array(($_POST['email_threshold'] ?? 'bot'), ['bot', 'suspicious', 'uncertain', 'all'], true)
+                                        ? $_POST['email_threshold'] : 'bot');
+    $emailDedupMinutesInput     = $isDemo ? (string) getSetting($pdo, 'email_dedup_minutes', '60') : (string) max(1, (int) ($_POST['email_dedup_minutes'] ?? 60));
     $displayMinScoreInput      = trim((string) ($_POST['display_min_score']   ?? '20'));
     $pageSizeInput             = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
     $autoRefreshInput          = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
