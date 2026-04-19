@@ -687,7 +687,7 @@ function renderAdminPage(
                     <?php foreach ($subdomainSummary as $sub): ?>
                         <tr>
                             <td class="mono">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['host' => $sub['host']])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['host' => $sub['subdomain']])) ?>">
                                     <?= h($sub['subdomain']) ?>
                                 </a>
                             </td>
@@ -1703,6 +1703,26 @@ function renderAdminPage(
 		   <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
 		   <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 1rem;">Email Alerting</strong>
 
+		   <?php
+		   $smtpConfigured = defined('EMAIL_SMTP_HOST') && EMAIL_SMTP_HOST !== ''
+		                  && defined('EMAIL_SMTP_USER') && EMAIL_SMTP_USER !== ''
+		                  && defined('EMAIL_SMTP_PASS') && EMAIL_SMTP_PASS !== '';
+		   ?>
+
+		   <?php if ($smtpConfigured): ?>
+
+		   <div style="padding: 0.75rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem;">
+		       <p class="muted" style="margin-bottom: 0.5rem;">SMTP credentials are configured in <code>config.local.php</code>.</p>
+		       <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+		           <span class="badge badge-human">Host: <?= h((string) EMAIL_SMTP_HOST) ?></span>
+		           <span class="badge badge-human">Port: <?= defined('EMAIL_SMTP_PORT') ? (int) EMAIL_SMTP_PORT : 587 ?></span>
+		           <span class="badge badge-human">Encryption: <?= defined('EMAIL_SMTP_ENCRYPTION') ? h((string) EMAIL_SMTP_ENCRYPTION) : 'tls' ?></span>
+		           <span class="badge badge-human">User: <?= h((string) EMAIL_SMTP_USER) ?></span>
+		           <span class="badge badge-human">From: <?= defined('EMAIL_SMTP_FROM') && EMAIL_SMTP_FROM !== '' ? h((string) EMAIL_SMTP_FROM) : '(same as user)' ?></span>
+		           <span class="badge badge-human">Password: ••••••••</span>
+		       </div>
+		   </div>
+
 		   <div style="margin-bottom: 12px;">
 		       <label style="display: inline-flex; align-items: center; gap: 6px;">
 		           <?php if ($isDemo): ?>
@@ -1722,38 +1742,6 @@ function renderAdminPage(
 		       <input id="email_to" type="email" name="email_to" value="<?= h((string) getSetting($pdo, 'email_to', '')) ?>" placeholder="alerts@yourdomain.example">
 		   <?php endif; ?>
 
-		   <label for="email_to">Recipient Address</label>
-		   <?php if ($isDemo): ?>
-		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_to', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
-		   <?php else: ?>
-		       <input id="email_to" type="email" name="email_to" value="<?= h((string) getSetting($pdo, 'email_to', '')) ?>" placeholder="alerts@yourdomain.example">
-		   <?php endif; ?>
-
-		   <?php
-		   $smtpConfigured = defined('EMAIL_SMTP_HOST') && EMAIL_SMTP_HOST !== ''
-		                  && defined('EMAIL_SMTP_USER') && EMAIL_SMTP_USER !== ''
-		                  && defined('EMAIL_SMTP_PASS') && EMAIL_SMTP_PASS !== '';
-		   ?>
-		   <label>SMTP Configuration</label>
-		   <?php if ($smtpConfigured): ?>
-		   <div style="padding: 0.75rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.75rem;">
-		       <p class="muted" style="margin-bottom: 0.5rem;">SMTP credentials are configured in <code>config.local.php</code>.</p>
-		       <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
-		           <span class="badge badge-human">Host: <?= h((string) EMAIL_SMTP_HOST) ?></span>
-		           <span class="badge badge-human">Port: <?= defined('EMAIL_SMTP_PORT') ? (int) EMAIL_SMTP_PORT : 587 ?></span>
-		           <span class="badge badge-human">Encryption: <?= defined('EMAIL_SMTP_ENCRYPTION') ? h((string) EMAIL_SMTP_ENCRYPTION) : 'tls' ?></span>
-		           <span class="badge badge-human">User: <?= h((string) EMAIL_SMTP_USER) ?></span>
-		           <span class="badge badge-human">From: <?= defined('EMAIL_SMTP_FROM') && EMAIL_SMTP_FROM !== '' ? h((string) EMAIL_SMTP_FROM) : '(same as user)' ?></span>
-		           <span class="badge badge-human">Password: ••••••••</span>
-		       </div>
-		   </div>
-		   <?php else: ?>
-		   <div style="padding: 0.75rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.75rem;">
-		       <span class="badge badge-suspicious">Not configured</span>
-		       <p class="muted" style="margin-top: 0.5rem; margin-bottom: 0;">SMTP credentials must be set in <code>config.local.php</code> — they are not stored in the database. Define <code>EMAIL_SMTP_HOST</code>, <code>EMAIL_SMTP_PORT</code>, <code>EMAIL_SMTP_ENCRYPTION</code>, <code>EMAIL_SMTP_USER</code>, <code>EMAIL_SMTP_PASS</code>, and <code>EMAIL_SMTP_FROM</code> as constants. See <code>config.local.php.example</code> for the format. Email alerting will not send until these are configured.</p>
-		   </div>
-		   <?php endif; ?>
-
 		   <label for="email_threshold">Alert Threshold</label>
 		   <?php $emailThreshold = (string) getSetting($pdo, 'email_threshold', 'bot'); ?>
 		   <select id="email_threshold" name="email_threshold">
@@ -1768,6 +1756,14 @@ function renderAdminPage(
 		   <input id="email_dedup_minutes" type="number" min="1" name="email_dedup_minutes" value="<?= h((string) getSetting($pdo, 'email_dedup_minutes', '60')) ?>">
 		   <p class="muted">Suppresses repeat alerts for the same IP within this window. Default 60 minutes.</p>
 
+		   <?php else: ?>
+
+		   <div style="padding: 0.75rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.75rem;">
+		       <span class="badge badge-suspicious">Not configured</span>
+		       <p class="muted" style="margin-top: 0.5rem; margin-bottom: 0;">SMTP credentials must be set in <code>config.local.php</code> — they are not stored in the database. Define <code>EMAIL_SMTP_HOST</code>, <code>EMAIL_SMTP_PORT</code>, <code>EMAIL_SMTP_ENCRYPTION</code>, <code>EMAIL_SMTP_USER</code>, <code>EMAIL_SMTP_PASS</code>, and <code>EMAIL_SMTP_FROM</code> as constants. See <code>config.local.php.example</code> for the format. Run <code>setup.sh</code> to be prompted for these values. Email alerting will not send until SMTP is configured.</p>
+		   </div>
+
+		   <?php endif; ?>
 
 		   <select id="export_min_confidence" name="export_min_confidence">
 		       <option value="human"        <?= $exportMinConf === 'human'        ? 'selected' : '' ?>>human</option>
