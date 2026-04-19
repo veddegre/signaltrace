@@ -1199,3 +1199,223 @@ function fireEmailAlert(PDO $pdo, array $requestData, string $type = 'threat'): 
         error_log('SignalTrace: email alert failed — ' . $e->getMessage());
     }
 }
+
+/* ======================================================
+   WEBHOOK PRESET TEMPLATES
+   ====================================================== */
+
+/**
+ * Returns the JSON template string for a named webhook preset.
+ * Used to pre-populate the template textarea when a preset is selected.
+ *
+ * @param  string $preset  'slack'|'discord'|'teams'|'pagerduty'
+ * @param  string $type    'threat'|'token'
+ * @return string          JSON template with {{placeholder}} syntax
+ */
+function webhookPresetTemplate(string $preset, string $type): string
+{
+    $event  = $type === 'token' ? 'signaltrace_token_hit' : 'signaltrace_alert';
+    $emoji  = $type === 'token' ? '🔔' : '🚨';
+    $title  = $type === 'token' ? 'SignalTrace Token Hit' : 'SignalTrace Threat Alert';
+    $color  = $type === 'token' ? '#4f78f1' : '#e53e3e';
+
+    return match ($preset) {
+        'slack', 'discord' => json_encode([
+            'text'        => "$emoji *$title*",
+            'attachments' => [[
+                'color'  => $color,
+                'fields' => [
+                    ['title' => 'IP',      'value' => '{{ip}}',       'short' => true],
+                    ['title' => 'Token',   'value' => '{{token}}',    'short' => true],
+                    ['title' => 'Label',   'value' => '{{label}}',    'short' => true],
+                    ['title' => 'Score',   'value' => '{{score}}',    'short' => true],
+                    ['title' => 'Org/ASN', 'value' => '{{org}} (AS{{asn}})', 'short' => true],
+                    ['title' => 'Country', 'value' => '{{country}}',  'short' => true],
+                    ['title' => 'Signals', 'value' => '{{triggers}}', 'short' => false],
+                    ['title' => 'UA',      'value' => '{{ua}}',       'short' => false],
+                    ['title' => 'Time',    'value' => '{{time}}',     'short' => true],
+                ],
+            ]],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+
+        'teams' => json_encode([
+            'type'       => 'message',
+            'attachments' => [[
+                'contentType' => 'application/vnd.microsoft.card.adaptive',
+                'content'     => [
+                    '$schema' => 'http://adaptivecards.io/schemas/adaptive-card.json',
+                    'type'    => 'AdaptiveCard',
+                    'version' => '1.4',
+                    'body'    => [
+                        ['type' => 'TextBlock', 'size' => 'Medium', 'weight' => 'Bolder',
+                         'text' => "$emoji $title"],
+                        ['type' => 'FactSet', 'facts' => [
+                            ['title' => 'IP',      'value' => '{{ip}}'],
+                            ['title' => 'Token',   'value' => '{{token}}'],
+                            ['title' => 'Label',   'value' => '{{label}}'],
+                            ['title' => 'Score',   'value' => '{{score}}'],
+                            ['title' => 'Org/ASN', 'value' => '{{org}} (AS{{asn}})'],
+                            ['title' => 'Country', 'value' => '{{country}}'],
+                            ['title' => 'Signals', 'value' => '{{triggers}}'],
+                            ['title' => 'UA',      'value' => '{{ua}}'],
+                            ['title' => 'Time',    'value' => '{{time}}'],
+                        ]],
+                    ],
+                ],
+            ]],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+
+        'pagerduty' => json_encode([
+            'routing_key'  => 'YOUR_PAGERDUTY_INTEGRATION_KEY',
+            'event_action' => 'trigger',
+            'payload'      => [
+                'summary'   => "$title — {{label}} from {{ip}}",
+                'severity'  => 'error',
+                'source'    => '{{ip}}',
+                'timestamp' => '{{time}}',
+                'custom_details' => [
+                    'token'    => '{{token}}',
+                    'label'    => '{{label}}',
+                    'score'    => '{{score}}',
+                    'org'      => '{{org}}',
+                    'asn'      => '{{asn}}',
+                    'country'  => '{{country}}',
+                    'ua'       => '{{ua}}',
+                    'triggers' => '{{triggers}}',
+                ],
+            ],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+
+        default => '',
+    };
+}
+
+/* ======================================================
+   WEBHOOK TEST
+   ====================================================== */
+
+/**
+ * Fires a clearly-labelled test payload to a webhook URL.
+ * Uses the stored template if one is set, otherwise sends generic JSON.
+ * Returns an array with 'ok' (bool) and 'message' (string).
+ *
+ * @param  string $url       Webhook URL to POST to
+ * @param  string $template  Stored template (may be empty)
+ * @param  string $type      'threat'|'token'
+ * @return array{ok: bool, message: string}
+ */
+function fireTestWebhook(string $url, string $template, string $type): array
+{
+    if ($url === '' || !isSafeRedirectUrl($url)) {
+        return ['ok' => false, 'message' => 'No valid webhook URL configured.'];
+    }
+
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    if ($host !== '' && isPrivateOrLoopbackHost($host)) {
+        return ['ok' => false, 'message' => 'Webhook URL resolves to a private or loopback address.'];
+    }
+
+    $time  = date('Y-m-d H:i:s T');
+    $event = $type === 'token' ? 'signaltrace_token_hit' : 'signaltrace_alert';
+    $emoji = $type === 'token' ? '🔔' : '🚨';
+    $title = $type === 'token' ? 'SignalTrace Token Hit' : 'SignalTrace Threat Alert';
+    $color = $type === 'token' ? '#4f78f1' : '#e53e3e';
+
+    // Dummy data — clearly labelled as a test
+    $dummy = [
+        'ip'       => '203.0.113.42',
+        'token'    => '/test/canary-path',
+        'label'    => 'bot',
+        'score'    => '12',
+        'org'      => 'TEST-ORG (SignalTrace Test)',
+        'asn'      => '64496',
+        'country'  => 'US',
+        'ua'       => 'SignalTrace-Webhook-Test/1.0',
+        'time'     => $time,
+        'triggers' => 'accept_missing, sec_fetch_missing, known_automation_ua',
+    ];
+
+    if ($template !== '') {
+        $esc = fn(string $v): string => trim((string) json_encode($v), '"');
+        $replacements = [
+            '{{ip}}'       => $esc($dummy['ip']),
+            '{{token}}'    => $esc($dummy['token']),
+            '{{label}}'    => $esc($dummy['label']),
+            '{{score}}'    => $dummy['score'],
+            '{{org}}'      => $esc($dummy['org']),
+            '{{asn}}'      => $esc($dummy['asn']),
+            '{{country}}'  => $esc($dummy['country']),
+            '{{ua}}'       => $esc($dummy['ua']),
+            '{{time}}'     => $esc($dummy['time']),
+            '{{triggers}}' => $esc($dummy['triggers']),
+        ];
+        $json = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        if (json_decode($json) === null) {
+            return ['ok' => false, 'message' => 'Stored template produced invalid JSON — fix the template before testing.'];
+        }
+    } else {
+        $isSlack = str_contains($url, 'hooks.slack.com') || str_contains($url, 'discord.com/api/webhooks');
+
+        if ($isSlack) {
+            $payload = [
+                'text'        => "$emoji *[TEST] $title*",
+                'attachments' => [[
+                    'color'  => $color,
+                    'fields' => [
+                        ['title' => 'IP',      'value' => $dummy['ip'],       'short' => true],
+                        ['title' => 'Token',   'value' => $dummy['token'],    'short' => true],
+                        ['title' => 'Label',   'value' => $dummy['label'],    'short' => true],
+                        ['title' => 'Score',   'value' => $dummy['score'],    'short' => true],
+                        ['title' => 'Org/ASN', 'value' => $dummy['org'] . ' (AS' . $dummy['asn'] . ')', 'short' => true],
+                        ['title' => 'Country', 'value' => $dummy['country'],  'short' => true],
+                        ['title' => 'Signals', 'value' => $dummy['triggers'], 'short' => false],
+                        ['title' => 'UA',      'value' => $dummy['ua'],       'short' => false],
+                        ['title' => 'Time',    'value' => $dummy['time'],     'short' => true],
+                    ],
+                ]],
+            ];
+        } else {
+            $payload = [
+                'test'     => true,
+                'event'    => $event,
+                'ip'       => $dummy['ip'],
+                'token'    => $dummy['token'],
+                'label'    => $dummy['label'],
+                'score'    => (int) $dummy['score'],
+                'triggers' => $dummy['triggers'],
+                'org'      => $dummy['org'],
+                'asn'      => $dummy['asn'],
+                'country'  => $dummy['country'],
+                'ua'       => $dummy['ua'],
+                'time'     => $dummy['time'],
+            ];
+        }
+
+        $json = (string) json_encode($payload);
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST              => true,
+        CURLOPT_POSTFIELDS        => $json,
+        CURLOPT_HTTPHEADER        => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_TIMEOUT_MS        => 5000,
+        CURLOPT_CONNECTTIMEOUT_MS => 3000,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    if ($error !== '') {
+        return ['ok' => false, 'message' => 'Connection failed: ' . $error];
+    }
+
+    if ($httpCode >= 200 && $httpCode < 300) {
+        return ['ok' => true, 'message' => "Test delivered successfully (HTTP $httpCode)."];
+    }
+
+    return ['ok' => false, 'message' => "Endpoint returned HTTP $httpCode. Check the URL and try again."];
+}
