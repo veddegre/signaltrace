@@ -269,6 +269,7 @@ function seedDefaultSettings(PDO $pdo): void
         'behavioral_window_hours'    => '24',
         'behavioral_max_rows'        => '25',
         'behavioral_hidden'          => '0',
+        'subdomains_hidden'          => '0',
     ];
 
     $stmt = $pdo->prepare("
