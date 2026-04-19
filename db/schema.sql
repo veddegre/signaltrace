@@ -206,7 +206,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('export_window_hours',       '168'),
     ('export_min_score',          '0'),
     ('redirect_rate_limit_count', '10'),
-    ('redirect_rate_limit_window','60');
+    ('redirect_rate_limit_window','60'),
+    ('wildcard_mode',             '0');
 
 -- ============================================================
 -- Default Skip Patterns
