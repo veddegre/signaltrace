@@ -317,9 +317,10 @@ function handleSaveSettings(PDO $pdo): void
     $subdomainsHiddenInput      = isset($_POST['subdomains_hidden'])   ? '1' : '0';
     $emailEnabledInput          = $isDemo ? '0' : (isset($_POST['email_enabled']) ? '1' : '0');
     $emailToInput               = $isDemo ? (string) getSetting($pdo, 'email_to', '') : trim((string) ($_POST['email_to'] ?? ''));
-    $emailThresholdInput        = $isDemo ? (string) getSetting($pdo, 'email_threshold', 'bot')
-                                    : (in_array(($_POST['email_threshold'] ?? 'bot'), ['bot', 'suspicious', 'uncertain', 'all'], true)
-                                        ? $_POST['email_threshold'] : 'bot');
+    $emailThresholdRaw          = trim((string) ($_POST['email_threshold'] ?? 'bot'));
+    $emailThresholdInput        = $isDemo
+                                    ? (string) getSetting($pdo, 'email_threshold', 'bot')
+                                    : (in_array($emailThresholdRaw, ['bot', 'suspicious', 'uncertain', 'all'], true) ? $emailThresholdRaw : 'bot');
     $emailDedupMinutesInput     = $isDemo ? (string) getSetting($pdo, 'email_dedup_minutes', '60') : (string) max(1, (int) ($_POST['email_dedup_minutes'] ?? 60));
     $displayMinScoreInput      = trim((string) ($_POST['display_min_score']   ?? '20'));
     $pageSizeInput             = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
