@@ -2257,7 +2257,7 @@ function renderAdminPage(
                     } else {
                         var score = parseInt(data.abuse_score, 10);
                         var scoreColor = score >= 75 ? 'var(--bot)' : score >= 25 ? 'var(--suspicious)' : 'var(--human)';
-                        html += '<div><span class="mono">Confidence score:</span> <strong style="color:' + scoreColor + '">' + score + '%</strong></div>';
+                        html += '<div><span class="mono">Abuse confidence:</span> <strong style="color:' + scoreColor + '">' + score + '% likelihood of malicious activity</strong></div>';
                         html += '<div><span class="mono">Total reports:</span> ' + escHtml(String(data.abuse_reports || 0)) + '</div>';
                         if (data.abuse_last_reported) {
                             html += '<div><span class="mono">Last reported:</span> ' + escHtml(data.abuse_last_reported) + '</div>';
