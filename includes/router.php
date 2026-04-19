@@ -553,18 +553,17 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     maybeFireEmailAlert($pdo, $requestData);
     maybeRunAutoCleanup($pdo);
 
-    // Background enrichment — fetch Shodan data for this IP if not cached.
+    // Background enrichment — fetch Shodan and AbuseIPDB data for this IP if not cached.
     // Runs after response is sent so it never delays the tracked request.
     $enrichIp = $requestData['ip'] ?? '';
     if ($enrichIp !== '' && !isPrivateIp($enrichIp)) {
         $cached = getEnrichment($pdo, $enrichIp);
-        if ($cached === null) {
-            // Use output buffering + fastcgi_finish_request when available so the
-            // curl fetch happens after the response is flushed to the client.
+        if ($cached === null || !isset($cached['abuse_score'])) {
             if (function_exists('fastcgi_finish_request')) {
                 fastcgi_finish_request();
             }
             fetchAndCacheEnrichment($pdo, $enrichIp);
+            fetchAndCacheAbuseIpDb($pdo, $enrichIp);
         }
     }
 
@@ -602,19 +601,30 @@ function handleEnrichment(PDO $pdo): void
     $cached = getEnrichment($pdo, $ip);
 
     if ($cached !== null) {
-        // Already in cache — decode JSON fields and return immediately
+        // Already have Shodan data — check if AbuseIPDB data is also cached
+        $abuseData = null;
+        if (!isset($cached['abuse_score'])) {
+            // Try to fetch AbuseIPDB now
+            $abuseData = fetchAndCacheAbuseIpDb($pdo, $ip);
+            if ($abuseData !== null) {
+                $cached = getEnrichment($pdo, $ip);
+            }
+        }
         echo json_encode(decodeEnrichmentRow($cached) + ['cached' => true]);
         exit;
     }
 
-    // Not cached yet — fetch now (on-demand path)
+    // Not cached yet — fetch Shodan first, then AbuseIPDB
     $result = fetchAndCacheEnrichment($pdo, $ip);
-
     if ($result === null) {
         http_response_code(503);
         echo json_encode(['error' => 'Enrichment fetch failed. Try again shortly.']);
         exit;
     }
+
+    // Now try AbuseIPDB
+    fetchAndCacheAbuseIpDb($pdo, $ip);
+    $result = getEnrichment($pdo, $ip);
 
     echo json_encode(decodeEnrichmentRow($result) + ['cached' => false]);
     exit;
