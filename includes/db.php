@@ -829,7 +829,11 @@ function getRecentClicksAdvancedFilteredPaged(
         SELECT
             c.*,
             l.description,
-            l.destination
+            l.destination,
+            l.force_include_in_feed,
+            l.include_in_email,
+            l.exclude_from_feed,
+            l.include_in_token_webhook
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
         WHERE 1 = 1
@@ -1411,7 +1415,9 @@ function exportClicks(
     $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
 
     $sql = "
-        SELECT c.*, l.description, l.destination
+        SELECT c.*, l.description, l.destination,
+               l.force_include_in_feed, l.include_in_email,
+               l.exclude_from_feed, l.include_in_token_webhook
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
         WHERE c.clicked_at >= datetime('now', ?)
