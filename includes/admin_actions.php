@@ -1122,7 +1122,7 @@ function handleWebhookPreset(): void
     $preset = trim((string) ($_GET['preset'] ?? ''));
     $type   = trim((string) ($_GET['type']   ?? 'threat'));
 
-    if (!in_array($preset, ['slack', 'discord', 'teams', 'pagerduty'], true)) {
+    if (!in_array($preset, ['slack', 'discord', 'teams', 'pagerduty', 'custom'], true)) {
         http_response_code(400);
         echo json_encode(['error' => 'Unknown preset.']);
         exit;
