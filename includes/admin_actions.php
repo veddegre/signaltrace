@@ -222,6 +222,7 @@ function handleUpdateLink(PDO $pdo): void
     $description = trim((string) ($_POST['description'] ?? ''));
     $excludeFromFeed       = isset($_POST['exclude_from_feed'])         && $_POST['exclude_from_feed']         === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook'])  && $_POST['include_in_token_webhook']  === '1';
+    $includeInEmail        = isset($_POST['include_in_email'])          && $_POST['include_in_email']          === '1';
 
     if ($id <= 0) {
         http_response_code(400);
@@ -250,7 +251,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -303,6 +304,18 @@ function handleSaveSettings(PDO $pdo): void
     $behavioralMaxRowsInput     = (string) max(1, min(200, (int) ($_POST['behavioral_max_rows']     ?? 25)));
     $behavioralHiddenInput      = isset($_POST['behavioral_hidden'])   ? '1' : '0';
     $subdomainsHiddenInput      = isset($_POST['subdomains_hidden'])   ? '1' : '0';
+    $emailEnabledInput          = isset($_POST['email_enabled'])       ? '1' : '0';
+    $emailToInput               = trim((string) ($_POST['email_to']               ?? ''));
+    $emailFromInput             = trim((string) ($_POST['email_from']             ?? ''));
+    $emailSmtpHostInput         = trim((string) ($_POST['email_smtp_host']        ?? ''));
+    $emailSmtpPortInput         = (string) max(1, min(65535, (int) ($_POST['email_smtp_port'] ?? 587)));
+    $emailSmtpUserInput         = trim((string) ($_POST['email_smtp_user']        ?? ''));
+    $emailSmtpPassInput         = trim((string) ($_POST['email_smtp_pass']        ?? ''));
+    $emailSmtpEncryptionInput   = in_array(($_POST['email_smtp_encryption'] ?? 'tls'), ['tls', 'ssl', 'none'], true)
+                                    ? $_POST['email_smtp_encryption'] : 'tls';
+    $emailThresholdInput        = in_array(($_POST['email_threshold'] ?? 'bot'), ['bot', 'suspicious', 'uncertain', 'all'], true)
+                                    ? $_POST['email_threshold'] : 'bot';
+    $emailDedupMinutesInput     = (string) max(1, (int) ($_POST['email_dedup_minutes'] ?? 60));
     $displayMinScoreInput      = trim((string) ($_POST['display_min_score']   ?? '20'));
     $pageSizeInput             = max(10, min(500, (int) ($_POST['page_size']  ?? 50)));
     $autoRefreshInput          = max(0,  (int) ($_POST['auto_refresh_secs']   ?? 0));
@@ -421,6 +434,19 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'behavioral_max_rows',      $behavioralMaxRowsInput);
     setSetting($pdo, 'behavioral_hidden',        $behavioralHiddenInput);
     setSetting($pdo, 'subdomains_hidden',        $subdomainsHiddenInput);
+    setSetting($pdo, 'email_enabled',            $emailEnabledInput);
+    setSetting($pdo, 'email_to',                 $emailToInput);
+    setSetting($pdo, 'email_from',               $emailFromInput);
+    setSetting($pdo, 'email_smtp_host',          $emailSmtpHostInput);
+    setSetting($pdo, 'email_smtp_port',          $emailSmtpPortInput);
+    setSetting($pdo, 'email_smtp_user',          $emailSmtpUserInput);
+    // Only overwrite the stored password if a new value was submitted.
+    if ($emailSmtpPassInput !== '') {
+        setSetting($pdo, 'email_smtp_pass', $emailSmtpPassInput);
+    }
+    setSetting($pdo, 'email_smtp_encryption',    $emailSmtpEncryptionInput);
+    setSetting($pdo, 'email_threshold',          $emailThresholdInput);
+    setSetting($pdo, 'email_dedup_minutes',      $emailDedupMinutesInput);
     setSetting($pdo, 'display_min_score',       $displayMinScoreInput);
     setSetting($pdo, 'page_size',               (string) $pageSizeInput);
     setSetting($pdo, 'auto_refresh_secs',       (string) $autoRefreshInput);
@@ -514,8 +540,9 @@ function handleCreateLink(PDO $pdo): void
     $token = trim((string) ($_POST['token'] ?? ''), '/');
     $destination = trim((string) ($_POST['destination'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
-    $excludeFromFeed = isset($_POST['exclude_from_feed']) && $_POST['exclude_from_feed'] === '1';
+    $excludeFromFeed       = isset($_POST['exclude_from_feed'])        && $_POST['exclude_from_feed']        === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
+    $includeInEmail        = isset($_POST['include_in_email'])         && $_POST['include_in_email']         === '1';
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -537,7 +564,7 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail);
         header('Location: /admin', true, 302);
         exit;
     } catch (Throwable $e) {
