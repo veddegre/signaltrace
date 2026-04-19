@@ -96,6 +96,23 @@ function handleThreatFeed(PDO $pdo, array $settings, string $path): void
         exit;
     }
 
+    // Intel export formats — MISP and STIX 2.1
+    if ($path === '/feed/misp.json') {
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        header('Content-Disposition: attachment; filename="signaltrace-misp-' . date('Y-m-d') . '.json"');
+        echo json_encode(buildMispExport($pdo), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($path === '/feed/stix.json') {
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        header('Content-Disposition: attachment; filename="signaltrace-stix-' . date('Y-m-d') . '.json"');
+        echo json_encode(buildStixExport($pdo), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
     // Determine address family and format from path
     // IPv4: /feed/ips.txt  /feed/ips.nginx  /feed/ips.iptables  /feed/ips.cidr
     // IPv6: /feed/ipv6.txt /feed/ipv6.nginx /feed/ipv6.iptables /feed/ipv6.cidr
