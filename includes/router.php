@@ -380,6 +380,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $tokenFilter   = trim((string) ($_GET['token']   ?? ''));
     $ipFilter      = trim((string) ($_GET['ip']      ?? ''));
     $visitorFilter = trim((string) ($_GET['visitor'] ?? ''));
+    $hostFilter    = trim((string) ($_GET['host']    ?? ''));
     $knownOnly     = isset($_GET['known'])    && $_GET['known']    === '1';
     $dateFrom      = trim((string) ($_GET['date_from'] ?? ''));
     $dateTo        = trim((string) ($_GET['date_to']   ?? ''));
@@ -400,6 +401,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $knownOnly,
         $dateFrom !== '' ? $dateFrom : null,
         $dateTo   !== '' ? $dateTo   : null,
+        $hostFilter !== '' ? $hostFilter : null,
     );
 
     $totalPages  = $pageSize > 0 ? max(1, (int) ceil($totalCount / $pageSize)) : 1;
@@ -429,6 +431,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     if ($tokenFilter   !== '') $refreshParams['token']           = $tokenFilter;
     if ($ipFilter      !== '') $refreshParams['ip']              = $ipFilter;
     if ($visitorFilter !== '') $refreshParams['visitor']         = $visitorFilter;
+    if ($hostFilter    !== '') $refreshParams['host']            = $hostFilter;
     if ($knownOnly)            $refreshParams['known']           = '1';
     if ($showTopTokens)        $refreshParams['show_top_tokens'] = '1';
     if ($showAll)              $refreshParams['show_all']        = '1';
@@ -459,6 +462,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $asnRules,
         $refreshUrl,
         $ipSummary,
+        $hostFilter,
     );
 
     exit;
