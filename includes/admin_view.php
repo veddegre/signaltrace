@@ -1072,6 +1072,14 @@ function renderAdminPage(
 	            <p class="muted" style="margin: 4px 0 0 0;">When enabled, a webhook fires each time this token is hit (deduped per visitor per 5 minutes). Requires a Token Webhook URL in Settings.</p>
 	        </div>
 
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="include_in_email" value="1" <?= ((int) ($editLink['include_in_email'] ?? 0) === 1) ? 'checked' : '' ?>>
+	                <span>Send email alert on hit</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">When enabled, an email fires each time this token is hit regardless of classification (deduped per IP per the configured window). Requires Email Alerting configured in Settings.</p>
+	        </div>
+
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 	            <button type="submit">Save Changes</button>
 	            <form method="get" action="/admin" class="inline-action-form">
@@ -1108,6 +1116,14 @@ function renderAdminPage(
                     <p class="muted" style="margin: 4px 0 0 0;">When enabled, a webhook fires each time this token is hit (deduped per visitor per 5 minutes). Requires a Token Webhook URL in Settings.</p>
                 </div>
 
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="include_in_email" value="1">
+                        <span>Send email alert on hit</span>
+                    </label>
+                    <p class="muted" style="margin: 4px 0 0 0;">When enabled, an email fires each time this token is hit regardless of classification (deduped per IP per the configured window). Requires Email Alerting configured in Settings.</p>
+                </div>
+
                 <button type="submit">Create Token</button>
             </form>
 
@@ -1123,6 +1139,7 @@ function renderAdminPage(
 			<th>Clicks</th>
                         <th>Excl. Feed</th>
                         <th>Token Webhook</th>
+                        <th>Email Alert</th>
                         <th>Path URL</th>
                         <th>Pixel URL</th>
                         <th class="actions-col">Actions</th>
@@ -1158,6 +1175,13 @@ function renderAdminPage(
 		    <td>
 		        <?php if ((int) ($link['include_in_token_webhook'] ?? 0) === 1): ?>
 		            <span class="badge badge-human" title="Token webhook fires on hit">Yes</span>
+		        <?php else: ?>
+		            No
+		        <?php endif; ?>
+		    </td>
+		    <td>
+		        <?php if ((int) ($link['include_in_email'] ?? 0) === 1): ?>
+		            <span class="badge badge-human" title="Email alert fires on hit">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
@@ -1652,7 +1676,83 @@ function renderAdminPage(
 		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
 		   </p>
 
-		   <label for="export_min_confidence">Export Minimum Confidence</label>
+		   <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+		   <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 1rem;">Email Alerting</strong>
+
+		   <div style="margin-bottom: 12px;">
+		       <label style="display: inline-flex; align-items: center; gap: 6px;">
+		           <?php if ($isDemo): ?>
+		               <input type="checkbox" disabled <?= getSetting($pdo, 'email_enabled', '0') === '1' ? 'checked' : '' ?>>
+		               <span>Email alerting enabled <span class="demo-lock-note">Not configurable in demo mode</span></span>
+		           <?php else: ?>
+		               <input type="checkbox" name="email_enabled" value="1" <?= getSetting($pdo, 'email_enabled', '0') === '1' ? 'checked' : '' ?>>
+		               <span>Email alerting enabled</span>
+		           <?php endif; ?>
+		       </label>
+		   </div>
+
+		   <label for="email_to">Recipient Address</label>
+		   <?php if ($isDemo): ?>
+		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_to', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
+		   <?php else: ?>
+		       <input id="email_to" type="email" name="email_to" value="<?= h((string) getSetting($pdo, 'email_to', '')) ?>" placeholder="alerts@yourdomain.example">
+		   <?php endif; ?>
+
+		   <label for="email_from">From Address</label>
+		   <?php if ($isDemo): ?>
+		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_from', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
+		   <?php else: ?>
+		       <input id="email_from" type="email" name="email_from" value="<?= h((string) getSetting($pdo, 'email_from', '')) ?>" placeholder="signaltrace@yourdomain.example">
+		   <?php endif; ?>
+
+		   <label for="email_smtp_host">SMTP Host</label>
+		   <?php if ($isDemo): ?>
+		       <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'email_smtp_host', '')) ?: '(not set)' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
+		   <?php else: ?>
+		       <input id="email_smtp_host" type="text" name="email_smtp_host" value="<?= h((string) getSetting($pdo, 'email_smtp_host', '')) ?>" placeholder="smtp.yourdomain.example">
+		   <?php endif; ?>
+
+		   <label for="email_smtp_port">SMTP Port</label>
+		   <input id="email_smtp_port" type="number" min="1" max="65535" name="email_smtp_port" value="<?= h((string) getSetting($pdo, 'email_smtp_port', '587')) ?>" <?= $isDemo ? 'disabled' : '' ?>>
+
+		   <label for="email_smtp_encryption">Encryption</label>
+		   <?php $emailEncryption = (string) getSetting($pdo, 'email_smtp_encryption', 'tls'); ?>
+		   <select id="email_smtp_encryption" name="email_smtp_encryption" <?= $isDemo ? 'disabled' : '' ?>>
+		       <option value="tls"  <?= $emailEncryption === 'tls'  ? 'selected' : '' ?>>TLS (STARTTLS, port 587)</option>
+		       <option value="ssl"  <?= $emailEncryption === 'ssl'  ? 'selected' : '' ?>>SSL (port 465)</option>
+		       <option value="none" <?= $emailEncryption === 'none' ? 'selected' : '' ?>>None (port 25, not recommended)</option>
+		   </select>
+
+		   <label for="email_smtp_user">SMTP Username</label>
+		   <?php if ($isDemo): ?>
+		       <div class="demo-locked-field">(not configurable in demo mode)</div>
+		   <?php else: ?>
+		       <input id="email_smtp_user" type="text" name="email_smtp_user" value="<?= h((string) getSetting($pdo, 'email_smtp_user', '')) ?>" placeholder="username or email address" autocomplete="off">
+		   <?php endif; ?>
+
+		   <label for="email_smtp_pass">SMTP Password</label>
+		   <?php if ($isDemo): ?>
+		       <div class="demo-locked-field">(not configurable in demo mode)</div>
+		   <?php else: ?>
+		       <input id="email_smtp_pass" type="password" name="email_smtp_pass" value="<?= h((string) getSetting($pdo, 'email_smtp_pass', '')) ?>" placeholder="leave blank to keep existing" autocomplete="new-password">
+		   <?php endif; ?>
+		   <p class="muted">Leave the password field blank to keep the existing value. It will only be updated when a new value is entered.</p>
+
+		   <label for="email_threshold">Alert Threshold</label>
+		   <?php $emailThreshold = (string) getSetting($pdo, 'email_threshold', 'bot'); ?>
+		   <select id="email_threshold" name="email_threshold">
+		       <option value="bot"        <?= $emailThreshold === 'bot'        ? 'selected' : '' ?>>bot only</option>
+		       <option value="suspicious" <?= $emailThreshold === 'suspicious' ? 'selected' : '' ?>>suspicious and above</option>
+		       <option value="uncertain"  <?= $emailThreshold === 'uncertain'  ? 'selected' : '' ?>>uncertain and above</option>
+		       <option value="all"        <?= $emailThreshold === 'all'        ? 'selected' : '' ?>>all hits</option>
+		   </select>
+		   <p class="muted">Minimum classification label to trigger an email alert for unknown-path hits. Per-token email alerts fire on any hit regardless of this threshold.</p>
+
+		   <label for="email_dedup_minutes">Deduplication Window (minutes)</label>
+		   <input id="email_dedup_minutes" type="number" min="1" name="email_dedup_minutes" value="<?= h((string) getSetting($pdo, 'email_dedup_minutes', '60')) ?>">
+		   <p class="muted">Suppresses repeat alerts for the same IP within this window. Default 60 minutes.</p>
+
+
 		   <select id="export_min_confidence" name="export_min_confidence">
 		       <option value="human"        <?= $exportMinConf === 'human'        ? 'selected' : '' ?>>human</option>
 		       <option value="uncertain" <?= $exportMinConf === 'uncertain' ? 'selected' : '' ?>>uncertain</option>
