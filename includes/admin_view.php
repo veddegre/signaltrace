@@ -902,12 +902,6 @@ function renderAdminPage(
                                         <div><span class="mono">Prior events for token:</span> <?= h((string) ($c['prior_events_for_token'] ?? '0')) ?></div>
                                     </div>
 
-                                    <div class="detail-box shodan-box" data-ip="<?= h($rowIp) ?>">
-                                        <strong>Shodan InternetDB</strong>
-                                        <div class="shodan-loading muted" style="font-size:0.8125rem;">Loading…</div>
-                                        <div class="shodan-content" style="display:none;"></div>
-                                    </div>
-
                                     <div class="detail-box">
                                         <strong>Request</strong>
                                         <div>
@@ -921,6 +915,12 @@ function renderAdminPage(
                                         <div><span class="mono">URI:</span> <span class="wrap"><?= h((string) ($c['request_uri'] ?? '')) ?></span></div>
                                         <div><span class="mono">Query:</span> <span class="wrap"><?= h((string) ($c['query_string'] ?? '')) ?></span></div>
                                         <div><span class="mono">Remote port:</span> <?= h((string) ($c['remote_port'] ?? '')) ?></div>
+                                    </div>
+
+                                    <div class="detail-box shodan-box" data-ip="<?= h($rowIp) ?>">
+                                        <strong>Shodan InternetDB</strong>
+                                        <div class="shodan-loading muted" style="font-size:0.8125rem;">Loading…</div>
+                                        <div class="shodan-content" style="display:none;"></div>
                                     </div>
 
                                     <div class="detail-box">
