@@ -53,15 +53,21 @@ Three new settings control the Behavioral Flagged IPs panel:
 
 The panel heading now shows a dynamic window label (e.g. "last 12h", "last 7d"). Hide/show state is preserved across pagination. A corresponding **Hide Subdomain Activity panel by default** setting was added for the new subdomain panel.
 
+### Infrastructure and Setup
+
+**Docker entrypoint** — `docker/entrypoint.sh` now writes `DEMO_MODE`, `DEMO_ADMIN_USERNAME`, `DEMO_ADMIN_PASSWORD`, `CF_ACCESS_ENABLED`, `CF_ACCESS_AUD`, `CF_ACCESS_TEAM_DOMAIN`, and all `EMAIL_SMTP_*` constants into `config.local.php` at container startup. These were previously silently ignored if set in `.env`.
+
+**`.env.example`** — All variables are now documented including Cloudflare Access (`CF_ACCESS_ENABLED`, `CF_ACCESS_AUD`, `CF_ACCESS_TEAM_DOMAIN`), demo mode (`DEMO_MODE`, `DEMO_ADMIN_USERNAME`, `DEMO_ADMIN_PASSWORD`), and email SMTP (`EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_ENCRYPTION`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, `EMAIL_SMTP_FROM`). SMTP variables are settable in `.env` — the entrypoint writes them as PHP constants into `config.local.php` so they never touch the database.
+
+**`setup.sh`** — When an existing `config.local.php` is found, the script now offers Update / Overwrite / Abort instead of always overwriting. All prompts pre-fill current values when updating. The email alerting section now shows a security warning about SMTP credential storage before prompting, and presents a Keep / Reconfigure / Remove menu when credentials already exist.
+
 ### Bug Fixes
 
-**Behavioral panel not staying hidden across pagination** — `hide_behavioral` was not preserved in pagination links. Fixed by capturing it early and including it in `buildAdminUrl()`.
+**Subdomain summary panel grouping** — The subdomain activity panel was grouping by raw `Host` header value, so IPs appearing under multiple Host variants created separate rows. The panel now aggregates by extracted subdomain label in PHP. Same-subdomain rows are correctly merged.
 
-**Missing spacing below behavioral panel when hidden** — A consistent spacer is now rendered after the behavioral section regardless of visibility state.
+**Wildcard host filter** — The host filter in the activity feed was doing a plain `LIKE` match against the raw host column. It now correctly handles `*` (no constraint), `(root)` (exact base domain), short subdomain labels (resolves to `label.basedomain`), and external hosts.
 
-**Stray backtick parse error** — A backtick was inserted by the GitHub web editor when committing PHP files, causing a parse error. Resolved in the clean output file.
-
-**Demo countdown using wrong time reference** — The banner countdown now takes the minimum of `last_reset_time + 3600` and the next top-of-the-hour, so manually triggered resets show an accurate countdown rather than a full 60 minutes.
+**Demo banner countdown using wrong time reference** — The countdown now takes the minimum of `last_reset_time + 3600` and the next top-of-the-hour, so manually triggered resets show an accurate remaining time rather than a full 60 minutes.
 
 ---
 
