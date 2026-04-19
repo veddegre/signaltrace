@@ -2018,15 +2018,22 @@ function exportStats(
     $sql = "
         SELECT
             COUNT(*)                                                        AS total_events,
+            COUNT(*)                                                        AS total,
             COUNT(DISTINCT c.ip)                                            AS unique_ips,
             COUNT(DISTINCT c.token)                                         AS unique_tokens,
             SUM(CASE WHEN c.confidence_label = 'bot'       THEN 1 ELSE 0 END) AS bot_events,
+            SUM(CASE WHEN c.confidence_label = 'bot'       THEN 1 ELSE 0 END) AS bot_count,
             SUM(CASE WHEN c.confidence_label = 'suspicious' THEN 1 ELSE 0 END) AS suspicious_events,
+            SUM(CASE WHEN c.confidence_label = 'suspicious' THEN 1 ELSE 0 END) AS suspicious_count,
             SUM(CASE WHEN c.confidence_label = 'uncertain'  THEN 1 ELSE 0 END) AS uncertain_events,
+            SUM(CASE WHEN c.confidence_label = 'uncertain'  THEN 1 ELSE 0 END) AS uncertain_count,
             SUM(CASE WHEN c.confidence_label = 'human'      THEN 1 ELSE 0 END) AS human_events,
+            SUM(CASE WHEN c.confidence_label = 'human'      THEN 1 ELSE 0 END) AS human_count,
             ROUND(AVG(CAST(c.confidence_score AS REAL)), 1)                AS avg_score,
+            ROUND(AVG(CAST(c.confidence_score AS REAL)), 1)                AS avg_confidence_score,
             MIN(c.confidence_score)                                        AS min_score,
-            MAX(c.confidence_score)                                        AS max_score
+            MAX(c.confidence_score)                                        AS max_score,
+            ROUND(100.0 * SUM(CASE WHEN c.confidence_label = 'bot' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) AS bot_pct
         FROM clicks c
         $where
     ";
