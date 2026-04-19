@@ -1527,3 +1527,122 @@ function fetchAndCacheEnrichment(PDO $pdo, string $ip): ?array
     saveEnrichment($pdo, $ip, $row);
     return getEnrichment($pdo, $ip);
 }
+
+/**
+ * Fetches AbuseIPDB confidence score and metadata for an IP.
+ * Respects the configured daily limit — returns null without calling the API
+ * if the limit has been reached for today.
+ * Results are cached in ip_enrichment alongside Shodan data.
+ *
+ * @return array|null  Keys: abuse_score, abuse_reports, abuse_last_reported,
+ *                     abuse_country, abuse_isp, abuse_usage_type, abuse_domain
+ *                     null if API key not set, limit reached, private IP, or fetch fails.
+ */
+function fetchAndCacheAbuseIpDb(PDO $pdo, string $ip): ?array
+{
+    if (isPrivateIp($ip)) {
+        return null;
+    }
+
+    $apiKey = (string) getSetting($pdo, 'abuseipdb_api_key', '');
+    if ($apiKey === '') {
+        return null;
+    }
+
+    $dailyLimit = max(0, (int) getSetting($pdo, 'abuseipdb_daily_limit', '500'));
+    if ($dailyLimit === 0) {
+        return null;
+    }
+
+    // Check and reset daily counter at UTC midnight
+    $today     = gmdate('Y-m-d');
+    $resetDate = (string) getSetting($pdo, 'abuseipdb_reset_date', '');
+    $usedToday = (int) getSetting($pdo, 'abuseipdb_used_today', '0');
+
+    if ($resetDate !== $today) {
+        $usedToday = 0;
+        setSetting($pdo, 'abuseipdb_used_today', '0');
+        setSetting($pdo, 'abuseipdb_reset_date', $today);
+    }
+
+    if ($usedToday >= $dailyLimit) {
+        return null;
+    }
+
+    // Check if already cached in ip_enrichment
+    $cached = getEnrichment($pdo, $ip);
+    if ($cached !== null && isset($cached['abuse_score'])) {
+        return [
+            'abuse_score'          => $cached['abuse_score'],
+            'abuse_reports'        => $cached['abuse_reports'],
+            'abuse_last_reported'  => $cached['abuse_last_reported'],
+            'abuse_country'        => $cached['abuse_country'],
+            'abuse_isp'            => $cached['abuse_isp'],
+            'abuse_usage_type'     => $cached['abuse_usage_type'],
+            'abuse_domain'         => $cached['abuse_domain'],
+        ];
+    }
+
+    // Fetch from AbuseIPDB v2
+    $url = 'https://api.abuseipdb.com/api/v2/check?' . http_build_query([
+        'ipAddress'    => $ip,
+        'maxAgeInDays' => 90,
+        'verbose'      => '',
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_TIMEOUT_MS        => 5000,
+        CURLOPT_CONNECTTIMEOUT_MS => 3000,
+        CURLOPT_HTTPHEADER        => [
+            'Accept: application/json',
+            'Key: ' . $apiKey,
+        ],
+        CURLOPT_USERAGENT         => 'SignalTrace/1.0',
+        CURLOPT_FOLLOWLOCATION    => false,
+    ]);
+
+    $body     = (string) curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    if ($error !== '') {
+        error_log("SignalTrace AbuseIPDB: curl error for $ip — $error");
+        return null;
+    }
+
+    if ($httpCode !== 200) {
+        error_log("SignalTrace AbuseIPDB: unexpected HTTP $httpCode for $ip");
+        return null;
+    }
+
+    $data = json_decode($body, true);
+    if (!is_array($data) || !isset($data['data'])) {
+        error_log("SignalTrace AbuseIPDB: invalid response for $ip");
+        return null;
+    }
+
+    $d = $data['data'];
+
+    $abuseData = [
+        'abuse_score'         => (int) ($d['abuseConfidenceScore'] ?? 0),
+        'abuse_reports'       => (int) ($d['totalReports']         ?? 0),
+        'abuse_last_reported' => (string) ($d['lastReportedAt']    ?? ''),
+        'abuse_country'       => (string) ($d['countryCode']       ?? ''),
+        'abuse_isp'           => (string) ($d['isp']               ?? ''),
+        'abuse_usage_type'    => (string) ($d['usageType']         ?? ''),
+        'abuse_domain'        => (string) ($d['domain']            ?? ''),
+    ];
+
+    // Increment daily counter
+    setSetting($pdo, 'abuseipdb_used_today', (string) ($usedToday + 1));
+
+    // Save into ip_enrichment — merge with existing Shodan data
+    $existing = getEnrichment($pdo, $ip) ?? [];
+    $merged   = array_merge($existing, $abuseData);
+    saveEnrichment($pdo, $ip, $merged);
+
+    return $abuseData;
+}
