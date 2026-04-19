@@ -123,15 +123,47 @@ else
 fi
 
 # -- Guard: existing config file -----------------------------------------------
+MODIFY_EXISTING=false
 if [ -f "$OUTPUT_FILE" ]; then
-    echo -e "${YELLOW}Warning: $(basename "$OUTPUT_FILE") already exists.${RESET}"
-    read -r -p "Overwrite it? [y/N] " overwrite
-    if [[ ! "$overwrite" =~ ^[Yy]$ ]]; then
-        echo "Aborted. Your existing file was not changed."
-        exit 0
-    fi
+    echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
+    echo ""
+    echo "  1) Update it — keep existing values as defaults, change only what you re-enter"
+    echo "  2) Overwrite it — start fresh, all values will be re-prompted"
+    echo "  3) Abort — exit without changing anything"
+    echo ""
+    read -r -p "  Choice [1]: " existing_choice
+    case "${existing_choice:-1}" in
+        2)
+            echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
+            ;;
+        3)
+            echo "Aborted. Your existing file was not changed."
+            exit 0
+            ;;
+        *)
+            MODIFY_EXISTING=true
+            echo -e "  ${GREEN}Will update existing values — press Enter to keep current value.${RESET}"
+            ;;
+    esac
     echo ""
 fi
+
+# -- Helper: read existing value from config.local.php -------------------------
+read_existing_php() {
+    local key="$1"
+    if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
+        # Extract the value from define('KEY', 'value'); or define('KEY', value);
+        grep -oP "define\('${key}',\s*'?\K[^';)]*" "$OUTPUT_FILE" 2>/dev/null | head -1
+    fi
+}
+
+# -- Helper: read existing value from .env ------------------------------------
+read_existing_env() {
+    local key="$1"
+    if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
+        grep -oP "^${key}=\"?\K[^\"]*" "$OUTPUT_FILE" 2>/dev/null | head -1
+    fi
+}
 
 # -- Helper functions ----------------------------------------------------------
 prompt() {
@@ -187,55 +219,87 @@ find_free_port() {
 # -- Shared: admin username ----------------------------------------------------
 echo -e "${BOLD}── Admin Credentials ────────────────────────────────────────${RESET}"
 echo ""
-prompt "Admin username" ADMIN_USERNAME "admin"
+_existing_username=$(read_existing_php "ADMIN_USERNAME")
+prompt "Admin username" ADMIN_USERNAME "${_existing_username:-admin}"
 
 # -- Admin password ------------------------------------------------------------
 echo -e "${CYAN}Admin password${RESET}"
-echo "  Enter a password and the script will hash it for you."
-while true; do
-    read -r -s -p "  Password: " ADMIN_PASSWORD
+if [ "$MODIFY_EXISTING" = true ]; then
+    echo "  Leave blank to keep your existing password hash unchanged."
+    read -r -s -p "  New password (blank to keep existing): " ADMIN_PASSWORD
     echo ""
     if [ -z "$ADMIN_PASSWORD" ]; then
-        echo -e "  ${RED}Error: password cannot be blank.${RESET}"
-        continue
-    fi
-    read -r -s -p "  Confirm password: " ADMIN_PASSWORD_CONFIRM
-    echo ""
-    if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
-        echo -e "  ${RED}Passwords do not match. Try again.${RESET}"
+        # Keep existing hash — read it from the file
+        ADMIN_PASSWORD_HASH=$(read_existing_php "ADMIN_PASSWORD_HASH")
+        DEFER_HASH=false
+        echo -e "  ${GREEN}Keeping existing password hash.${RESET}"
         echo ""
     else
-        break
+        read -r -s -p "  Confirm new password: " ADMIN_PASSWORD_CONFIRM
+        echo ""
+        if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+            echo -e "  ${RED}Passwords do not match. Keeping existing hash.${RESET}"
+            ADMIN_PASSWORD_HASH=$(read_existing_php "ADMIN_PASSWORD_HASH")
+            ADMIN_PASSWORD=""
+            DEFER_HASH=false
+        fi
     fi
-done
+else
+    echo "  Enter a password and the script will hash it for you."
+    while true; do
+        read -r -s -p "  Password: " ADMIN_PASSWORD
+        echo ""
+        if [ -z "$ADMIN_PASSWORD" ]; then
+            echo -e "  ${RED}Error: password cannot be blank.${RESET}"
+            continue
+        fi
+        read -r -s -p "  Confirm password: " ADMIN_PASSWORD_CONFIRM
+        echo ""
+        if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+            echo -e "  ${RED}Passwords do not match. Try again.${RESET}"
+            echo ""
+        else
+            break
+        fi
+    done
+fi
 
 DEFER_HASH=false
 
-if [ "$INSTALL_TYPE" = "2" ]; then
-    echo "  Generating bcrypt hash..."
-    ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
-    echo -e "  ${GREEN}Hash generated.${RESET}"
-else
-    if command -v php &>/dev/null; then
+if [ -n "$ADMIN_PASSWORD" ]; then
+    if [ "$INSTALL_TYPE" = "2" ]; then
         echo "  Generating bcrypt hash..."
         ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
         echo -e "  ${GREEN}Hash generated.${RESET}"
-    elif python3 -c "import bcrypt" 2>/dev/null; then
-        echo "  Generating bcrypt hash..."
-        ADMIN_PASSWORD_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw('${ADMIN_PASSWORD}'.encode(), bcrypt.gensalt()).decode())")
-        echo -e "  ${GREEN}Hash generated.${RESET}"
     else
-        echo -e "  ${YELLOW}PHP not found — hash will be generated from the container after build.${RESET}"
-        ADMIN_PASSWORD_HASH="__DEFER__"
-        DEFER_HASH=true
+        if command -v php &>/dev/null; then
+            echo "  Generating bcrypt hash..."
+            ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
+            echo -e "  ${GREEN}Hash generated.${RESET}"
+        elif python3 -c "import bcrypt" 2>/dev/null; then
+            echo "  Generating bcrypt hash..."
+            ADMIN_PASSWORD_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw('${ADMIN_PASSWORD}'.encode(), bcrypt.gensalt()).decode())")
+            echo -e "  ${GREEN}Hash generated.${RESET}"
+        else
+            echo -e "  ${YELLOW}PHP not found — hash will be generated from the container after build.${RESET}"
+            ADMIN_PASSWORD_HASH="__DEFER__"
+            DEFER_HASH=true
+        fi
     fi
+    echo ""
 fi
-echo ""
 
 # -- Visitor hash salt ---------------------------------------------------------
 echo -e "${CYAN}Visitor hash salt${RESET}"
-echo "  Used to anonymise visitor fingerprints. Leave blank to auto-generate."
-read -r -p "  Value (leave blank to auto-generate): " VISITOR_HASH_SALT
+_existing_salt=$(read_existing_php "VISITOR_HASH_SALT")
+if [ -n "$_existing_salt" ]; then
+    echo "  Used to anonymise visitor fingerprints. Leave blank to keep existing."
+    read -r -p "  Value (blank to keep existing): " VISITOR_HASH_SALT
+    VISITOR_HASH_SALT="${VISITOR_HASH_SALT:-$_existing_salt}"
+else
+    echo "  Used to anonymise visitor fingerprints. Leave blank to auto-generate."
+    read -r -p "  Value (leave blank to auto-generate): " VISITOR_HASH_SALT
+fi
 
 if [ -z "$VISITOR_HASH_SALT" ]; then
     echo "  Generating salt..."
@@ -397,24 +461,118 @@ echo -e "${BOLD}── Optional Tuning ─────────────�
 echo "  Press Enter to accept defaults for all of these."
 echo ""
 
+_existing_auth_failures=$(read_existing_php "AUTH_MAX_FAILURES")
 echo -e "${CYAN}Auth lockout threshold${RESET}"
 echo "  Failed login attempts before an IP is locked out."
-read -r -p "  Value [5]: " AUTH_MAX_FAILURES_INPUT
-AUTH_MAX_FAILURES="${AUTH_MAX_FAILURES_INPUT:-5}"
+read -r -p "  Value [${_existing_auth_failures:-5}]: " AUTH_MAX_FAILURES_INPUT
+AUTH_MAX_FAILURES="${AUTH_MAX_FAILURES_INPUT:-${_existing_auth_failures:-5}}"
 echo ""
 
+_existing_lockout_secs=$(read_existing_php "AUTH_LOCKOUT_SECS")
 echo -e "${CYAN}Auth lockout duration${RESET}"
 echo "  How long a lockout lasts in seconds."
-read -r -p "  Value [900]: " AUTH_LOCKOUT_SECS_INPUT
-AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS_INPUT:-900}"
+read -r -p "  Value [${_existing_lockout_secs:-900}]: " AUTH_LOCKOUT_SECS_INPUT
+AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS_INPUT:-${_existing_lockout_secs:-900}}"
 echo ""
 
+_existing_self_referer=$(read_existing_php "SELF_REFERER_DOMAIN")
 echo -e "${CYAN}Self-referrer domain${RESET}"
 echo "  Your site's own domain (e.g. example.com). When set, requests"
 echo "  arriving at / with your domain in the Referer header receive a"
 echo "  score penalty — helps catch crawler traffic. Leave blank to disable."
-read -r -p "  Value (leave blank to skip): " SELF_REFERER_DOMAIN
+read -r -p "  Value [${_existing_self_referer:-none}]: " SELF_REFERER_DOMAIN_INPUT
+SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN_INPUT:-$_existing_self_referer}"
 echo ""
+
+# -- Email alerting (manual installs only) ------------------------------------
+EMAIL_SMTP_HOST=""
+EMAIL_SMTP_PORT="587"
+EMAIL_SMTP_USER=""
+EMAIL_SMTP_PASS=""
+EMAIL_SMTP_FROM=""
+EMAIL_SMTP_ENCRYPTION="tls"
+
+if [ "$INSTALL_TYPE" = "3" ]; then
+    _existing_smtp_host=$(read_existing_php "EMAIL_SMTP_HOST")
+    echo -e "${BOLD}── Email Alerting (optional) ────────────────────────────────${RESET}"
+    echo "  SignalTrace can send email alerts when threats are detected."
+    echo "  SMTP credentials are stored in config.local.php (not the database)"
+    echo "  so they are never exposed through the admin UI."
+    echo ""
+    if [ -n "$_existing_smtp_host" ]; then
+        echo -e "  ${CYAN}Existing SMTP host: ${_existing_smtp_host}${RESET}"
+        read -r -p "  Reconfigure email alerting? [y/N] " do_email
+    else
+        read -r -p "  Configure email alerting? [y/N] " do_email
+    fi
+    if [[ "$do_email" =~ ^[Yy]$ ]]; then
+        echo ""
+        _existing_smtp_host=$(read_existing_php "EMAIL_SMTP_HOST")
+        echo -e "${CYAN}SMTP host${RESET}"
+        read -r -p "  Value [${_existing_smtp_host:-smtp.example.com}]: " EMAIL_SMTP_HOST_INPUT
+        EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST_INPUT:-$_existing_smtp_host}"
+        echo ""
+
+        _existing_smtp_port=$(read_existing_php "EMAIL_SMTP_PORT")
+        echo -e "${CYAN}SMTP port${RESET}"
+        read -r -p "  Value [${_existing_smtp_port:-587}]: " EMAIL_SMTP_PORT_INPUT
+        EMAIL_SMTP_PORT="${EMAIL_SMTP_PORT_INPUT:-${_existing_smtp_port:-587}}"
+        echo ""
+
+        echo -e "${CYAN}SMTP encryption${RESET}"
+        echo "  1) TLS / STARTTLS (port 587, recommended)"
+        echo "  2) SSL (port 465)"
+        echo "  3) None (port 25, not recommended)"
+        read -r -p "  Choice [1]: " EMAIL_ENC_INPUT
+        case "${EMAIL_ENC_INPUT:-1}" in
+            2) EMAIL_SMTP_ENCRYPTION="ssl" ;;
+            3) EMAIL_SMTP_ENCRYPTION="none" ;;
+            *) EMAIL_SMTP_ENCRYPTION="tls" ;;
+        esac
+        echo ""
+
+        _existing_smtp_user=$(read_existing_php "EMAIL_SMTP_USER")
+        echo -e "${CYAN}SMTP username${RESET}"
+        read -r -p "  Value [${_existing_smtp_user:-}]: " EMAIL_SMTP_USER_INPUT
+        EMAIL_SMTP_USER="${EMAIL_SMTP_USER_INPUT:-$_existing_smtp_user}"
+        echo ""
+
+        echo -e "${CYAN}SMTP password${RESET}"
+        if [ -n "$(read_existing_php "EMAIL_SMTP_PASS")" ]; then
+            echo "  Leave blank to keep existing password."
+            read -r -s -p "  New password (blank to keep): " EMAIL_SMTP_PASS
+            echo ""
+            if [ -z "$EMAIL_SMTP_PASS" ]; then
+                EMAIL_SMTP_PASS=$(read_existing_php "EMAIL_SMTP_PASS")
+                echo -e "  ${GREEN}Keeping existing password.${RESET}"
+            fi
+        else
+            read -r -s -p "  Value: " EMAIL_SMTP_PASS
+            echo ""
+        fi
+        echo ""
+
+        _existing_smtp_from=$(read_existing_php "EMAIL_SMTP_FROM")
+        echo -e "${CYAN}From address${RESET}"
+        read -r -p "  Value [${_existing_smtp_from:-$EMAIL_SMTP_USER}]: " EMAIL_SMTP_FROM_INPUT
+        EMAIL_SMTP_FROM="${EMAIL_SMTP_FROM_INPUT:-${_existing_smtp_from:-$EMAIL_SMTP_USER}}"
+        echo ""
+
+        echo -e "${GREEN}Email SMTP credentials will be written to config.local.php.${RESET}"
+        echo "  Alerting must be enabled and configured in the Settings tab after install."
+        echo ""
+    elif [ -n "$_existing_smtp_host" ]; then
+        # Keep existing SMTP values unchanged
+        EMAIL_SMTP_HOST=$(read_existing_php "EMAIL_SMTP_HOST")
+        EMAIL_SMTP_PORT=$(read_existing_php "EMAIL_SMTP_PORT")
+        EMAIL_SMTP_ENCRYPTION=$(read_existing_php "EMAIL_SMTP_ENCRYPTION")
+        EMAIL_SMTP_USER=$(read_existing_php "EMAIL_SMTP_USER")
+        EMAIL_SMTP_PASS=$(read_existing_php "EMAIL_SMTP_PASS")
+        EMAIL_SMTP_FROM=$(read_existing_php "EMAIL_SMTP_FROM")
+        echo -e "  ${GREEN}Keeping existing email configuration.${RESET}"
+        echo ""
+    fi
+fi
 
 # -- Write output file ---------------------------------------------------------
 if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
@@ -459,6 +617,16 @@ EOF
         echo "define('CF_ACCESS_ENABLED',     true);" >> "$OUTPUT_FILE"
         echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" >> "$OUTPUT_FILE"
         echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" >> "$OUTPUT_FILE"
+    fi
+    if [ -n "$EMAIL_SMTP_HOST" ]; then
+        echo "" >> "$OUTPUT_FILE"
+        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" >> "$OUTPUT_FILE"
     fi
     if [ "$DEMO_MODE_ENABLED" = true ]; then
         echo "" >> "$OUTPUT_FILE"
