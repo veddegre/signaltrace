@@ -210,15 +210,40 @@ function initializeDatabase(PDO $pdo): void
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ip_enrichment (
-            ip          TEXT PRIMARY KEY,
-            ports       TEXT,
-            vulns       TEXT,
-            tags        TEXT,
-            hostnames   TEXT,
-            not_found   INTEGER NOT NULL DEFAULT 0,
-            fetched_at  TEXT NOT NULL
+            ip                   TEXT PRIMARY KEY,
+            ports                TEXT,
+            vulns                TEXT,
+            tags                 TEXT,
+            hostnames            TEXT,
+            not_found            INTEGER NOT NULL DEFAULT 0,
+            fetched_at           TEXT NOT NULL,
+            abuse_score          INTEGER,
+            abuse_reports        INTEGER,
+            abuse_last_reported  TEXT,
+            abuse_country        TEXT,
+            abuse_isp            TEXT,
+            abuse_usage_type     TEXT,
+            abuse_domain         TEXT
         )
     ");
+
+    // Add AbuseIPDB columns to existing installs
+    $abuseColumns = [
+        'abuse_score'         => 'INTEGER',
+        'abuse_reports'       => 'INTEGER',
+        'abuse_last_reported' => 'TEXT',
+        'abuse_country'       => 'TEXT',
+        'abuse_isp'           => 'TEXT',
+        'abuse_usage_type'    => 'TEXT',
+        'abuse_domain'        => 'TEXT',
+    ];
+    foreach ($abuseColumns as $col => $def) {
+        try {
+            $pdo->exec("ALTER TABLE ip_enrichment ADD COLUMN $col $def");
+        } catch (\Exception $e) {
+            // Column already exists — ignore
+        }
+    }
 
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
@@ -2400,24 +2425,46 @@ function getEnrichment(PDO $pdo, string $ip): ?array
 function saveEnrichment(PDO $pdo, string $ip, array $data): void
 {
     $stmt = $pdo->prepare("
-        INSERT INTO ip_enrichment (ip, ports, vulns, tags, hostnames, not_found, fetched_at)
-        VALUES (:ip, :ports, :vulns, :tags, :hostnames, :not_found, :fetched_at)
+        INSERT INTO ip_enrichment (
+            ip, ports, vulns, tags, hostnames, not_found, fetched_at,
+            abuse_score, abuse_reports, abuse_last_reported,
+            abuse_country, abuse_isp, abuse_usage_type, abuse_domain
+        )
+        VALUES (
+            :ip, :ports, :vulns, :tags, :hostnames, :not_found, :fetched_at,
+            :abuse_score, :abuse_reports, :abuse_last_reported,
+            :abuse_country, :abuse_isp, :abuse_usage_type, :abuse_domain
+        )
         ON CONFLICT(ip) DO UPDATE SET
-            ports      = excluded.ports,
-            vulns      = excluded.vulns,
-            tags       = excluded.tags,
-            hostnames  = excluded.hostnames,
-            not_found  = excluded.not_found,
-            fetched_at = excluded.fetched_at
+            ports                = COALESCE(excluded.ports,                ports),
+            vulns                = COALESCE(excluded.vulns,                vulns),
+            tags                 = COALESCE(excluded.tags,                 tags),
+            hostnames            = COALESCE(excluded.hostnames,            hostnames),
+            not_found            = excluded.not_found,
+            fetched_at           = excluded.fetched_at,
+            abuse_score          = COALESCE(excluded.abuse_score,          abuse_score),
+            abuse_reports        = COALESCE(excluded.abuse_reports,        abuse_reports),
+            abuse_last_reported  = COALESCE(excluded.abuse_last_reported,  abuse_last_reported),
+            abuse_country        = COALESCE(excluded.abuse_country,        abuse_country),
+            abuse_isp            = COALESCE(excluded.abuse_isp,            abuse_isp),
+            abuse_usage_type     = COALESCE(excluded.abuse_usage_type,     abuse_usage_type),
+            abuse_domain         = COALESCE(excluded.abuse_domain,         abuse_domain)
     ");
 
     $stmt->execute([
-        ':ip'         => $ip,
-        ':ports'      => $data['ports']     ?? null,
-        ':vulns'      => $data['vulns']     ?? null,
-        ':tags'       => $data['tags']      ?? null,
-        ':hostnames'  => $data['hostnames'] ?? null,
-        ':not_found'  => (int) ($data['not_found'] ?? 0),
-        ':fetched_at' => date('Y-m-d H:i:s'),
+        ':ip'                  => $ip,
+        ':ports'               => $data['ports']               ?? null,
+        ':vulns'               => $data['vulns']               ?? null,
+        ':tags'                => $data['tags']                ?? null,
+        ':hostnames'           => $data['hostnames']           ?? null,
+        ':not_found'           => (int) ($data['not_found']    ?? 0),
+        ':fetched_at'          => date('Y-m-d H:i:s'),
+        ':abuse_score'         => isset($data['abuse_score'])         ? (int) $data['abuse_score']         : null,
+        ':abuse_reports'       => isset($data['abuse_reports'])       ? (int) $data['abuse_reports']       : null,
+        ':abuse_last_reported' => $data['abuse_last_reported']        ?? null,
+        ':abuse_country'       => $data['abuse_country']              ?? null,
+        ':abuse_isp'           => $data['abuse_isp']                  ?? null,
+        ':abuse_usage_type'    => $data['abuse_usage_type']           ?? null,
+        ':abuse_domain'        => $data['abuse_domain']               ?? null,
     ]);
 }
