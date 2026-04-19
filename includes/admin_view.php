@@ -1066,6 +1066,14 @@ function renderAdminPage(
 
 	        <div style="margin-bottom: 12px;">
 	            <label style="display: inline-flex; align-items: center; gap: 6px;">
+	                <input type="checkbox" name="force_include_in_feed" value="1" <?= ((int) ($editLink['force_include_in_feed'] ?? 0) === 1) ? 'checked' : '' ?>>
+	                <span>Always include in threat feed</span>
+	            </label>
+	            <p class="muted" style="margin: 4px 0 0 0;">Any IP that hits this token is added to the threat feed regardless of classification. Useful for canary tokens where any hit is inherently suspicious. Overrides exclude if both are set.</p>
+	        </div>
+
+	        <div style="margin-bottom: 12px;">
+	            <label style="display: inline-flex; align-items: center; gap: 6px;">
 	                <input type="checkbox" name="include_in_token_webhook" value="1" <?= ((int) ($editLink['include_in_token_webhook'] ?? 0) === 1) ? 'checked' : '' ?>>
 	                <span>Fire token webhook on hit</span>
 	            </label>
@@ -1110,6 +1118,14 @@ function renderAdminPage(
 
                 <div style="margin-bottom: 12px;">
                     <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="force_include_in_feed" value="1">
+                        <span>Always include in threat feed</span>
+                    </label>
+                    <p class="muted" style="margin: 4px 0 0 0;">Any IP that hits this token is added to the threat feed regardless of classification. Useful for canary tokens where any hit is inherently suspicious. Overrides exclude if both are set.</p>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
                         <input type="checkbox" name="include_in_token_webhook" value="1">
                         <span>Fire token webhook on hit</span>
                     </label>
@@ -1138,6 +1154,7 @@ function renderAdminPage(
                         <th>Active</th>
 			<th>Clicks</th>
                         <th>Excl. Feed</th>
+                        <th>Force Feed</th>
                         <th>Token Webhook</th>
                         <th>Email Alert</th>
                         <th>Path URL</th>
@@ -1168,6 +1185,13 @@ function renderAdminPage(
 		    <td>
 		        <?php if ((int) ($link['exclude_from_feed'] ?? 0) === 1): ?>
 		            <span class="badge badge-suspicious" title="IPs hitting this token are excluded from the threat feed">Yes</span>
+		        <?php else: ?>
+		            No
+		        <?php endif; ?>
+		    </td>
+		    <td>
+		        <?php if ((int) ($link['force_include_in_feed'] ?? 0) === 1): ?>
+		            <span class="badge badge-bot" title="Any IP hitting this token is always in the threat feed">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
@@ -1849,6 +1873,26 @@ function renderAdminPage(
 
                         <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-top: 0.75rem; margin-bottom: 0.5rem;">IPv6 Feeds</strong>
                         <?php foreach ($ipv6Feeds as $label => $feedPath):
+                            $fullUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . $feedPath;
+                        ?>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 90px;"><?= h($label) ?></span>
+                            <span class="mono" style="font-size: 0.75rem;"><?= h($fullUrl) ?></span>
+                            <button type="button" class="copy-button" data-copy="<?= h($fullUrl) ?>">Copy</button>
+                            <?php if ($baseUrl !== ''): ?>
+                                <a class="copy-button" href="<?= h($fullUrl) ?>" target="_blank" rel="noopener">Open</a>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+
+                        <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-top: 0.75rem; margin-bottom: 0.5rem;">Threat Intel Formats</strong>
+                        <p class="muted" style="margin-bottom: 0.5rem;">Full enriched exports with classification, score, org, country, and timestamps. Both IPv4 and IPv6 included. Authenticate with admin Basic Auth or the export API token.</p>
+                        <?php
+                        $intelFeeds = [
+                            'MISP Event'  => '/feed/misp.json',
+                            'STIX 2.1'    => '/feed/stix.json',
+                        ];
+                        foreach ($intelFeeds as $label => $feedPath):
                             $fullUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . $feedPath;
                         ?>
                         <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
