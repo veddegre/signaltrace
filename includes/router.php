@@ -671,6 +671,11 @@ function handleEnrichmentRescan(PDO $pdo): void
     echo json_encode(decodeEnrichmentRow($result) + ['cached' => false]);
     exit;
 }
+
+/**
+ * Decodes JSON-encoded array fields in an enrichment row for API output.
+ */
+function decodeEnrichmentRow(array $row): array
 {
     foreach (['ports', 'vulns', 'tags', 'hostnames'] as $field) {
         if (isset($row[$field]) && is_string($row[$field])) {
