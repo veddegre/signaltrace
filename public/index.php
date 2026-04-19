@@ -175,6 +175,60 @@ if ($path === '/export/csv') {
     handleExport($pdo, 'csv');
 }
 
+if ($path === '/export/stats') {
+    requireExportAuth();
+    handleExportStats($pdo);
+    exit;
+}
+
+if ($path === '/export/stats/extended') {
+    requireExportAuth();
+    handleExportStatsExtended($pdo);
+    exit;
+}
+
+if ($path === '/export/by-ip') {
+    requireExportAuth();
+    handleExportByIp($pdo);
+    exit;
+}
+
+if ($path === '/export/by-country') {
+    requireExportAuth();
+    handleExportByCountry($pdo);
+    exit;
+}
+
+if ($path === '/export/by-token') {
+    requireExportAuth();
+    handleExportByToken($pdo);
+    exit;
+}
+
+if ($path === '/export/by-org') {
+    requireExportAuth();
+    handleExportByOrg($pdo);
+    exit;
+}
+
+if ($path === '/export/by-signal') {
+    requireExportAuth();
+    handleExportBySignal($pdo);
+    exit;
+}
+
+if ($path === '/export/behavioral') {
+    requireExportAuth();
+    handleExportBehavioralSignals($pdo);
+    exit;
+}
+
+if ($path === '/export/over-time') {
+    requireExportAuth();
+    handleExportOverTime($pdo);
+    exit;
+}
+
 /* ============================================================
    ADMIN ACTIONS (POST)
    ============================================================ */
@@ -262,6 +316,17 @@ $reserved = [
     '/feed/ipv6.cidr',
     '/export/json',
     '/export/csv',
+    '/export/stats',
+    '/export/stats/extended',
+    '/export/by-ip',
+    '/export/by-country',
+    '/export/by-token',
+    '/export/by-org',
+    '/export/by-signal',
+    '/export/behavioral',
+    '/export/over-time',
+    '/feed/misp.json',
+    '/feed/stix.json',
 ];
 
 /* ============================================================
