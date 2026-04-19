@@ -859,10 +859,25 @@ function getRecentClicksAdvancedFilteredPaged(
         $params[':visitorFilter'] = '%' . $visitorFilter . '%';
     }
 
-    if ($hostFilter !== null && $hostFilter !== '') {
-        $sql .= " AND c.host LIKE :hostFilter ";
-        $params[':hostFilter'] = '%' . $hostFilter . '%';
+    if ($hostFilter !== null && $hostFilter !== '' && $hostFilter !== '*') {
+        $baseDomain = strtolower(preg_replace('#^https?://#', '', rtrim((string) getSetting($pdo, 'base_url', ''), '/')));
+        $baseDomain = preg_replace('/:\d+$/', '', $baseDomain);
+
+        if ($hostFilter === '(root)') {
+            // Root domain — match exact base domain
+            $sql .= " AND LOWER(c.host) = :hostFilter ";
+            $params[':hostFilter'] = $baseDomain;
+        } elseif ($baseDomain !== '' && !str_contains($hostFilter, '.')) {
+            // Short subdomain label — match subdomain.basedomain
+            $sql .= " AND LOWER(c.host) LIKE :hostFilter ";
+            $params[':hostFilter'] = $hostFilter . '.' . $baseDomain;
+        } else {
+            // External host or full hostname — partial match
+            $sql .= " AND LOWER(c.host) LIKE :hostFilter ";
+            $params[':hostFilter'] = '%' . strtolower($hostFilter) . '%';
+        }
     }
+    // $hostFilter === '*' means show all — no constraint added
 
     if ($knownOnly) {
         $sql .= " AND c.link_id IS NOT NULL ";
@@ -1754,6 +1769,9 @@ function getBehaviorallyFlaggedIps(PDO $pdo, int $windowHours = 24, int $limit =
 
 function getSubdomainSummary(PDO $pdo, string $baseUrl, ?string $dateFrom = null, ?string $dateTo = null): array
 {
+    // Pull raw host rows first, then aggregate by extracted subdomain label in PHP.
+    // Grouping in SQL by host would give separate rows for the same IP appearing
+    // in different Host header variations (port suffixes, case differences, etc.).
     $sql = "
         SELECT
             host,
@@ -1778,39 +1796,54 @@ function getSubdomainSummary(PDO $pdo, string $baseUrl, ?string $dateFrom = null
         $params[':dateTo'] = $dateTo;
     }
 
-    $sql .= " GROUP BY host ORDER BY total_hits DESC LIMIT 100 ";
+    $sql .= " GROUP BY host ORDER BY total_hits DESC LIMIT 500 ";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
 
-    // Extract base domain from base URL for subdomain extraction
+    // Extract base domain from base URL for subdomain classification
     $baseDomain = strtolower(preg_replace('#^https?://#', '', rtrim($baseUrl, '/')));
+    $baseDomain = preg_replace('/:\d+$/', '', $baseDomain); // strip port if present
 
-    $result = [];
+    // Aggregate by subdomain label — multiple raw hosts can map to the same label
+    $byLabel = [];
     foreach ($rows as $row) {
-        $host      = strtolower(preg_replace('/:\d+$/', '', (string) ($row['host'] ?? '')));
-        $subdomain = '';
+        $host = strtolower(preg_replace('/:\d+$/', '', (string) ($row['host'] ?? '')));
 
         if ($host === $baseDomain) {
-            $subdomain = '(root)';
-        } elseif (str_ends_with($host, '.' . $baseDomain)) {
-            $subdomain = substr($host, 0, strlen($host) - strlen('.' . $baseDomain));
+            $label = '(root)';
+        } elseif ($baseDomain !== '' && str_ends_with($host, '.' . $baseDomain)) {
+            $label = substr($host, 0, strlen($host) - strlen('.' . $baseDomain));
         } else {
-            $subdomain = $host; // external or unrecognised host
+            $label = $host; // external or unrecognised host — use as-is
         }
 
-        $result[] = [
-            'host'       => $row['host'],
-            'subdomain'  => $subdomain,
-            'total_hits' => (int) $row['total_hits'],
-            'bot_hits'   => (int) $row['bot_hits'],
-            'first_seen' => (string) $row['first_seen'],
-            'last_seen'  => (string) $row['last_seen'],
-        ];
+        if (!isset($byLabel[$label])) {
+            $byLabel[$label] = [
+                'subdomain'  => $label,
+                'total_hits' => 0,
+                'bot_hits'   => 0,
+                'first_seen' => (string) $row['first_seen'],
+                'last_seen'  => (string) $row['last_seen'],
+            ];
+        }
+
+        $byLabel[$label]['total_hits'] += (int) $row['total_hits'];
+        $byLabel[$label]['bot_hits']   += (int) $row['bot_hits'];
+
+        // Keep earliest first_seen and latest last_seen across merged rows
+        if ($row['first_seen'] < $byLabel[$label]['first_seen']) {
+            $byLabel[$label]['first_seen'] = (string) $row['first_seen'];
+        }
+        if ($row['last_seen'] > $byLabel[$label]['last_seen']) {
+            $byLabel[$label]['last_seen'] = (string) $row['last_seen'];
+        }
     }
 
-    return $result;
+    // Sort by total_hits descending and return top 100
+    usort($byLabel, fn($a, $b) => $b['total_hits'] <=> $a['total_hits']);
+    return array_slice(array_values($byLabel), 0, 100);
 }
 
 /* ======================================================
