@@ -155,6 +155,7 @@ if ($path === '/health') {
 $feedPaths = [
     '/feed/ips.txt', '/feed/ips.nginx', '/feed/ips.iptables', '/feed/ips.cidr',
     '/feed/ipv6.txt', '/feed/ipv6.nginx', '/feed/ipv6.iptables', '/feed/ipv6.cidr',
+    '/feed/misp.json', '/feed/stix.json',
 ];
 if (in_array($path, $feedPaths, true)) {
     requireAdminAuth();
