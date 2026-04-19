@@ -144,7 +144,8 @@ function initializeDatabase(PDO $pdo): void
     }
 
     $linksColumnDefinitions = [
-        'exclude_from_feed' => 'INTEGER NOT NULL DEFAULT 0',
+        'exclude_from_feed'        => 'INTEGER NOT NULL DEFAULT 0',
+        'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -264,6 +265,7 @@ function seedDefaultSettings(PDO $pdo): void
         'export_min_confidence'      => 'suspicious',
         'export_window_hours'        => '168',
         'export_min_score'           => '0',
+        'wildcard_mode'              => '0',
     ];
 
     $stmt = $pdo->prepare("
@@ -805,6 +807,7 @@ function getRecentClicksAdvancedFilteredPaged(
     bool $knownOnly = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
+    ?string $hostFilter = null,
 ): array {
     $sql = "
         SELECT
@@ -840,6 +843,11 @@ function getRecentClicksAdvancedFilteredPaged(
         $params[':visitorFilter'] = '%' . $visitorFilter . '%';
     }
 
+    if ($hostFilter !== null && $hostFilter !== '') {
+        $sql .= " AND c.host LIKE :hostFilter ";
+        $params[':hostFilter'] = '%' . $hostFilter . '%';
+    }
+
     if ($knownOnly) {
         $sql .= " AND c.link_id IS NOT NULL ";
     }
@@ -856,7 +864,6 @@ function getRecentClicksAdvancedFilteredPaged(
 
     // COUNT query for pagination total
     $countSql  = "SELECT COUNT(*) FROM clicks c LEFT JOIN links l ON c.link_id = l.id WHERE 1 = 1";
-    // Re-use the same WHERE fragments already appended to $sql — extract them
     $whereOnly = substr($sql, strpos($sql, 'WHERE 1 = 1') + strlen('WHERE 1 = 1'));
     $countSql .= $whereOnly;
 
