@@ -882,6 +882,12 @@ function renderAdminPage(
                                         <div><span class="mono">XFF:</span> <?= h((string) ($c['x_forwarded_for'] ?? '')) ?></div>
                                     </div>
 
+                                    <div class="detail-box shodan-box" data-ip="<?= h($rowIp) ?>">
+                                        <strong>Shodan InternetDB</strong>
+                                        <div class="shodan-loading muted" style="font-size:0.8125rem;">Loading…</div>
+                                        <div class="shodan-content" style="display:none;"></div>
+                                    </div>
+
                                     <div class="detail-box">
 					<strong>Scoring</strong>
 					<?php
@@ -2118,6 +2124,104 @@ function renderAdminPage(
             if (!row) return;
             var open = row.classList.toggle('open');
             if (button) { button.textContent = open ? 'Hide' : 'Details'; }
+            if (open) { loadShodanEnrichment(row); }
+        }
+
+        /* --------------------------------------------------------
+           SHODAN ENRICHMENT
+           Fetches InternetDB data when a details panel opens.
+           Only fetches once per panel — result is cached in the DOM.
+           -------------------------------------------------------- */
+        function loadShodanEnrichment(row) {
+            var box = row.querySelector('.shodan-box');
+            if (!box) return;
+
+            // Already loaded or loading
+            if (box.dataset.loaded) return;
+            box.dataset.loaded = '1';
+
+            var ip = box.dataset.ip;
+            if (!ip) return;
+
+            var loading = box.querySelector('.shodan-loading');
+            var content = box.querySelector('.shodan-content');
+
+            fetch('/admin/enrichment?ip=' + encodeURIComponent(ip))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (loading) loading.style.display = 'none';
+                    if (!content) return;
+
+                    if (data.private) {
+                        content.innerHTML = '<span class="muted" style="font-size:0.8125rem;">Private or reserved IP — no enrichment available.</span>';
+                        content.style.display = '';
+                        return;
+                    }
+
+                    if (data.not_found && !data.ports && !data.vulns && !data.tags) {
+                        content.innerHTML = '<span class="muted" style="font-size:0.8125rem;">No data in Shodan InternetDB for this IP.</span>';
+                        content.style.display = '';
+                        return;
+                    }
+
+                    var html = '';
+                    var ports     = data.ports     || [];
+                    var vulns     = data.vulns     || [];
+                    var tags      = data.tags      || [];
+                    var hostnames = data.hostnames || [];
+
+                    if (hostnames.length > 0) {
+                        html += '<div><span class="mono">Hostnames:</span> ' + escHtml(hostnames.join(', ')) + '</div>';
+                    }
+
+                    if (ports.length > 0) {
+                        html += '<div><span class="mono">Open ports:</span> ';
+                        html += ports.map(function(p) {
+                            return '<span class="badge badge-uncertain">' + escHtml(String(p)) + '</span>';
+                        }).join(' ');
+                        html += '</div>';
+                    } else {
+                        html += '<div><span class="mono">Open ports:</span> <span class="muted">none</span></div>';
+                    }
+
+                    if (vulns.length > 0) {
+                        html += '<div><span class="mono">CVEs:</span> ';
+                        html += vulns.map(function(v) {
+                            return '<a class="copy-button" href="https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(v) + '" target="_blank" rel="noopener">' + escHtml(v) + '</a>';
+                        }).join(' ');
+                        html += '</div>';
+                    }
+
+                    if (tags.length > 0) {
+                        html += '<div><span class="mono">Tags:</span> ';
+                        html += tags.map(function(t) {
+                            return '<span class="badge badge-suspicious">' + escHtml(t) + '</span>';
+                        }).join(' ');
+                        html += '</div>';
+                    }
+
+                    if (data.fetched_at) {
+                        html += '<div style="margin-top:6px;"><span class="muted" style="font-size:0.75rem;">Fetched: ' + escHtml(data.fetched_at) + (data.cached ? ' (cached)' : '') + '</span></div>';
+                    }
+
+                    content.innerHTML = html;
+                    content.style.display = '';
+                })
+                .catch(function() {
+                    if (loading) loading.style.display = 'none';
+                    if (content) {
+                        content.innerHTML = '<span class="muted" style="font-size:0.8125rem;">Enrichment unavailable.</span>';
+                        content.style.display = '';
+                    }
+                });
+        }
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
         }
 
         /* --------------------------------------------------------
