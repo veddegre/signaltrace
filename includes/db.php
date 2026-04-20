@@ -2015,25 +2015,28 @@ function buildExportWhere(
             default => ['suspicious', 'bot'],
         };
 
-        $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
-        $where .= " AND c.clicked_at >= datetime('now', ?)";
-        $where .= " AND c.confidence_label IN ($placeholders)";
-        $where .= " AND (c.confidence_score IS NULL OR c.confidence_score >= ?)";
+        $labelPlaceholders = [];
+        foreach ($allowedLabels as $i => $label) {
+            $key                = ':label' . $i;
+            $labelPlaceholders[] = $key;
+            $params[$key]       = $label;
+        }
 
-        $params = array_merge(
-            ['-' . $windowHours . ' hours'],
-            $allowedLabels,
-            [$minScore],
-        );
+        $where .= " AND c.clicked_at >= datetime('now', :exportWindow)";
+        $where .= " AND c.confidence_label IN (" . implode(',', $labelPlaceholders) . ")";
+        $where .= " AND (c.confidence_score IS NULL OR c.confidence_score >= :minScore)";
+
+        $params[':exportWindow'] = '-' . $windowHours . ' hours';
+        $params[':minScore']     = $minScore;
     }
 
     if ($fromMs !== null) {
-        $where   .= ' AND c.clicked_at_unix_ms >= :fromMs';
-        $params[':fromMs'] = $fromMs;
+        $where              .= ' AND c.clicked_at_unix_ms >= :fromMs';
+        $params[':fromMs']   = $fromMs;
     }
     if ($toMs !== null) {
-        $where   .= ' AND c.clicked_at_unix_ms <= :toMs';
-        $params[':toMs'] = $toMs;
+        $where             .= ' AND c.clicked_at_unix_ms <= :toMs';
+        $params[':toMs']    = $toMs;
     }
 
     return [$where, $params];
@@ -2325,14 +2328,15 @@ function exportBehavioralSignals(
 
     $behavioralSignals = ['burst_activity', 'rapid_repeat', 'fast_repeat', 'multi_token_scan'];
 
-    // Use positional placeholders to avoid mixing with named placeholders
-    // that buildExportWhere may have already added when manualFilters is true.
-    $likeClauses = implode(' OR ', array_fill(0, count($behavioralSignals), 'c.confidence_reason LIKE ?'));
-
-    // Append signal LIKE values to the params array as positional values.
-    foreach ($behavioralSignals as $s) {
-        $params[] = "%$s%";
+    // Use named placeholders to avoid mixing with any positional placeholders
+    // that buildExportWhere may have already added.
+    $likeClauses = [];
+    foreach ($behavioralSignals as $i => $signal) {
+        $key              = ':bsig' . $i;
+        $likeClauses[]    = "c.confidence_reason LIKE $key";
+        $params[$key]     = "%$signal%";
     }
+    $likeClause = implode(' OR ', $likeClauses);
 
     $stmt = $pdo->prepare("
         SELECT
@@ -2345,7 +2349,7 @@ function exportBehavioralSignals(
             c.confidence_reason
         FROM clicks c
         $where
-          AND ($likeClauses)
+          AND ($likeClause)
         GROUP BY c.ip
         ORDER BY hits DESC
         LIMIT 100
