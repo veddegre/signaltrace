@@ -68,7 +68,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
-# -- For manual installs: install packages and clone repo first ---------------
+# -- For manual installs: install packages and stage repo into INSTALL_DIR -----
 if [ "$INSTALL_TYPE" = "3" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing system packages..."
@@ -95,28 +95,38 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo -e "  ${GREEN}System packages installed.${RESET}"
     echo ""
 
-    # Clone repo if not already running from inside it
-    if [ ! -f "$SCRIPT_DIR/db/schema.sql" ]; then
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Cloning SignalTrace repository..."
-        echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Staging SignalTrace into ${INSTALL_DIR}..."
+    echo ""
+
+    if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
         if [ -d "$INSTALL_DIR" ]; then
             echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
-            read -r -p "  Remove and re-clone? [y/N] " reclone
-            if [[ "$reclone" =~ ^[Yy]$ ]]; then
+            read -r -p "  Remove and replace it with the current source? [y/N] " replace_install
+            if [[ "$replace_install" =~ ^[Yy]$ ]]; then
                 sudo rm -rf "$INSTALL_DIR"
             else
-                echo "  Using existing directory."
+                echo -e "${RED}Manual install requires files to live in ${INSTALL_DIR}.${RESET}"
+                echo "Aborted to avoid mixing files from two locations."
+                exit 1
             fi
         fi
-        if [ ! -d "$INSTALL_DIR" ]; then
+
+        if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
+            sudo mkdir -p "$INSTALL_DIR"
+            sudo cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
+            echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
+        else
             sudo git clone "$REPO_URL" "$INSTALL_DIR"
+            echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
         fi
-        SCRIPT_DIR="$INSTALL_DIR"
-        echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
+        echo ""
+    else
+        echo -e "  ${GREEN}Already running from ${INSTALL_DIR}.${RESET}"
         echo ""
     fi
 
+    SCRIPT_DIR="$INSTALL_DIR"
     OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
 else
     OUTPUT_FILE="$SCRIPT_DIR/.env"
@@ -152,7 +162,6 @@ fi
 read_existing_php() {
     local key="$1"
     if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
-        # Extract the value from define('KEY', 'value'); or define('KEY', value);
         grep -oP "define\('${key}',\s*'?\K[^';)]*" "$OUTPUT_FILE" 2>/dev/null | head -1
     fi
 }
@@ -213,7 +222,7 @@ find_free_port() {
     while ss -tlnp 2>/dev/null | grep -q ":${port} "; do
         port=$((port + 1))
     done
-    echo $port
+    echo "$port"
 }
 
 # -- Shared: admin username ----------------------------------------------------
@@ -229,7 +238,6 @@ if [ "$MODIFY_EXISTING" = true ]; then
     read -r -s -p "  New password (blank to keep existing): " ADMIN_PASSWORD
     echo ""
     if [ -z "$ADMIN_PASSWORD" ]; then
-        # Keep existing hash — read it from the file
         ADMIN_PASSWORD_HASH=$(read_existing_php "ADMIN_PASSWORD_HASH")
         DEFER_HASH=false
         echo -e "  ${GREEN}Keeping existing password hash.${RESET}"
@@ -456,7 +464,6 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
-
 echo -e "${BOLD}── Optional Tuning ──────────────────────────────────────────${RESET}"
 echo "  Press Enter to accept defaults for all of these."
 echo ""
@@ -519,7 +526,6 @@ if [ "$INSTALL_TYPE" = "3" ]; then
             3)
                 echo -e "  ${YELLOW}Email alerting will be removed from config.local.php.${RESET}"
                 echo ""
-                # Leave EMAIL_SMTP_HOST blank so nothing gets written
                 ;;
             *)
                 EMAIL_SMTP_HOST=$(read_existing_php "EMAIL_SMTP_HOST")
@@ -623,8 +629,9 @@ AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS}"
 SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN}"
 EOF
 else
-    # Manual install — write config.local.php
-    cat > "$OUTPUT_FILE" << EOF
+    sudo mkdir -p "$SCRIPT_DIR/includes"
+
+    sudo tee "$OUTPUT_FILE" > /dev/null << EOF
 <?php
 define('ADMIN_USERNAME',      '${ADMIN_USERNAME}');
 define('ADMIN_PASSWORD_HASH', '${ADMIN_PASSWORD_HASH}');
@@ -636,38 +643,41 @@ define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
 
     if [ -n "$MAXMIND_ACCOUNT_ID" ]; then
-        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" >> "$OUTPUT_FILE"
+        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$MAXMIND_LICENSE_KEY" ]; then
-        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" >> "$OUTPUT_FILE"
+        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$SELF_REFERER_DOMAIN" ]; then
-        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" >> "$OUTPUT_FILE"
+        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
-        echo "" >> "$OUTPUT_FILE"
-        echo "// Cloudflare Access" >> "$OUTPUT_FILE"
-        echo "define('CF_ACCESS_ENABLED',     true);" >> "$OUTPUT_FILE"
-        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" >> "$OUTPUT_FILE"
-        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" >> "$OUTPUT_FILE"
+        echo "" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Cloudflare Access" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_ENABLED',     true);" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$EMAIL_SMTP_HOST" ]; then
-        echo "" >> "$OUTPUT_FILE"
-        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" >> "$OUTPUT_FILE"
-        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" >> "$OUTPUT_FILE"
-        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" >> "$OUTPUT_FILE"
-        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" >> "$OUTPUT_FILE"
-        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" >> "$OUTPUT_FILE"
-        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" >> "$OUTPUT_FILE"
-        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" >> "$OUTPUT_FILE"
+        echo "" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ "$DEMO_MODE_ENABLED" = true ]; then
-        echo "" >> "$OUTPUT_FILE"
-        echo "// Demo mode" >> "$OUTPUT_FILE"
-        echo "define('DEMO_MODE',             true);" >> "$OUTPUT_FILE"
-        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" >> "$OUTPUT_FILE"
-        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" >> "$OUTPUT_FILE"
+        echo "" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Demo mode" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_MODE',             true);" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
     fi
+
+    sudo chown root:www-data "$OUTPUT_FILE"
+    sudo chmod 640 "$OUTPUT_FILE"
 fi
 
 # -- Deferred hash generation (Docker, no local PHP) --------------------------
@@ -746,7 +756,7 @@ else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing PHP dependencies..."
     echo ""
-    cd "$SCRIPT_DIR" && composer update --no-dev --no-interaction
+    cd "$SCRIPT_DIR" && sudo composer update --no-dev --no-interaction
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: composer update failed.${RESET}"
         exit 1
@@ -808,9 +818,6 @@ GEOIPCONF
             echo -e "  ${GREEN}Sample data loaded.${RESET}"
         fi
 
-        # Seed demo settings into the database so they are correct from first boot.
-        # These fields are locked in the UI when DEMO_MODE is true so they cannot
-        # be changed through the Settings form.
         if [ "$DEMO_MODE_ENABLED" = true ]; then
             sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
             sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
@@ -824,7 +831,6 @@ GEOIPCONF
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Setting file ownership and permissions..."
 
-    # includes/, public/, db/, vendor/ — root-owned, web server read-only
     sudo chown -R root:www-data "${INSTALL_DIR}/includes/"
     sudo chmod 750 "${INSTALL_DIR}/includes/"
     sudo chmod 640 "${INSTALL_DIR}/includes/"*.php
@@ -845,7 +851,6 @@ GEOIPCONF
     sudo find "${INSTALL_DIR}/vendor/" -type f -exec chmod 640 {} \;
     echo -e "  ${GREEN}vendor/ — root:www-data (640)${RESET}"
 
-    # data/ — web server needs write on database and directory only
     sudo chown root:www-data "$DB_DIR"
     sudo chmod 770 "$DB_DIR"
     if [ -f "$DB_FILE" ]; then
