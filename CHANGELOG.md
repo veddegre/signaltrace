@@ -2,6 +2,86 @@
 
 --
 
+## [v2.7.0] — April 19, 2026
+
+### Webhook Enhancements
+
+Platform preset templates are now available for Slack, Discord, Microsoft Teams, PagerDuty, and Custom (generic JSON) via a dropdown in the Settings tab. Selecting a preset populates the payload template textarea with a correctly formatted template for that platform. The textarea border flashes green on load to confirm the change. Teams uses the Adaptive Card format required by the Teams webhook API. PagerDuty uses the Events API v2 format with a routing_key placeholder. Custom produces a flat generic JSON object with all available placeholders as a starting point for any other endpoint.
+
+A Test button now appears inline next to each webhook URL field (threat and token). Clicking it sends a clearly labelled dummy payload using RFC5737 IP 203.0.113.42 to the configured URL. The result is shown inline in green or red. The test uses the stored template if one is set, otherwise sends the appropriate auto-detected format. Testing is blocked in demo mode.
+
+### IP Enrichment — Shodan InternetDB
+
+SignalTrace now enriches IP addresses with data from Shodan InternetDB (no API key required). Enrichment data — open ports, known CVEs, tags, and hostnames — is cached permanently in a new ip_enrichment table on first sight. Private and reserved IPs are skipped. IPs that return a 404 from Shodan are stored with a not_found flag so they are never retried.
+
+Enrichment is triggered two ways: in the background after a tracked request is logged (using fastcgi_finish_request when available so the visitor is never delayed), and on demand when a details panel is opened in the admin UI. A new IP Reputation box appears in the event details panel below the Request section. A Rescan button refreshes both Shodan and AbuseIPDB data on demand.
+
+### IP Enrichment — AbuseIPDB
+
+AbuseIPDB v2 enrichment is now available as an optional companion to Shodan. Configure an API key and daily lookup cap in Settings > IP Enrichment. The key is masked after saving — only the last four characters are shown, with a Change Key button to reveal the input. The daily limit resets at UTC midnight and is tracked in settings (abuseipdb_used_today, abuseipdb_reset_date). Lookups are skipped once the limit is reached. Explicit rescans bypass the daily limit.
+
+AbuseIPDB data is shown in the same IP Reputation box as Shodan, separated by a labeled divider. The abuse confidence score is color-coded: green below 25%, yellow 25–74%, red 75% and above. Total reports, last reported date, ISP, usage type, domain, and a direct link to the AbuseIPDB page are shown. Both Shodan and AbuseIPDB show their fetched_at timestamp and whether the result is cached or freshly fetched.
+
+### Grafana Export Endpoints
+
+Eleven aggregation endpoints are now wired up and served from index.php (they existed as handler functions in router.php but were never routed):
+
+/export/stats — summary statistics (total, unique IPs, unique tokens, bot/suspicious/uncertain/human counts, avg score, bot %)
+/export/stats/extended — extends /export/stats with top countries and top orgs arrays
+/export/by-ip — top IPs by hit count with classification breakdown
+/export/by-country — hit counts grouped by country code
+/export/by-token — hit counts grouped by token with optional ?label= filter
+/export/by-org — hit counts grouped by ASN organisation
+/export/by-signal — individual confidence_reason signal hit counts (aggregated in PHP from the comma-separated field)
+/export/behavioral — IPs that triggered burst, rapid_repeat, fast_repeat, or multi_token_scan signals
+/export/over-time — hourly event counts in wide format (bucket, bot, suspicious, uncertain, human)
+
+All export endpoints are added to the reserved routes list so they are never logged as honeypot hits.
+
+The /export/stats and /export/stats/extended responses now include dual field aliases (total + total_events, bot_count + bot_events, etc.) and a bot_pct field for compatibility with both the Splunk app and the Grafana dashboard without requiring field mapping transforms.
+
+### Grafana Dashboard
+
+The pre-built Grafana Infinity dashboard (signaltrace_overview_infinity.json) has been updated:
+
+Panel 7 (Events Over Time) — switched from long format (label/hits columns with groupBy and partitionByValues transformations) to wide format (bucket, bot, suspicious, uncertain, human columns). Transformations removed.
+Panel 9 (Top Source IPs) — column selectors corrected from ip_country/ip_org to country/org to match what /export/by-ip returns.
+Panel 15 (Behavioral Signal Hits) — URL corrected from /export/behavioral-signals to /export/behavioral. Columns updated to match the endpoint output (ip, org, country, hits).
+
+### Splunk Integration
+
+props.conf updated with:
+
+EVAL-confidence_reasons_mv = split(trim(confidence_reason), ", ") — splits the comma-separated confidence_reason string into a proper multivalue field for use with mvexpand and stats count by confidence_reasons_mv.
+CIM field aliases — maps ip → src/src_ip, user_agent → http_user_agent, request_uri → url_path, request_method → http_method, query_string → uri_query, request_host → dest.
+Boolean coercions — EVAL-is_bot_bool, EVAL-is_known_token, EVAL-first_hit_for_token.
+Numeric type enforcement — EVAL-confidence_score_num, EVAL-prior_events_num, EVAL-clicked_at_ms.
+EVAL-subdomain — extracts subdomain label from request_host field.
+
+inputs.conf updated with a full field reference comment listing all indexed fields including new v2.6.0 fields (force_include_in_feed, include_in_email, exclude_from_feed, include_in_token_webhook).
+
+signaltrace_fetch.sh updated with timestamp-based incremental fetching (?from= parameter), improved error handling that exits 0 on transient failures so Splunk does not mark the input as permanently failed, and JSON validation before Python processing.
+
+signaltrace_events.json dashboard updated: classification filter dropdown corrected from likely-human to uncertain, filter syntax changed from bare field filters to | search to avoid Splunk reserved word conflicts, request_host added to the event table.
+
+host → request_host Field Rename
+
+The host field in /export/json and /export/csv output has been renamed to request_host to avoid collision with Splunk's built-in host metadata field, which would shadow the JSON value at index time. Internal database queries, the admin UI, and all other code paths are unchanged — the rename applies only to export output. The Splunk props.conf FIELDALIAS-dest and EVAL-subdomain have been updated to reference request_host.
+
+### Export Field Improvements
+
+The exportClicks and getRecentClicksAdvancedFilteredPaged queries now JOIN the links table and include force_include_in_feed, include_in_email, exclude_from_feed, and include_in_token_webhook in export rows. These fields were previously missing from JSON and CSV exports.
+
+### Bug Fixes
+
+Settings tab auto-opening on fresh /admin load — the tab restore was unconditionally reading localStorage. Now only restores from localStorage when navigating back from a same-origin /admin URL (post-form-submit). Fresh navigation always lands on the dashboard tab.
+
+Grafana /export/by-ip returned ip\_country and ip\_org — renamed to country and org in the query output to match what the Grafana dashboard expects.
+
+AbuseIPDB email_threshold null on save — the email threshold ternary could evaluate to null if the POST field was missing (e.g. when SMTP is not configured and the email section is hidden). Refactored to use a safe intermediate variable with a 'bot' default.
+
+---
+
 ## [v2.6.1] — April 19, 2026
 
 Fixed README Docker environment variable table — The email alerting note incorrectly stated that SMTP credentials are not stored in .env. Corrected to reflect that EMAIL_SMTP_* variables are set in .env and written by the entrypoint into config.local.php as PHP constants, where they are never stored in the database or exposed through the admin UI.
