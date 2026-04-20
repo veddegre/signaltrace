@@ -2,7 +2,7 @@
   "title": "SignalTrace Overview — SQLite",
   "uid": "signaltrace-sqlite",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
   "time": { "from": "now-24h", "to": "now" },
   "tags": ["signaltrace", "security"],
@@ -15,7 +15,7 @@
       "datasource": { "type": "frser-sqlite-datasource", "uid": "${DS_SQLITE}" },
       "options": { "colorMode": "background", "graphMode": "none" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" } }
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#4f78f1" } }
       },
       "targets": [{
         "refId": "A",
@@ -30,7 +30,7 @@
       "datasource": { "type": "frser-sqlite-datasource", "uid": "${DS_SQLITE}" },
       "options": { "colorMode": "background", "graphMode": "none" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "red" } }
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#ef4444" } }
       },
       "targets": [{
         "refId": "A",
@@ -45,7 +45,7 @@
       "datasource": { "type": "frser-sqlite-datasource", "uid": "${DS_SQLITE}" },
       "options": { "colorMode": "background", "graphMode": "none" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } }
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#22c55e" } }
       },
       "targets": [{
         "refId": "A",
@@ -60,7 +60,7 @@
       "datasource": { "type": "frser-sqlite-datasource", "uid": "${DS_SQLITE}" },
       "options": { "colorMode": "background", "graphMode": "none" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" }, "decimals": 1 }
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#06b6d4" }, "decimals": 1 }
       },
       "targets": [{
         "refId": "A",
@@ -75,7 +75,7 @@
       "datasource": { "type": "frser-sqlite-datasource", "uid": "${DS_SQLITE}" },
       "options": { "colorMode": "background", "graphMode": "none" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "orange" }, "unit": "percent", "decimals": 1 }
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#f59e0b" }, "unit": "percent", "decimals": 1 }
       },
       "targets": [{
         "refId": "A",
@@ -91,10 +91,10 @@
       "options": { "pieType": "donut", "legend": { "displayMode": "table", "placement": "bottom" } },
       "fieldConfig": {
         "overrides": [
-          { "matcher": { "id": "byName", "options": "bot" },          "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#ef4444" } }] },
-          { "matcher": { "id": "byName", "options": "suspicious" },   "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f59e0b" } }] },
-          { "matcher": { "id": "byName", "options": "likely-human" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }] },
-          { "matcher": { "id": "byName", "options": "human" },        "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#22c55e" } }] }
+          { "matcher": { "id": "byName", "options": "bot" },        "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#ef4444" } }] },
+          { "matcher": { "id": "byName", "options": "suspicious" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f59e0b" } }] },
+          { "matcher": { "id": "byName", "options": "uncertain" },  "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }] },
+          { "matcher": { "id": "byName", "options": "human" },      "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#22c55e" } }] }
         ]
       },
       "targets": [{
@@ -112,15 +112,15 @@
       "fieldConfig": {
         "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "bot" },          "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#ef4444" } }] },
-          { "matcher": { "id": "byName", "options": "suspicious" },   "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f59e0b" } }] },
-          { "matcher": { "id": "byName", "options": "likely-human" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }] },
-          { "matcher": { "id": "byName", "options": "human" },        "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#22c55e" } }] }
+          { "matcher": { "id": "byName", "options": "bot" },        "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#ef4444" } }] },
+          { "matcher": { "id": "byName", "options": "suspicious" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f59e0b" } }] },
+          { "matcher": { "id": "byName", "options": "uncertain" },  "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }] },
+          { "matcher": { "id": "byName", "options": "human" },      "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#22c55e" } }] }
         ]
       },
       "targets": [{
         "refId": "A",
-        "queryText": "SELECT strftime('%Y-%m-%d %H:%M:00', clicked_at) AS time, confidence_label, COUNT(*) AS count FROM clicks WHERE clicked_at >= datetime('now', '-24 hours') GROUP BY strftime('%Y-%m-%d %H:%M:00', clicked_at), confidence_label ORDER BY time ASC",
+        "queryText": "SELECT strftime('%Y-%m-%d %H:00:00', clicked_at) AS time, confidence_label, COUNT(*) AS count FROM clicks WHERE clicked_at >= datetime('now', '-24 hours') GROUP BY strftime('%Y-%m-%d %H:00:00', clicked_at), confidence_label ORDER BY time ASC",
         "timeColumns": ["time"]
       }]
     },
@@ -177,7 +177,7 @@
       "datasource": { "type": "frser-sqlite-datasource", "uid": "${DS_SQLITE}" },
       "options": { "orientation": "horizontal", "legend": { "displayMode": "hidden" } },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "#ef4444" } }
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#f59e0b" } }
       },
       "targets": [{
         "refId": "A",
@@ -197,10 +197,10 @@
           { "matcher": { "id": "byName", "options": "Label" }, "properties": [
             { "id": "custom.displayMode", "value": "color-background" },
             { "id": "mappings", "value": [
-              { "type": "value", "options": { "bot":          { "color": "#ef4444", "index": 0 } } },
-              { "type": "value", "options": { "suspicious":   { "color": "#f59e0b", "index": 1 } } },
-              { "type": "value", "options": { "likely-human": { "color": "#38bdf8", "index": 2 } } },
-              { "type": "value", "options": { "human":        { "color": "#22c55e", "index": 3 } } }
+              { "type": "value", "options": { "bot":        { "color": "#ef4444", "index": 0 } } },
+              { "type": "value", "options": { "suspicious": { "color": "#f59e0b", "index": 1 } } },
+              { "type": "value", "options": { "uncertain":  { "color": "#38bdf8", "index": 2 } } },
+              { "type": "value", "options": { "human":      { "color": "#22c55e", "index": 3 } } }
             ]}
           ]}
         ]
