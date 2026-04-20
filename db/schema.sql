@@ -140,6 +140,28 @@ CREATE TABLE IF NOT EXISTS auth_failures (
 );
 
 -- ============================================================
+-- IP Enrichment Cache (Shodan InternetDB + AbuseIPDB)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ip_enrichment (
+    ip                   TEXT PRIMARY KEY,
+    -- Shodan InternetDB
+    ports                TEXT,    -- JSON array of port numbers
+    vulns                TEXT,    -- JSON array of CVE strings
+    tags                 TEXT,    -- JSON array of tag strings
+    hostnames            TEXT,    -- JSON array of hostname strings
+    not_found            INTEGER NOT NULL DEFAULT 0,  -- 1 = 404 from Shodan, never retry
+    fetched_at           TEXT    NOT NULL,
+    -- AbuseIPDB
+    abuse_score          INTEGER,  -- 0-100 confidence score
+    abuse_reports        INTEGER,  -- total community reports
+    abuse_last_reported  TEXT,     -- ISO timestamp of most recent report
+    abuse_country        TEXT,
+    abuse_isp            TEXT,
+    abuse_usage_type     TEXT,
+    abuse_domain         TEXT
+);
+
+-- ============================================================
 -- Indexes
 -- ============================================================
 
@@ -217,7 +239,11 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('email_enabled',             '0'),
     ('email_to',                  ''),
     ('email_threshold',           'bot'),
-    ('email_dedup_minutes',       '60');
+    ('email_dedup_minutes',       '60'),
+    -- AbuseIPDB enrichment (API key stored via Settings UI, never in schema)
+    ('abuseipdb_daily_limit',     '500'),
+    ('abuseipdb_used_today',      '0'),
+    ('abuseipdb_reset_date',      '');
 
 -- ============================================================
 -- Default Skip Patterns
