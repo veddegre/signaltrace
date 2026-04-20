@@ -99,12 +99,14 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         unzip \
         git \
         software-properties-common
-    if ! command -v geoipupdate &>/dev/null; then
+
+    if ! command -v geoipupdate >/dev/null 2>&1; then
         $SUDO add-apt-repository -y ppa:maxmind/ppa
         $SUDO apt-get update -qq
         $SUDO apt-get install -y geoipupdate
     fi
-    $SUDO a2enmod rewrite
+
+    $SUDO a2enmod rewrite >/dev/null
     echo -e "  ${GREEN}System packages installed.${RESET}"
     echo ""
 
@@ -133,11 +135,10 @@ if [ "$INSTALL_TYPE" = "3" ]; then
             $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
             echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
         fi
-        echo ""
     else
         echo -e "  ${GREEN}Already running from ${INSTALL_DIR}.${RESET}"
-        echo ""
     fi
+    echo ""
 
     SCRIPT_DIR="$INSTALL_DIR"
     OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
@@ -171,7 +172,7 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo ""
 fi
 
-# -- Helper: read existing value from config.local.php -------------------------
+# -- Helpers -------------------------------------------------------------------
 read_existing_php() {
     local key="$1"
     if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
@@ -179,7 +180,6 @@ read_existing_php() {
     fi
 }
 
-# -- Helper: read existing value from .env ------------------------------------
 read_existing_env() {
     local key="$1"
     if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
@@ -187,7 +187,6 @@ read_existing_env() {
     fi
 }
 
-# -- Helper functions ----------------------------------------------------------
 prompt() {
     local label="$1"
     local var="$2"
@@ -196,7 +195,7 @@ prompt() {
     local secret="$5"
 
     echo -e "${CYAN}${label}${RESET}"
-    [ -n "$hint" ] && echo -e "  ${hint}"
+    [ -n "$hint" ] && echo "  $hint"
     if [ -n "$default" ]; then
         if [ "$secret" = "secret" ]; then
             read -r -s -p "  Value [${default}]: " input
@@ -204,7 +203,7 @@ prompt() {
         else
             read -r -p "  Value [${default}]: " input
         fi
-        eval "$var=\"${input:-$default}\""
+        eval "$var=\"\${input:-$default}\""
     else
         if [ "$secret" = "secret" ]; then
             read -r -s -p "  Value (leave blank to skip): " input
@@ -212,7 +211,7 @@ prompt() {
         else
             read -r -p "  Value (leave blank to skip): " input
         fi
-        eval "$var=\"${input}\""
+        eval "$var=\"\${input}\""
     fi
     echo ""
 }
@@ -223,7 +222,7 @@ generate_hash_php() {
 }
 
 generate_salt() {
-    if command -v openssl &>/dev/null; then
+    if command -v openssl >/dev/null 2>&1; then
         openssl rand -hex 64
     else
         php -r "echo bin2hex(random_bytes(64)) . PHP_EOL;"
@@ -232,7 +231,7 @@ generate_salt() {
 
 find_free_port() {
     local port=8080
-    while ss -tlnp 2>/dev/null | grep -q ":${port} "; do
+    while ss -tln 2>/dev/null | grep -q ":${port} "; do
         port=$((port + 1))
     done
     echo "$port"
@@ -263,6 +262,7 @@ if [ "$MODIFY_EXISTING" = true ]; then
             ADMIN_PASSWORD_HASH=$(read_existing_php "ADMIN_PASSWORD_HASH")
             ADMIN_PASSWORD=""
             DEFER_HASH=false
+            echo ""
         fi
     fi
 else
@@ -286,14 +286,13 @@ else
 fi
 
 DEFER_HASH=false
-
 if [ -n "$ADMIN_PASSWORD" ]; then
     if [ "$INSTALL_TYPE" = "2" ]; then
         echo "  Generating bcrypt hash..."
         ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
         echo -e "  ${GREEN}Hash generated.${RESET}"
     else
-        if command -v php &>/dev/null; then
+        if command -v php >/dev/null 2>&1; then
             echo "  Generating bcrypt hash..."
             ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
             echo -e "  ${GREEN}Hash generated.${RESET}"
@@ -338,7 +337,7 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^signaltrace$"; then
         CONTAINER_WAS_RUNNING=true
         echo "  Stopping existing container to free port..."
-        docker compose stop 2>/dev/null
+        docker compose stop >/dev/null 2>&1 || true
         echo ""
     fi
 
@@ -375,7 +374,7 @@ if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
     SIGNALTRACE_EXPORT_API_TOKEN=""
     echo -e "  ${YELLOW}Export API token disabled.${RESET}"
 elif [ -z "$EXPORT_TOKEN_INPUT" ]; then
-    if command -v openssl &>/dev/null; then
+    if command -v openssl >/dev/null 2>&1; then
         SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
         echo -e "  ${GREEN}Token auto-generated.${RESET}"
     else
@@ -435,7 +434,7 @@ DEMO_ADMIN_USERNAME_DISPLAY="demo"
 DEMO_ADMIN_PASSWORD_DISPLAY=""
 
 if [ "$INSTALL_TYPE" = "3" ]; then
-    echo -e "${BOLD}── Demo Mode (optional) ──────────────────────────────────────${RESET}"
+    echo -e "${BOLD}── Demo Mode (optional) ─────────────────────────────────────${RESET}"
     echo "  Demo mode shows a banner with a reset countdown and locks"
     echo "  certain settings so visitors cannot change them."
     echo ""
@@ -477,6 +476,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
+# -- Optional tuning -----------------------------------------------------------
 echo -e "${BOLD}── Optional Tuning ──────────────────────────────────────────${RESET}"
 echo "  Press Enter to accept defaults for all of these."
 echo ""
@@ -644,7 +644,7 @@ EOF
 else
     $SUDO mkdir -p "$SCRIPT_DIR/includes"
 
-    $SUDO tee "$OUTPUT_FILE" > /dev/null << EOF
+    $SUDO tee "$OUTPUT_FILE" >/dev/null << EOF
 <?php
 define('ADMIN_USERNAME',      '${ADMIN_USERNAME}');
 define('ADMIN_PASSWORD_HASH', '${ADMIN_PASSWORD_HASH}');
@@ -656,37 +656,37 @@ define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
 
     if [ -n "$MAXMIND_ACCOUNT_ID" ]; then
-        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
     fi
     if [ -n "$MAXMIND_LICENSE_KEY" ]; then
-        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
     fi
     if [ -n "$SELF_REFERER_DOMAIN" ]; then
-        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
     fi
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "// Cloudflare Access" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('CF_ACCESS_ENABLED',     true);" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "// Cloudflare Access" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('CF_ACCESS_ENABLED',     true);" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
     fi
     if [ -n "$EMAIL_SMTP_HOST" ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
     fi
     if [ "$DEMO_MODE_ENABLED" = true ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "// Demo mode" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('DEMO_MODE',             true);" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "// Demo mode" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('DEMO_MODE',             true);" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
     fi
 
     $SUDO chown root:www-data "$OUTPUT_FILE"
@@ -703,7 +703,7 @@ if [ "$DEFER_HASH" = true ]; then
         echo "  Pulling pre-built image to generate hash..."
         docker pull ghcr.io/veddegre/signaltrace:latest
     else
-        if ! docker image inspect signaltrace-signaltrace &>/dev/null; then
+        if ! docker image inspect signaltrace-signaltrace >/dev/null 2>&1; then
             echo "  Building container image first..."
             docker compose build
         fi
@@ -711,9 +711,9 @@ if [ "$DEFER_HASH" = true ]; then
 
     echo "  Starting container to generate hash..."
     if [ "$INSTALL_TYPE" = "1" ]; then
-        docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d 2>/dev/null
+        docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d >/dev/null 2>&1
     else
-        docker compose up -d 2>/dev/null
+        docker compose up -d >/dev/null 2>&1
     fi
     sleep 3
 
@@ -750,30 +750,28 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
         docker compose build
         echo ""
     fi
+
     if [ "$INSTALL_TYPE" = "1" ]; then
         COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml"
     else
         COMPOSE_CMD="docker compose"
     fi
+
+    $COMPOSE_CMD up -d
     if [ "$CONTAINER_WAS_RUNNING" = true ]; then
-        $COMPOSE_CMD up -d
         echo -e "  ${GREEN}Container restarted.${RESET}"
     else
-        $COMPOSE_CMD up -d
         echo -e "  ${GREEN}Container started.${RESET}"
     fi
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
+
 else
     # ── Composer dependencies -------------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing PHP dependencies..."
     echo ""
     cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer update --no-dev --no-interaction
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: composer update failed.${RESET}"
-        exit 1
-    fi
     echo -e "  ${GREEN}PHP dependencies installed.${RESET}"
     echo ""
 
@@ -783,7 +781,7 @@ else
         echo "Configuring GeoIP..."
         echo ""
         $SUDO mkdir -p /var/lib/GeoIP
-        $SUDO tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
+        $SUDO tee /etc/GeoIP.conf >/dev/null << GEOIPCONF
 AccountID ${MAXMIND_ACCOUNT_ID}
 LicenseKey ${MAXMIND_LICENSE_KEY}
 EditionIDs GeoLite2-ASN GeoLite2-Country
@@ -891,14 +889,14 @@ GEOIPCONF
         $SUDO chmod 755 "${INSTALL_DIR}/setup.sh"
     fi
 
+    # SQLite writable area
     $SUDO mkdir -p "$DB_DIR"
-    $SUDO chown root:www-data "$DB_DIR"
-    $SUDO chmod 770 "$DB_DIR"
+    $SUDO chown -R www-data:www-data "$DB_DIR"
+    $SUDO find "$DB_DIR" -type d -exec chmod 770 {} \;
+    $SUDO find "$DB_DIR" -type f -exec chmod 660 {} \;
 
     if [ -f "$DB_FILE" ]; then
-        $SUDO chown root:www-data "$DB_FILE"
-        $SUDO chmod 660 "$DB_FILE"
-        echo -e "  ${GREEN}data/database.db — root:www-data, 660${RESET}"
+        echo -e "  ${GREEN}data/database.db — www-data:www-data, 660${RESET}"
     fi
     echo ""
 
@@ -909,7 +907,7 @@ GEOIPCONF
     read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
     APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
 
-    $SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
+    $SUDO tee /etc/apache2/sites-available/signaltrace.conf >/dev/null << APACHECONF
 <VirtualHost *:80>
     ServerName ${APACHE_SERVER_NAME}
     DocumentRoot /var/www/signaltrace/public
@@ -930,9 +928,9 @@ GEOIPCONF
 </VirtualHost>
 APACHECONF
 
-    $SUDO a2enmod rewrite ssl
-    $SUDO a2ensite signaltrace.conf
-    $SUDO a2dissite 000-default.conf 2>/dev/null || true
+    $SUDO a2enmod rewrite ssl >/dev/null
+    $SUDO a2ensite signaltrace.conf >/dev/null
+    $SUDO a2dissite 000-default.conf >/dev/null 2>&1 || true
     $SUDO systemctl restart apache2
     echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
     echo ""
@@ -970,7 +968,13 @@ APACHECONF
     echo ""
 
     if [ "${HTTPS_ENABLED:-false}" = true ]; then
-        echo -e "${CYAN}SignalTrace is available at: https://${APACHE_SERVER_NAME}/admin${RESET}"
+        if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
+            echo -e "${CYAN}SignalTrace URLs:${RESET}"
+            echo "  Public: https://${APACHE_SERVER_NAME}"
+            echo "  Admin (Cloudflare Access): https://admin.${APACHE_SERVER_NAME}"
+        else
+            echo -e "${CYAN}SignalTrace is available at: https://${APACHE_SERVER_NAME}/admin${RESET}"
+        fi
     else
         echo -e "${CYAN}SignalTrace is available at: http://${APACHE_SERVER_NAME}/admin${RESET}"
     fi
@@ -979,12 +983,13 @@ APACHECONF
         echo ""
         echo -e "${YELLOW}Cloudflare Access is enabled. Remember to:${RESET}"
         echo "  1. Create an A record for your domain in Cloudflare with the proxy enabled (orange cloud)"
-        echo "  2. Configure the Access application for your domain in Zero Trust"
-        echo "  3. See the wiki for the full setup guide"
+        echo "  2. Create an A/CNAME for admin.${APACHE_SERVER_NAME} if you use a separate admin host"
+        echo "  3. Configure the Access application for your domain in Zero Trust"
+        echo "  4. See the wiki for the full setup guide"
     fi
 fi
-echo ""
 
+echo ""
 if [ -n "$SIGNALTRACE_EXPORT_API_TOKEN" ]; then
     echo -e "${YELLOW}Note: save your export API token — it will not be shown again:${RESET}"
     echo "  $SIGNALTRACE_EXPORT_API_TOKEN"
