@@ -53,13 +53,8 @@
             "options": {
                 "backgroundColor": "#111827",
                 "majorColor": "#ef4444",
-                "showSparklineAreaGraph": true,
-                "showSparklineTooltip": true,
-                "sparklineAreaColor": "#ef4444",
-                "sparklineDisplay": "below",
-                "sparklineStrokeColor": "#ef4444",
-                "trendColor": "#fca5a5",
-                "trendDisplay": "absolute",
+                "showSparklineAreaGraph": false,
+                "trendDisplay": "off",
                 "underLabel": "Bot-classified hits"
             },
             "title": "Bot Events",
@@ -203,13 +198,8 @@
             "options": {
                 "backgroundColor": "#111827",
                 "majorColor": "#38bdf8",
-                "showSparklineAreaGraph": true,
-                "showSparklineTooltip": true,
-                "sparklineAreaColor": "#38bdf8",
-                "sparklineDisplay": "below",
-                "sparklineStrokeColor": "#38bdf8",
-                "trendColor": "#93c5fd",
-                "trendDisplay": "absolute",
+                "showSparklineAreaGraph": false,
+                "trendDisplay": "off",
                 "underLabel": "All SignalTrace events"
             },
             "title": "Total Events",
@@ -222,13 +212,8 @@
             "options": {
                 "backgroundColor": "#111827",
                 "majorColor": "#22c55e",
-                "showSparklineAreaGraph": true,
-                "showSparklineTooltip": true,
-                "sparklineAreaColor": "#22c55e",
-                "sparklineDisplay": "below",
-                "sparklineStrokeColor": "#22c55e",
-                "trendColor": "#86efac",
-                "trendDisplay": "absolute",
+                "showSparklineAreaGraph": false,
+                "trendDisplay": "off",
                 "underLabel": "Distinct source IPs"
             },
             "title": "Unique IPs",
@@ -241,13 +226,8 @@
             "options": {
                 "backgroundColor": "#111827",
                 "majorColor": "#a78bfa",
-                "showSparklineAreaGraph": true,
-                "showSparklineTooltip": true,
-                "sparklineAreaColor": "#a78bfa",
-                "sparklineDisplay": "below",
-                "sparklineStrokeColor": "#a78bfa",
-                "trendColor": "#c4b5fd",
-                "trendDisplay": "absolute",
+                "showSparklineAreaGraph": false,
+                "trendDisplay": "off",
                 "underLabel": "Distinct paths / tokens"
             },
             "title": "Unique Tokens",
@@ -282,7 +262,7 @@
         "ds_bot_count": {
             "name": "Bot Count",
             "options": {
-                "query": "index=security sourcetype=signaltrace confidence_label=bot | timechart span=15m count as bot_events | table bot_events _time"
+                "query": "index=security sourcetype=signaltrace confidence_label=bot | stats count as bot_events"
             },
             "type": "ds.search"
         },
@@ -345,21 +325,21 @@
         "ds_total_events": {
             "name": "Total Events",
             "options": {
-                "query": "index=security sourcetype=signaltrace | timechart span=15m count as total | table total _time"
+                "query": "index=security sourcetype=signaltrace | stats count as total"
             },
             "type": "ds.search"
         },
         "ds_unique_ips": {
             "name": "Unique IPs",
             "options": {
-                "query": "index=security sourcetype=signaltrace | timechart span=15m dc(ip) as unique_ips | table unique_ips _time"
+                "query": "index=security sourcetype=signaltrace | stats dc(ip) as unique_ips"
             },
             "type": "ds.search"
         },
         "ds_unique_tokens": {
             "name": "Unique Tokens",
             "options": {
-                "query": "index=security sourcetype=signaltrace | timechart span=15m dc(token) as unique_tokens | table unique_tokens _time"
+                "query": "index=security sourcetype=signaltrace | stats dc(token) as unique_tokens"
             },
             "type": "ds.search"
         },
