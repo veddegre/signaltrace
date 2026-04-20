@@ -1,5 +1,7 @@
 # Changelog
 
+---
+
 ## [v2.7.0] — April 19, 2026
 
 ### Webhook Enhancements
