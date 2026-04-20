@@ -2,13 +2,24 @@
 # SignalTrace setup script
 # Supports Docker and manual installs.
 # Can be run from inside the cloned repo, or downloaded standalone:
-#   curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh | bash
 
 set -e
 
 REPO_URL="https://github.com/veddegre/signaltrace.git"
 INSTALL_DIR="/var/www/signaltrace"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+fi
+
+require_sudo() {
+    if [ -n "$SUDO" ]; then
+        $SUDO -v
+    fi
+}
 
 # -- Colours ------------------------------------------------------------------
 RED='\033[0;31m'
@@ -70,11 +81,13 @@ fi
 
 # -- For manual installs: install packages and stage repo into INSTALL_DIR -----
 if [ "$INSTALL_TYPE" = "3" ]; then
+    require_sudo
+
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing system packages..."
     echo ""
-    sudo apt-get update -qq
-    sudo apt-get install -y \
+    $SUDO apt-get update -qq
+    $SUDO apt-get install -y \
         apache2 \
         php \
         php-sqlite3 \
@@ -87,11 +100,11 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         git \
         software-properties-common
     if ! command -v geoipupdate &>/dev/null; then
-        sudo add-apt-repository -y ppa:maxmind/ppa
-        sudo apt-get update -qq
-        sudo apt-get install -y geoipupdate
+        $SUDO add-apt-repository -y ppa:maxmind/ppa
+        $SUDO apt-get update -qq
+        $SUDO apt-get install -y geoipupdate
     fi
-    sudo a2enmod rewrite
+    $SUDO a2enmod rewrite
     echo -e "  ${GREEN}System packages installed.${RESET}"
     echo ""
 
@@ -104,7 +117,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
             echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
             read -r -p "  Remove and replace it with the current source? [y/N] " replace_install
             if [[ "$replace_install" =~ ^[Yy]$ ]]; then
-                sudo rm -rf "$INSTALL_DIR"
+                $SUDO rm -rf "$INSTALL_DIR"
             else
                 echo -e "${RED}Manual install requires files to live in ${INSTALL_DIR}.${RESET}"
                 echo "Aborted to avoid mixing files from two locations."
@@ -113,11 +126,11 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         fi
 
         if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
-            sudo mkdir -p "$INSTALL_DIR"
-            sudo cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
+            $SUDO mkdir -p "$INSTALL_DIR"
+            $SUDO cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
             echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
         else
-            sudo git clone "$REPO_URL" "$INSTALL_DIR"
+            $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
             echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
         fi
         echo ""
@@ -629,9 +642,9 @@ AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS}"
 SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN}"
 EOF
 else
-    sudo mkdir -p "$SCRIPT_DIR/includes"
+    $SUDO mkdir -p "$SCRIPT_DIR/includes"
 
-    sudo tee "$OUTPUT_FILE" > /dev/null << EOF
+    $SUDO tee "$OUTPUT_FILE" > /dev/null << EOF
 <?php
 define('ADMIN_USERNAME',      '${ADMIN_USERNAME}');
 define('ADMIN_PASSWORD_HASH', '${ADMIN_PASSWORD_HASH}');
@@ -643,41 +656,41 @@ define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
 
     if [ -n "$MAXMIND_ACCOUNT_ID" ]; then
-        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$MAXMIND_LICENSE_KEY" ]; then
-        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$SELF_REFERER_DOMAIN" ]; then
-        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
-        echo "" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "// Cloudflare Access" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('CF_ACCESS_ENABLED',     true);" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Cloudflare Access" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_ENABLED',     true);" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$EMAIL_SMTP_HOST" ]; then
-        echo "" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ "$DEMO_MODE_ENABLED" = true ]; then
-        echo "" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "// Demo mode" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('DEMO_MODE',             true);" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
-        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | sudo tee -a "$OUTPUT_FILE" > /dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Demo mode" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_MODE',             true);" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
 
-    sudo chown root:www-data "$OUTPUT_FILE"
-    sudo chmod 640 "$OUTPUT_FILE"
+    $SUDO chown root:www-data "$OUTPUT_FILE"
+    $SUDO chmod 640 "$OUTPUT_FILE"
 fi
 
 # -- Deferred hash generation (Docker, no local PHP) --------------------------
@@ -722,7 +735,7 @@ if [ "$DEFER_HASH" = true ]; then
     CONTAINER_WAS_RUNNING=true
 fi
 
-# -- Done ----------------------------------------------------------------------
+# -- Done writing config -------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}${BOLD}$(basename "$OUTPUT_FILE") written successfully.${RESET}"
 echo ""
@@ -756,7 +769,7 @@ else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing PHP dependencies..."
     echo ""
-    cd "$SCRIPT_DIR" && sudo composer update --no-dev --no-interaction
+    cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer update --no-dev --no-interaction
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: composer update failed.${RESET}"
         exit 1
@@ -769,8 +782,8 @@ else
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "Configuring GeoIP..."
         echo ""
-        sudo mkdir -p /var/lib/GeoIP
-        sudo tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
+        $SUDO mkdir -p /var/lib/GeoIP
+        $SUDO tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
 AccountID ${MAXMIND_ACCOUNT_ID}
 LicenseKey ${MAXMIND_LICENSE_KEY}
 EditionIDs GeoLite2-ASN GeoLite2-Country
@@ -778,7 +791,7 @@ DatabaseDirectory /var/lib/GeoIP
 GEOIPCONF
         echo "  /etc/GeoIP.conf written."
         echo "  Downloading GeoIP databases..."
-        if sudo geoipupdate; then
+        if $SUDO geoipupdate; then
             echo -e "  ${GREEN}GeoIP databases downloaded to /var/lib/GeoIP/.${RESET}"
         else
             echo -e "  ${YELLOW}Warning: geoipupdate failed. Run 'sudo geoipupdate' manually once credentials are correct.${RESET}"
@@ -806,22 +819,22 @@ GEOIPCONF
 
     if [ "${SKIP_DB:-false}" = false ]; then
         echo "Initialising database..."
-        sudo mkdir -p "$DB_DIR"
-        [ -f "$DB_FILE" ] && sudo rm -f "$DB_FILE"
-        sudo sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
+        $SUDO mkdir -p "$DB_DIR"
+        [ -f "$DB_FILE" ] && $SUDO rm -f "$DB_FILE"
+        $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
         echo -e "  ${GREEN}Database initialised.${RESET}"
         echo ""
 
         read -r -p "  Load sample data so the dashboard has something to show? [y/N] " doseed
         if [[ "$doseed" =~ ^[Yy]$ ]]; then
-            sudo sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
+            $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
             echo -e "  ${GREEN}Sample data loaded.${RESET}"
         fi
 
         if [ "$DEMO_MODE_ENABLED" = true ]; then
-            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
-            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
-            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
             echo -e "  ${GREEN}Demo settings seeded into database.${RESET}"
         fi
     fi
@@ -831,32 +844,61 @@ GEOIPCONF
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Setting file ownership and permissions..."
 
-    sudo chown -R root:www-data "${INSTALL_DIR}/includes/"
-    sudo chmod 750 "${INSTALL_DIR}/includes/"
-    sudo chmod 640 "${INSTALL_DIR}/includes/"*.php
-    echo -e "  ${GREEN}includes/ — root:www-data (640)${RESET}"
+    $SUDO chown root:root "$INSTALL_DIR"
+    $SUDO chmod 755 "$INSTALL_DIR"
 
-    sudo chown -R root:www-data "${INSTALL_DIR}/public/"
-    sudo chmod 750 "${INSTALL_DIR}/public/"
-    sudo find "${INSTALL_DIR}/public/" -type f -exec chmod 640 {} \;
-    echo -e "  ${GREEN}public/ — root:www-data (640)${RESET}"
+    if [ -d "${INSTALL_DIR}/includes" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/includes"
+        $SUDO find "${INSTALL_DIR}/includes" -type d -exec chmod 750 {} \;
+        $SUDO find "${INSTALL_DIR}/includes" -type f -exec chmod 640 {} \;
+        echo -e "  ${GREEN}includes/ — root:www-data, dirs 750 files 640${RESET}"
+    fi
 
-    sudo chown -R root:www-data "${INSTALL_DIR}/db/"
-    sudo chmod 750 "${INSTALL_DIR}/db/"
-    sudo chmod 640 "${INSTALL_DIR}/db/"*
-    echo -e "  ${GREEN}db/ — root:www-data (640)${RESET}"
+    if [ -d "${INSTALL_DIR}/public" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/public"
+        $SUDO find "${INSTALL_DIR}/public" -type d -exec chmod 755 {} \;
+        $SUDO find "${INSTALL_DIR}/public" -type f -exec chmod 644 {} \;
+        echo -e "  ${GREEN}public/ — root:www-data, dirs 755 files 644${RESET}"
+    fi
 
-    sudo chown -R root:www-data "${INSTALL_DIR}/vendor/"
-    sudo find "${INSTALL_DIR}/vendor/" -type d -exec chmod 750 {} \;
-    sudo find "${INSTALL_DIR}/vendor/" -type f -exec chmod 640 {} \;
-    echo -e "  ${GREEN}vendor/ — root:www-data (640)${RESET}"
+    if [ -d "${INSTALL_DIR}/db" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/db"
+        $SUDO find "${INSTALL_DIR}/db" -type d -exec chmod 750 {} \;
+        $SUDO find "${INSTALL_DIR}/db" -type f -exec chmod 640 {} \;
+        echo -e "  ${GREEN}db/ — root:www-data, dirs 750 files 640${RESET}"
+    fi
 
-    sudo chown root:www-data "$DB_DIR"
-    sudo chmod 770 "$DB_DIR"
+    if [ -d "${INSTALL_DIR}/vendor" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/vendor"
+        $SUDO find "${INSTALL_DIR}/vendor" -type d -exec chmod 755 {} \;
+        $SUDO find "${INSTALL_DIR}/vendor" -type f -exec chmod 644 {} \;
+        echo -e "  ${GREEN}vendor/ — root:www-data, dirs 755 files 644${RESET}"
+    fi
+
+    for optional_dir in docs docker grafana splunk .github; do
+        if [ -d "${INSTALL_DIR}/${optional_dir}" ]; then
+            $SUDO chown -R root:root "${INSTALL_DIR}/${optional_dir}"
+            $SUDO find "${INSTALL_DIR}/${optional_dir}" -type d -exec chmod 755 {} \;
+            $SUDO find "${INSTALL_DIR}/${optional_dir}" -type f -exec chmod 644 {} \;
+        fi
+    done
+
+    $SUDO find "$INSTALL_DIR" -maxdepth 1 -type f -exec chown root:root {} \;
+    $SUDO find "$INSTALL_DIR" -maxdepth 1 -type f -exec chmod 644 {} \;
+
+    if [ -f "${INSTALL_DIR}/setup.sh" ]; then
+        $SUDO chown root:root "${INSTALL_DIR}/setup.sh"
+        $SUDO chmod 755 "${INSTALL_DIR}/setup.sh"
+    fi
+
+    $SUDO mkdir -p "$DB_DIR"
+    $SUDO chown root:www-data "$DB_DIR"
+    $SUDO chmod 770 "$DB_DIR"
+
     if [ -f "$DB_FILE" ]; then
-        sudo chown root:www-data "$DB_FILE"
-        sudo chmod 660 "$DB_FILE"
-        echo -e "  ${GREEN}data/database.db — root:www-data (660)${RESET}"
+        $SUDO chown root:www-data "$DB_FILE"
+        $SUDO chmod 660 "$DB_FILE"
+        echo -e "  ${GREEN}data/database.db — root:www-data, 660${RESET}"
     fi
     echo ""
 
@@ -867,7 +909,7 @@ GEOIPCONF
     read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
     APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
 
-    sudo tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
+    $SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
 <VirtualHost *:80>
     ServerName ${APACHE_SERVER_NAME}
     DocumentRoot /var/www/signaltrace/public
@@ -888,10 +930,10 @@ GEOIPCONF
 </VirtualHost>
 APACHECONF
 
-    sudo a2enmod rewrite ssl
-    sudo a2ensite signaltrace.conf
-    sudo a2dissite 000-default.conf 2>/dev/null || true
-    sudo systemctl restart apache2
+    $SUDO a2enmod rewrite ssl
+    $SUDO a2ensite signaltrace.conf
+    $SUDO a2dissite 000-default.conf 2>/dev/null || true
+    $SUDO systemctl restart apache2
     echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
     echo ""
 
@@ -909,9 +951,9 @@ APACHECONF
             echo -e "  ${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
         else
             echo "  Installing certbot..."
-            sudo apt-get install -y certbot python3-certbot-apache -qq
+            $SUDO apt-get install -y certbot python3-certbot-apache -qq
             echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
-            if sudo certbot --apache \
+            if $SUDO certbot --apache \
                 --non-interactive \
                 --agree-tos \
                 --email "$LE_EMAIL" \
