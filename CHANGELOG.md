@@ -2,6 +2,30 @@
 
 ---
 
+## [v2.7.1] — Splunk and Grafana SQLite Dashboard Fixes
+
+Two dashboard bug fixes. No changes to application code, database schema, or the Infinity-based Grafana dashboard.
+
+### Splunk Overview Dashboard
+
+**File:** `splunk/signaltrace/dashboards/signaltrace_overview.json`
+
+The four stat panels — Total Events, Unique IPs, Unique Tokens, and Bot Events — were displaying values from the most recent 15-minute time bucket rather than the full 24-hour window. Root cause was `timechart span=15m` queries paired with `lastNotNull` reduction, which picks the last bucket value instead of aggregating across the full range. All four queries changed from `timechart` to `stats`. Sparkline display options removed from the affected panels as they no longer apply.
+
+### Grafana SQLite Dashboard
+
+**File:** `grafana/signaltrace_overview_sqlite.json`
+
+Three fixes to the direct SQLite datasource dashboard used by local Grafana installs:
+
+- `likely-human` label references updated to `uncertain` across the pie chart color overrides, events over time series overrides, and the recent events table label color mappings — `likely-human` was renamed in a previous release and was no longer matching any data
+- `uncertain` color override added (`#38bdf8`) to the pie chart and events over time panel, which was missing entirely
+- Events Over Time bucketing changed from per-minute (`%H:%M:00`) to per-hour (`%H:00:00`) — the minute-level grouping produced up to 1,440 data points over a 24-hour window, making the chart noisy and slow to render
+
+**Deployment:** Replace both dashboard files and restart Splunk. Grafana will pick up the updated JSON on next import — existing dashboards need to be re-imported or updated in place.
+
+---
+
 ## [v2.7.0] — April 19, 2026
 
 ### Webhook Enhancements
