@@ -267,6 +267,24 @@ if ($pixelEnabled && preg_match('#^/pixel/(.+)\.gif$#', $path)) {
 /* ============================================================
    ADMIN UI
    ============================================================ */
+/* ============================================================
+   ADMIN SUBDOMAIN REDIRECT
+   If CF_ACCESS_ENABLED is set and the request host matches the
+   configured admin subdomain, rewrite / and /admin paths cleanly.
+   ============================================================ */
+if (defined('CF_ACCESS_ENABLED') && CF_ACCESS_ENABLED) {
+    $requestHost = strtolower(trim($_SERVER['HTTP_HOST'] ?? ''));
+    if (defined('CF_ACCESS_TEAM_DOMAIN')) {
+        $baseHostPart = parse_url((string) \getSetting($pdo, 'base_url', ''), PHP_URL_HOST);
+        $adminHost = 'admin.' . ltrim((string) ($baseHostPart ?: ''), '.');
+        if ($requestHost !== '' && $adminHost !== '' && $requestHost === strtolower($adminHost)) {
+            if ($path === '/') {
+                $path = '/admin';
+            }
+        }
+    }
+}
+
 if ($path === '/admin') {
     handleAdminPage($pdo, $settings);
 }
@@ -282,6 +300,9 @@ $reserved = [
     '/admin/delete-link',
     '/admin/deactivate-link',
     '/admin/activate-link',
+    '/admin/create-campaign',
+    '/admin/update-campaign',
+    '/admin/delete-campaign',
     '/admin/create-skip-pattern',
     '/admin/add-token-to-skip',
     '/admin/deactivate-skip-pattern',
