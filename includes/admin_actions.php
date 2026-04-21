@@ -14,6 +14,7 @@ function adminRedirectUrl(string $tab = ''): string
     $token   = trim((string) ($_POST['_filter_token']   ?? ''));
     $ip      = trim((string) ($_POST['_filter_ip']      ?? ''));
     $visitor = trim((string) ($_POST['_filter_visitor']  ?? ''));
+    $campaign = max(0, (int) ($_POST['_filter_campaign'] ?? '0'));
     $known   = trim((string) ($_POST['_filter_known']   ?? ''));
     $from    = trim((string) ($_POST['_filter_date_from'] ?? ''));
     $to      = trim((string) ($_POST['_filter_date_to']   ?? ''));
@@ -22,6 +23,7 @@ function adminRedirectUrl(string $tab = ''): string
     if ($token !== '')   $params['token']     = $token;
     if ($ip !== '')      $params['ip']        = $ip;
     if ($visitor !== '') $params['visitor']   = $visitor;
+    if ($campaign > 0)   $params['campaign']  = (string) $campaign;
     if ($known === '1')  $params['known']     = '1';
     if ($from !== '')    $params['date_from'] = $from;
     if ($to !== '')      $params['date_to']   = $to;
