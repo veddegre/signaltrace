@@ -89,6 +89,21 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleActivateLink($pdo);
             return true;
 
+        case '/admin/create-campaign':
+            requireAdminAuth();
+            handleCreateCampaign($pdo);
+            return true;
+
+        case '/admin/update-campaign':
+            requireAdminAuth();
+            handleUpdateCampaign($pdo);
+            return true;
+
+        case '/admin/delete-campaign':
+            requireAdminAuth();
+            handleDeleteCampaign($pdo);
+            return true;
+
         case '/admin/create-skip-pattern':
             requireAdminAuth();
             handleCreateSkipPattern($pdo);
@@ -234,6 +249,8 @@ function handleUpdateLink(PDO $pdo): void
     $forceIncludeInFeed    = isset($_POST['force_include_in_feed'])     && $_POST['force_include_in_feed']     === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook'])  && $_POST['include_in_token_webhook']  === '1';
     $includeInEmail        = isset($_POST['include_in_email'])          && $_POST['include_in_email']          === '1';
+    $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
+    $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
 
     if ($id <= 0) {
         http_response_code(400);
@@ -262,7 +279,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -549,6 +566,8 @@ function handleCreateLink(PDO $pdo): void
     $forceIncludeInFeed    = isset($_POST['force_include_in_feed'])    && $_POST['force_include_in_feed']    === '1';
     $includeInTokenWebhook = isset($_POST['include_in_token_webhook']) && $_POST['include_in_token_webhook'] === '1';
     $includeInEmail        = isset($_POST['include_in_email'])         && $_POST['include_in_email']         === '1';
+    $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
+    $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -570,8 +589,8 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed);
-        header('Location: /admin', true, 302);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId);
+        header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);
@@ -1138,5 +1157,76 @@ function handleWebhookPreset(): void
 
     header('Content-Type: application/json');
     echo json_encode(['template' => webhookPresetTemplate($preset, $type)]);
+    exit;
+}
+
+// ============================================================
+// Campaign Handlers
+// ============================================================
+
+function handleCreateCampaign(PDO $pdo): void
+{
+    $name        = trim((string) ($_POST['campaign_name'] ?? ''));
+    $description = trim((string) ($_POST['campaign_description'] ?? ''));
+
+    if ($name === '') {
+        http_response_code(400);
+        echo 'Campaign name is required.';
+        exit;
+    }
+
+    try {
+        createCampaign($pdo, $name, $description);
+        header('Location: /admin?tab=links', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to create campaign. The name may already exist.';
+        exit;
+    }
+}
+
+function handleUpdateCampaign(PDO $pdo): void
+{
+    $id          = (int) ($_POST['campaign_id'] ?? 0);
+    $name        = trim((string) ($_POST['campaign_name'] ?? ''));
+    $description = trim((string) ($_POST['campaign_description'] ?? ''));
+    $active      = isset($_POST['campaign_active']) && $_POST['campaign_active'] === '1';
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid campaign id.';
+        exit;
+    }
+
+    if ($name === '') {
+        http_response_code(400);
+        echo 'Campaign name is required.';
+        exit;
+    }
+
+    try {
+        updateCampaign($pdo, $id, $name, $description, $active);
+        header('Location: /admin?tab=links', true, 302);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo 'Unable to update campaign. The name may already exist.';
+        exit;
+    }
+}
+
+function handleDeleteCampaign(PDO $pdo): void
+{
+    $id = (int) ($_POST['campaign_id'] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid campaign id.';
+        exit;
+    }
+
+    deleteCampaign($pdo, $id);
+    header('Location: /admin?tab=links', true, 302);
     exit;
 }
