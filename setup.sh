@@ -959,6 +959,7 @@ ADMINCONF
                 --agree-tos \
                 --email "$LE_EMAIL" \
                 --domains "$LE_DOMAINS" \
+                --expand \
                 --redirect; then
                 echo -e "  ${GREEN}HTTPS configured. Certificate will auto-renew.${RESET}"
                 HTTPS_ENABLED=true
