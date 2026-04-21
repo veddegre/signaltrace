@@ -8,6 +8,8 @@
 # - Run with: bash setup.sh
 # - The script prompts for sudo when needed.
 # - Manual installs are staged into /var/www/signaltrace.
+# - Installer-only settings are stored in /var/www/signaltrace/.setup-state
+#   so future update runs can prefill values that are not stored in config.local.php.
 # - Cloudflare admin subdomain uses Apache redirect:
 #     https://admin.example.com/ -> https://admin.example.com/admin
 # - If a Cloudflare DNS API token is provided, certbot can renew while proxied.
@@ -17,6 +19,7 @@ set -e
 REPO_URL="https://github.com/veddegre/signaltrace.git"
 INSTALL_DIR="/var/www/signaltrace"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_FILE="${INSTALL_DIR}/.setup-state"
 
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then
@@ -38,6 +41,13 @@ RESET='\033[0m'
 
 RUN_SYSTEM_TASKS=true
 INSTALL_ACTION="fresh"
+PRESERVE_CONFIG=true
+PRESERVE_DATA=true
+TMP_BACKUP_DIR=""
+MODIFY_EXISTING=false
+DEFER_HASH=false
+HTTPS_ENABLED=false
+LE_EMAIL=""
 
 echo ""
 echo -e "${BOLD}SignalTrace Setup${RESET}"
@@ -45,252 +55,6 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "This script will configure SignalTrace for your environment."
 echo "Press Enter to accept defaults where shown."
 echo ""
-
-# -- Install type --------------------------------------------------------------
-echo -e "${CYAN}Install type${RESET}"
-echo "  1) Docker — pre-built image (fastest, no build step)"
-echo "  2) Docker — build from source"
-echo "  3) Manual (Ubuntu + Apache)"
-echo ""
-read -r -p "  Choice [1]: " INSTALL_TYPE_INPUT
-INSTALL_TYPE="${INSTALL_TYPE_INPUT:-1}"
-echo ""
-
-if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ] && [ "$INSTALL_TYPE" != "3" ]; then
-    echo -e "${RED}Invalid choice. Please enter 1, 2, or 3.${RESET}"
-    exit 1
-fi
-
-# -- Manual install warning ----------------------------------------------------
-if [ "$INSTALL_TYPE" = "3" ]; then
-    echo ""
-    echo -e "${RED}${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${RED}${BOLD}║                        WARNING                           ║${RESET}"
-    echo -e "${RED}${BOLD}╠══════════════════════════════════════════════════════════╣${RESET}"
-    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
-    echo -e "${RED}${BOLD}║  The manual install is designed for a FRESH Ubuntu       ║${RESET}"
-    echo -e "${RED}${BOLD}║  server with no existing web services.                   ║${RESET}"
-    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
-    echo -e "${RED}${BOLD}║  It will:                                                ║${RESET}"
-    echo -e "${RED}${BOLD}║  * Install and configure Apache                          ║${RESET}"
-    echo -e "${RED}${BOLD}║  * Disable the default Apache site                       ║${RESET}"
-    echo -e "${RED}${BOLD}║  * Overwrite /etc/GeoIP.conf if it exists                ║${RESET}"
-    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
-    echo -e "${RED}${BOLD}║  Do NOT run this on a server already hosting other       ║${RESET}"
-    echo -e "${RED}${BOLD}║  websites or services.                                   ║${RESET}"
-    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
-    echo -e "${RED}${BOLD}╚══════════════════════════════════════════════════════════╝${RESET}"
-    echo ""
-    read -r -p "  I understand. Continue? [y/N] " confirm_manual
-    if [[ ! "$confirm_manual" =~ ^[Yy]$ ]]; then
-        echo "Aborted."
-        exit 0
-    fi
-    echo ""
-fi
-
-# -- Existing install/update strategy -----------------------------------------
-PRESERVE_CONFIG=true
-PRESERVE_DATA=true
-TMP_BACKUP_DIR=""
-
-# -- Manual install prep -------------------------------------------------------
-if [ "$INSTALL_TYPE" = "3" ]; then
-    require_sudo
-
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Installing system packages..."
-    echo ""
-    $SUDO apt-get update -qq
-    $SUDO apt-get install -y \
-        apache2 \
-        php \
-        php-sqlite3 \
-        php-mbstring \
-        php-xml \
-        php-curl \
-        sqlite3 \
-        composer \
-        unzip \
-        git \
-        software-properties-common \
-        certbot \
-        python3-certbot-apache \
-        python3-certbot-dns-cloudflare
-
-    if ! command -v geoipupdate >/dev/null 2>&1; then
-        $SUDO add-apt-repository -y ppa:maxmind/ppa
-        $SUDO apt-get update -qq
-        $SUDO apt-get install -y geoipupdate
-    fi
-
-    $SUDO a2enmod rewrite >/dev/null
-    echo -e "  ${GREEN}System packages installed.${RESET}"
-    echo ""
-
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Preparing SignalTrace in ${INSTALL_DIR}..."
-    echo ""
-
-    if [ -d "$INSTALL_DIR" ]; then
-        echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
-        echo ""
-        echo "How would you like to proceed?"
-        echo "  1) Update application files only"
-        echo "     - keeps config.local.php"
-        echo "     - keeps data/ and database"
-        echo "  2) Update application files and review settings"
-        echo "     - keeps config.local.php unless you choose to overwrite it later"
-        echo "     - keeps data/ and database unless you later choose to reset them"
-        echo "  3) Fresh reinstall"
-        echo "     - deletes application files"
-        echo "     - deletes config.local.php"
-        echo "     - deletes data/ and database"
-        echo "  4) Abort"
-        echo ""
-        read -r -p "  Choice [1]: " install_action_choice
-
-        case "${install_action_choice:-1}" in
-            2)
-                INSTALL_ACTION="update_and_review"
-                PRESERVE_CONFIG=true
-                PRESERVE_DATA=true
-                ;;
-            3)
-                INSTALL_ACTION="fresh"
-                PRESERVE_CONFIG=false
-                PRESERVE_DATA=false
-                ;;
-            4)
-                echo "Aborted."
-                exit 0
-                ;;
-            *)
-                INSTALL_ACTION="update_files_only"
-                PRESERVE_CONFIG=true
-                PRESERVE_DATA=true
-                ;;
-        esac
-    fi
-
-    if [ "$INSTALL_ACTION" = "update_files_only" ] || [ "$INSTALL_ACTION" = "update_and_review" ]; then
-        TMP_BACKUP_DIR="$(mktemp -d)"
-        echo "Backing up preserved files..."
-        echo ""
-
-        if [ "$PRESERVE_CONFIG" = true ] && [ -f "${INSTALL_DIR}/includes/config.local.php" ]; then
-            $SUDO mkdir -p "${TMP_BACKUP_DIR}/includes"
-            $SUDO cp -a "${INSTALL_DIR}/includes/config.local.php" "${TMP_BACKUP_DIR}/includes/"
-            echo -e "  ${GREEN}Preserved config.local.php${RESET}"
-        fi
-
-        if [ "$PRESERVE_DATA" = true ] && [ -d "${INSTALL_DIR}/data" ]; then
-            $SUDO cp -a "${INSTALL_DIR}/data" "${TMP_BACKUP_DIR}/"
-            echo -e "  ${GREEN}Preserved data/${RESET}"
-        fi
-        echo ""
-    fi
-
-    if [ -d "$INSTALL_DIR" ]; then
-        $SUDO rm -rf "$INSTALL_DIR"
-    fi
-    $SUDO mkdir -p "$INSTALL_DIR"
-
-    if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
-        $SUDO cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
-        echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
-    else
-        $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
-        echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
-    fi
-
-    if [ -n "$TMP_BACKUP_DIR" ]; then
-        echo ""
-        echo "Restoring preserved files..."
-        echo ""
-
-        if [ -f "${TMP_BACKUP_DIR}/includes/config.local.php" ]; then
-            $SUDO mkdir -p "${INSTALL_DIR}/includes"
-            $SUDO cp -a "${TMP_BACKUP_DIR}/includes/config.local.php" "${INSTALL_DIR}/includes/"
-            echo -e "  ${GREEN}Restored config.local.php${RESET}"
-        fi
-
-        if [ -d "${TMP_BACKUP_DIR}/data" ]; then
-            $SUDO rm -rf "${INSTALL_DIR}/data"
-            $SUDO cp -a "${TMP_BACKUP_DIR}/data" "${INSTALL_DIR}/"
-            echo -e "  ${GREEN}Restored data/${RESET}"
-        fi
-
-        $SUDO rm -rf "$TMP_BACKUP_DIR"
-    fi
-
-    echo ""
-    SCRIPT_DIR="$INSTALL_DIR"
-    OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
-else
-    OUTPUT_FILE="$SCRIPT_DIR/.env"
-fi
-
-# -- Existing config -----------------------------------------------------------
-MODIFY_EXISTING=false
-if [ -f "$OUTPUT_FILE" ]; then
-    if [ "$INSTALL_ACTION" = "update_files_only" ]; then
-        MODIFY_EXISTING=true
-        RUN_SYSTEM_TASKS=false
-        echo -e "${GREEN}Keeping existing config.local.php without prompting for settings.${RESET}"
-        echo ""
-    else
-        echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
-        echo ""
-        echo "  1) Update it — keep existing values as defaults, change only sections you choose"
-        echo "  2) Overwrite it — start fresh, all values will be re-prompted"
-        echo "  3) Keep it exactly as-is"
-        echo "  4) Abort — exit without changing anything"
-        echo ""
-        read -r -p "  Choice [1]: " existing_choice
-        case "${existing_choice:-1}" in
-            2)
-                echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
-                ;;
-            3)
-                MODIFY_EXISTING=true
-                RUN_SYSTEM_TASKS=false
-                echo -e "  ${GREEN}Keeping existing config exactly as-is.${RESET}"
-                ;;
-            4)
-                echo "Aborted. Your existing file was not changed."
-                exit 0
-                ;;
-            *)
-                MODIFY_EXISTING=true
-                echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
-                ;;
-        esac
-        echo ""
-    fi
-fi
-
-if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ] && [ "$INSTALL_ACTION" != "update_files_only" ]; then
-    echo "  System/infrastructure tasks are things like:"
-    echo "  • composer update"
-    echo "  • GeoIP config/write"
-    echo "  • database handling"
-    echo "  • file permissions"
-    echo "  • Apache vhost rewrite"
-    echo "  • Let's Encrypt / certbot"
-    echo ""
-    read -r -p "  Re-run system/infrastructure tasks too? [y/N] " rerun_system_tasks
-    if [[ "$rerun_system_tasks" =~ ^[Yy]$ ]]; then
-        RUN_SYSTEM_TASKS=true
-    else
-        RUN_SYSTEM_TASKS=false
-    fi
-    echo ""
-fi
-
-if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" != "3" ]; then
-    RUN_SYSTEM_TASKS=false
-fi
 
 # -- Helpers -------------------------------------------------------------------
 read_existing_php() {
@@ -304,6 +68,13 @@ read_existing_php_literal() {
     local key="$1"
     if [ -f "$OUTPUT_FILE" ]; then
         grep -oP "define\('${key}',\s*\K[^;)]+" "$OUTPUT_FILE" 2>/dev/null | head -1 | tr -d ' '
+    fi
+}
+
+read_existing_state() {
+    local key="$1"
+    if [ -f "$STATE_FILE" ]; then
+        grep -oP "^${key}=\"?\K[^\"]*" "$STATE_FILE" 2>/dev/null | head -1
     fi
 }
 
@@ -369,6 +140,283 @@ find_free_port() {
     echo "$port"
 }
 
+write_state_file() {
+    if [ "$INSTALL_TYPE" = "3" ]; then
+        $SUDO tee "$STATE_FILE" > /dev/null << EOF
+INSTALL_TYPE="${INSTALL_TYPE}"
+INSTALL_ACTION="${INSTALL_ACTION}"
+APACHE_SERVER_NAME="${APACHE_SERVER_NAME}"
+CF_ACCESS_ENABLED="${CF_ACCESS_ENABLED_VAL}"
+CF_ADMIN_SUBDOMAIN="${CF_ADMIN_SUBDOMAIN}"
+CF_DNS_PLUGIN_ENABLED="${CF_DNS_PLUGIN_ENABLED}"
+CF_DNS_CREDENTIALS_FILE="/root/.secrets/certbot/cloudflare.ini"
+HTTPS_ENABLED="${HTTPS_ENABLED}"
+LE_EMAIL="${LE_EMAIL}"
+RUN_SYSTEM_TASKS="${RUN_SYSTEM_TASKS}"
+EOF
+        $SUDO chown root:root "$STATE_FILE"
+        $SUDO chmod 600 "$STATE_FILE"
+    fi
+}
+
+# -- Install type --------------------------------------------------------------
+echo -e "${CYAN}Install type${RESET}"
+echo "  1) Docker — pre-built image (fastest, no build step)"
+echo "  2) Docker — build from source"
+echo "  3) Manual (Ubuntu + Apache)"
+echo ""
+read -r -p "  Choice [1]: " INSTALL_TYPE_INPUT
+INSTALL_TYPE="${INSTALL_TYPE_INPUT:-1}"
+echo ""
+
+if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ] && [ "$INSTALL_TYPE" != "3" ]; then
+    echo -e "${RED}Invalid choice. Please enter 1, 2, or 3.${RESET}"
+    exit 1
+fi
+
+# -- Manual install warning ----------------------------------------------------
+if [ "$INSTALL_TYPE" = "3" ]; then
+    echo ""
+    echo -e "${RED}${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${RED}${BOLD}║                        WARNING                           ║${RESET}"
+    echo -e "${RED}${BOLD}╠══════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  The manual install is designed for a FRESH Ubuntu       ║${RESET}"
+    echo -e "${RED}${BOLD}║  server with no existing web services.                   ║${RESET}"
+    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  It will:                                                ║${RESET}"
+    echo -e "${RED}${BOLD}║  * Install and configure Apache                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  * Disable the default Apache site                       ║${RESET}"
+    echo -e "${RED}${BOLD}║  * Overwrite /etc/GeoIP.conf if it exists                ║${RESET}"
+    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
+    echo -e "${RED}${BOLD}║  Do NOT run this on a server already hosting other       ║${RESET}"
+    echo -e "${RED}${BOLD}║  websites or services.                                   ║${RESET}"
+    echo -e "${RED}${BOLD}║                                                          ║${RESET}"
+    echo -e "${RED}${BOLD}╚══════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    read -r -p "  I understand. Continue? [y/N] " confirm_manual
+    if [[ ! "$confirm_manual" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+    echo ""
+fi
+
+# -- Manual install prep -------------------------------------------------------
+if [ "$INSTALL_TYPE" = "3" ]; then
+    require_sudo
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Installing system packages..."
+    echo ""
+    $SUDO apt-get update -qq
+    $SUDO apt-get install -y \
+        apache2 \
+        php \
+        php-sqlite3 \
+        php-mbstring \
+        php-xml \
+        php-curl \
+        sqlite3 \
+        composer \
+        unzip \
+        git \
+        software-properties-common \
+        certbot \
+        python3-certbot-apache \
+        python3-certbot-dns-cloudflare
+
+    if ! command -v geoipupdate >/dev/null 2>&1; then
+        $SUDO add-apt-repository -y ppa:maxmind/ppa
+        $SUDO apt-get update -qq
+        $SUDO apt-get install -y geoipupdate
+    fi
+
+    $SUDO a2enmod rewrite >/dev/null
+    echo -e "  ${GREEN}System packages installed.${RESET}"
+    echo ""
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Preparing SignalTrace in ${INSTALL_DIR}..."
+    echo ""
+
+    if [ -d "$INSTALL_DIR" ]; then
+        echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
+        echo ""
+        echo "How would you like to proceed?"
+        echo "  1) Update application files only"
+        echo "     - keeps config.local.php"
+        echo "     - keeps data/ and database"
+        echo "  2) Update application files and review settings"
+        echo "     - keeps config.local.php unless you choose to overwrite it later"
+        echo "     - keeps data/ and database unless you later choose to reset them"
+        echo "     - reuses installer-only settings from .setup-state when available"
+        echo "  3) Fresh reinstall"
+        echo "     - deletes application files"
+        echo "     - deletes config.local.php"
+        echo "     - deletes data/ and database"
+        echo "  4) Abort"
+        echo ""
+        read -r -p "  Choice [1]: " install_action_choice
+
+        case "${install_action_choice:-1}" in
+            2)
+                INSTALL_ACTION="update_and_review"
+                PRESERVE_CONFIG=true
+                PRESERVE_DATA=true
+                ;;
+            3)
+                INSTALL_ACTION="fresh"
+                PRESERVE_CONFIG=false
+                PRESERVE_DATA=false
+                ;;
+            4)
+                echo "Aborted."
+                exit 0
+                ;;
+            *)
+                INSTALL_ACTION="update_files_only"
+                PRESERVE_CONFIG=true
+                PRESERVE_DATA=true
+                ;;
+        esac
+    fi
+
+    if [ "$INSTALL_ACTION" = "update_files_only" ] || [ "$INSTALL_ACTION" = "update_and_review" ]; then
+        TMP_BACKUP_DIR="$(mktemp -d)"
+        echo "Backing up preserved files..."
+        echo ""
+
+        if [ "$PRESERVE_CONFIG" = true ] && [ -f "${INSTALL_DIR}/includes/config.local.php" ]; then
+            $SUDO mkdir -p "${TMP_BACKUP_DIR}/includes"
+            $SUDO cp -a "${INSTALL_DIR}/includes/config.local.php" "${TMP_BACKUP_DIR}/includes/"
+            echo -e "  ${GREEN}Preserved config.local.php${RESET}"
+        fi
+
+        if [ "$PRESERVE_DATA" = true ] && [ -d "${INSTALL_DIR}/data" ]; then
+            $SUDO cp -a "${INSTALL_DIR}/data" "${TMP_BACKUP_DIR}/"
+            echo -e "  ${GREEN}Preserved data/${RESET}"
+        fi
+
+        if [ -f "${INSTALL_DIR}/.setup-state" ]; then
+            $SUDO cp -a "${INSTALL_DIR}/.setup-state" "${TMP_BACKUP_DIR}/.setup-state"
+            echo -e "  ${GREEN}Preserved .setup-state${RESET}"
+        fi
+        echo ""
+    fi
+
+    if [ -d "$INSTALL_DIR" ]; then
+        $SUDO rm -rf "$INSTALL_DIR"
+    fi
+    $SUDO mkdir -p "$INSTALL_DIR"
+
+    if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
+        $SUDO cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
+        echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
+    else
+        $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
+        echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
+    fi
+
+    if [ -n "$TMP_BACKUP_DIR" ]; then
+        echo ""
+        echo "Restoring preserved files..."
+        echo ""
+
+        if [ -f "${TMP_BACKUP_DIR}/includes/config.local.php" ]; then
+            $SUDO mkdir -p "${INSTALL_DIR}/includes"
+            $SUDO cp -a "${TMP_BACKUP_DIR}/includes/config.local.php" "${INSTALL_DIR}/includes/"
+            echo -e "  ${GREEN}Restored config.local.php${RESET}"
+        fi
+
+        if [ -d "${TMP_BACKUP_DIR}/data" ]; then
+            $SUDO rm -rf "${INSTALL_DIR}/data"
+            $SUDO cp -a "${TMP_BACKUP_DIR}/data" "${INSTALL_DIR}/"
+            echo -e "  ${GREEN}Restored data/${RESET}"
+        fi
+
+        if [ -f "${TMP_BACKUP_DIR}/.setup-state" ]; then
+            $SUDO cp -a "${TMP_BACKUP_DIR}/.setup-state" "${INSTALL_DIR}/.setup-state"
+            echo -e "  ${GREEN}Restored .setup-state${RESET}"
+        fi
+
+        $SUDO rm -rf "$TMP_BACKUP_DIR"
+    fi
+
+    echo ""
+    SCRIPT_DIR="$INSTALL_DIR"
+    OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
+else
+    OUTPUT_FILE="$SCRIPT_DIR/.env"
+fi
+
+# -- Existing config -----------------------------------------------------------
+if [ -f "$OUTPUT_FILE" ]; then
+    if [ "$INSTALL_ACTION" = "update_files_only" ]; then
+        MODIFY_EXISTING=true
+        RUN_SYSTEM_TASKS=false
+        echo -e "${GREEN}Keeping existing config.local.php without prompting for settings.${RESET}"
+        echo ""
+    else
+        echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
+        echo ""
+        echo "  1) Update it — keep existing values as defaults, change only sections you choose"
+        echo "  2) Overwrite it — start fresh, all values will be re-prompted"
+        echo "  3) Keep it exactly as-is"
+        echo "  4) Abort — exit without changing anything"
+        echo ""
+        read -r -p "  Choice [1]: " existing_choice
+        case "${existing_choice:-1}" in
+            2)
+                echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
+                ;;
+            3)
+                MODIFY_EXISTING=true
+                RUN_SYSTEM_TASKS=false
+                echo -e "  ${GREEN}Keeping existing config exactly as-is.${RESET}"
+                ;;
+            4)
+                echo "Aborted. Your existing file was not changed."
+                exit 0
+                ;;
+            *)
+                MODIFY_EXISTING=true
+                echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
+                ;;
+        esac
+        echo ""
+    fi
+fi
+
+if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ] && [ "$INSTALL_ACTION" != "update_files_only" ]; then
+    echo "  System/infrastructure tasks are things like:"
+    echo "  • composer update"
+    echo "  • GeoIP config/write"
+    echo "  • database handling"
+    echo "  • file permissions"
+    echo "  • Apache vhost rewrite"
+    echo "  • Let's Encrypt / certbot"
+    echo ""
+    read -r -p "  Re-run system/infrastructure tasks too? [y/N] " rerun_system_tasks
+    if [[ "$rerun_system_tasks" =~ ^[Yy]$ ]]; then
+        RUN_SYSTEM_TASKS=true
+    else
+        RUN_SYSTEM_TASKS=false
+    fi
+    echo ""
+fi
+
+if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" != "3" ]; then
+    RUN_SYSTEM_TASKS=false
+fi
+
+# -- Existing state lookups ----------------------------------------------------
+_existing_apache_server_name=$(read_existing_state "APACHE_SERVER_NAME")
+_existing_cf_admin_subdomain=$(read_existing_state "CF_ADMIN_SUBDOMAIN")
+_existing_https_enabled=$(read_existing_state "HTTPS_ENABLED")
+_existing_le_email=$(read_existing_state "LE_EMAIL")
+_existing_cf_dns_plugin_enabled=$(read_existing_state "CF_DNS_PLUGIN_ENABLED")
+
 # -- Admin credentials ---------------------------------------------------------
 echo -e "${BOLD}── Admin Credentials ────────────────────────────────────────${RESET}"
 echo ""
@@ -416,7 +464,6 @@ else
     done
 fi
 
-DEFER_HASH=false
 if [ -n "$ADMIN_PASSWORD" ]; then
     if command -v php >/dev/null 2>&1; then
         echo "  Generating bcrypt hash..."
@@ -554,7 +601,6 @@ else
     echo "  Press Enter to auto-generate  |  Type a value to use your own  |  Type 'none' to skip"
     echo ""
     read -r -p "  Value: " EXPORT_TOKEN_INPUT
-
     if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
         SIGNALTRACE_EXPORT_API_TOKEN=""
         echo -e "${YELLOW}  Export API token disabled.${RESET}"
@@ -618,20 +664,39 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo "    Scope it to this zone only."
     echo ""
 
-    if [ "$MODIFY_EXISTING" = true ] && { [ "$_existing_cf_enabled" = "true" ] || [ -n "$_existing_cf_aud" ]; }; then
+    if [ "$MODIFY_EXISTING" = true ] && { [ "$_existing_cf_enabled" = "true" ] || [ -n "$_existing_cf_aud" ] || [ -n "$_existing_cf_admin_subdomain" ]; }; then
         section_choice_existing "Cloudflare Access / DNS"
         case "$SECTION_CHOICE" in
             2)
                 prompt "Cloudflare Access AUD token" CF_ACCESS_AUD_VAL "$_existing_cf_aud" ""
                 prompt "Cloudflare team domain" CF_ACCESS_TEAM_DOMAIN_VAL "$_existing_cf_team" "e.g. yourteam.cloudflareaccess.com"
-                prompt "Admin subdomain" CF_ADMIN_SUBDOMAIN "" "e.g. admin.example.com"
-                echo -e "${CYAN}Cloudflare DNS API token${RESET}"
-                read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
-                echo ""
-                echo ""
-                if [ -n "$CF_DNS_API_TOKEN" ]; then
-                    CF_DNS_PLUGIN_ENABLED="true"
+                prompt "Admin subdomain" CF_ADMIN_SUBDOMAIN "${_existing_cf_admin_subdomain:-}" "e.g. admin.example.com"
+
+                if [ "$_existing_cf_dns_plugin_enabled" = "true" ]; then
+                    echo -e "${CYAN}Cloudflare DNS plugin${RESET}"
+                    echo "  Existing DNS plugin appears enabled."
+                    read -r -p "  Keep using existing credentials file? [Y/n] " keep_dns_file
+                    if [[ ! "$keep_dns_file" =~ ^[Nn]$ ]]; then
+                        CF_DNS_PLUGIN_ENABLED="true"
+                    else
+                        echo -e "${CYAN}Cloudflare DNS API token${RESET}"
+                        read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
+                        echo ""
+                        echo ""
+                        if [ -n "$CF_DNS_API_TOKEN" ]; then
+                            CF_DNS_PLUGIN_ENABLED="true"
+                        fi
+                    fi
+                else
+                    echo -e "${CYAN}Cloudflare DNS API token${RESET}"
+                    read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
+                    echo ""
+                    echo ""
+                    if [ -n "$CF_DNS_API_TOKEN" ]; then
+                        CF_DNS_PLUGIN_ENABLED="true"
+                    fi
                 fi
+
                 if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
                     CF_ACCESS_ENABLED_VAL="true"
                 fi
@@ -648,6 +713,10 @@ if [ "$INSTALL_TYPE" = "3" ]; then
                 CF_ACCESS_ENABLED_VAL="true"
                 CF_ACCESS_AUD_VAL="$_existing_cf_aud"
                 CF_ACCESS_TEAM_DOMAIN_VAL="$_existing_cf_team"
+                CF_ADMIN_SUBDOMAIN="${_existing_cf_admin_subdomain:-}"
+                if [ "$_existing_cf_dns_plugin_enabled" = "true" ]; then
+                    CF_DNS_PLUGIN_ENABLED="true"
+                fi
                 ;;
         esac
     else
@@ -929,6 +998,8 @@ EOF
     $SUDO chmod 640 "$OUTPUT_FILE"
 fi
 
+write_state_file
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}${BOLD}$(basename "$OUTPUT_FILE") written successfully.${RESET}"
 echo ""
@@ -1125,19 +1196,23 @@ if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
     echo "Configuring Cloudflare DNS plugin credentials..."
     echo ""
     $SUDO mkdir -p /root/.secrets/certbot
-    $SUDO tee /root/.secrets/certbot/cloudflare.ini > /dev/null << EOF
+    if [ -n "$CF_DNS_API_TOKEN" ]; then
+        $SUDO tee /root/.secrets/certbot/cloudflare.ini > /dev/null << EOF
 dns_cloudflare_api_token = ${CF_DNS_API_TOKEN}
 EOF
-    $SUDO chmod 600 /root/.secrets/certbot/cloudflare.ini
-    echo -e "${GREEN}  Cloudflare certbot credentials written.${RESET}"
+        $SUDO chmod 600 /root/.secrets/certbot/cloudflare.ini
+        echo -e "${GREEN}  Cloudflare certbot credentials written.${RESET}"
+    else
+        echo -e "${GREEN}  Reusing existing Cloudflare credentials file if present.${RESET}"
+    fi
     echo ""
 fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Configuring Apache..."
 echo ""
-read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
-APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
+read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com) [${_existing_apache_server_name:-localhost}]: " APACHE_SERVER_NAME
+APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-${_existing_apache_server_name:-localhost}}"
 
 $SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << EOF
 <VirtualHost *:80>
@@ -1195,12 +1270,20 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${CYAN}HTTPS with Let's Encrypt (optional)${RESET}"
 echo ""
-read -r -p "  Set up HTTPS now? [y/N] " do_letsencrypt
+default_https_prompt="N"
+if [ "$_existing_https_enabled" = "true" ]; then
+    default_https_prompt="Y"
+fi
+read -r -p "  Set up HTTPS now? [${default_https_prompt}/n] " do_letsencrypt
+do_letsencrypt="${do_letsencrypt:-$default_https_prompt}"
+
 if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
     echo ""
-    read -r -p "  Email address for Let's Encrypt notifications: " LE_EMAIL
+    read -r -p "  Email address for Let's Encrypt notifications [${_existing_le_email:-}]: " LE_EMAIL
+    LE_EMAIL="${LE_EMAIL:-$_existing_le_email}"
     if [ -z "$LE_EMAIL" ]; then
         echo -e "${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
+        HTTPS_ENABLED=false
     else
         if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
             echo "  Requesting certificate using Cloudflare DNS validation..."
@@ -1244,7 +1327,7 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
             HTTPS_ENABLED=true
         fi
 
-        if [ "${HTTPS_ENABLED:-false}" = true ] && [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
+        if [ "${HTTPS_ENABLED}" = "true" ] && [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
             $SUDO tee /etc/apache2/sites-available/signaltrace-le-ssl.conf > /dev/null << EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
@@ -1304,7 +1387,9 @@ EOF
 fi
 echo ""
 
-if [ "${HTTPS_ENABLED:-false}" = true ]; then
+write_state_file
+
+if [ "${HTTPS_ENABLED}" = "true" ]; then
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
         echo -e "${CYAN}SignalTrace URLs:${RESET}"
         echo "  Public honeypot: https://${APACHE_SERVER_NAME}"
