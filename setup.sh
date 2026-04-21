@@ -3,6 +3,17 @@
 # Supports Docker and manual installs.
 # Can be run from inside the cloned repo, or downloaded standalone:
 #   curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh | bash
+#
+# Notes:
+# - Run with: bash setup.sh
+# - The script will prompt for sudo when needed.
+# - For manual installs, the app is staged into /var/www/signaltrace.
+# - If Cloudflare Access + admin subdomain are enabled, Apache handles:
+#     https://admin.example.com/  ->  https://admin.example.com/admin
+#   The app itself does not need special redirect logic for that.
+# - If you provide a Cloudflare DNS API token, the script will use the
+#   certbot Cloudflare DNS plugin so certificates can renew even while
+#   Cloudflare proxying is enabled.
 
 set -e
 
@@ -35,6 +46,7 @@ echo "This script will configure SignalTrace for your environment."
 echo "Press Enter to accept defaults where shown."
 echo ""
 
+# -- Install type --------------------------------------------------------------
 echo -e "${CYAN}Install type${RESET}"
 echo "  1) Docker — pre-built image (fastest, no build step)"
 echo "  2) Docker — build from source"
@@ -49,6 +61,7 @@ if [ "$INSTALL_TYPE" != "1" ] && [ "$INSTALL_TYPE" != "2" ] && [ "$INSTALL_TYPE"
     exit 1
 fi
 
+# -- Manual install warning ----------------------------------------------------
 if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
     echo -e "${RED}${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
@@ -76,6 +89,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
+# -- Manual install prep -------------------------------------------------------
 if [ "$INSTALL_TYPE" = "3" ]; then
     require_sudo
 
@@ -94,7 +108,10 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         composer \
         unzip \
         git \
-        software-properties-common
+        software-properties-common \
+        certbot \
+        python3-certbot-apache \
+        python3-certbot-dns-cloudflare
 
     if ! command -v geoipupdate >/dev/null 2>&1; then
         $SUDO add-apt-repository -y ppa:maxmind/ppa
@@ -102,7 +119,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         $SUDO apt-get install -y geoipupdate
     fi
 
-    $SUDO a2enmod rewrite >/dev/null
+    $SUDO a2enmod rewrite ssl >/dev/null
     echo -e "  ${GREEN}System packages installed.${RESET}"
     echo ""
 
@@ -142,6 +159,7 @@ else
     OUTPUT_FILE="$SCRIPT_DIR/.env"
 fi
 
+# -- Existing config -----------------------------------------------------------
 MODIFY_EXISTING=false
 if [ -f "$OUTPUT_FILE" ]; then
     echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
@@ -224,6 +242,7 @@ find_free_port() {
     echo "$port"
 }
 
+# -- Admin credentials ---------------------------------------------------------
 echo -e "${BOLD}── Admin Credentials ────────────────────────────────────────${RESET}"
 echo ""
 _existing_username=$(read_existing_php "ADMIN_USERNAME")
@@ -288,6 +307,7 @@ if [ -n "$ADMIN_PASSWORD" ]; then
     echo ""
 fi
 
+# -- Visitor hash salt ---------------------------------------------------------
 echo -e "${CYAN}Visitor hash salt${RESET}"
 _existing_salt=$(read_existing_php "VISITOR_HASH_SALT")
 if [ -n "$_existing_salt" ]; then
@@ -306,6 +326,7 @@ if [ -z "$VISITOR_HASH_SALT" ]; then
 fi
 echo ""
 
+# -- Docker settings -----------------------------------------------------------
 CONTAINER_WAS_RUNNING=false
 if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     echo -e "${BOLD}── Docker Configuration ─────────────────────────────────────${RESET}"
@@ -332,12 +353,14 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     echo ""
 fi
 
+# -- GeoIP ---------------------------------------------------------------------
 echo -e "${BOLD}── GeoIP Enrichment (optional but recommended) ──────────────${RESET}"
 echo "  Sign up free at https://www.maxmind.com to get these."
 echo ""
 prompt "MaxMind Account ID" MAXMIND_ACCOUNT_ID "" ""
 prompt "MaxMind License Key" MAXMIND_LICENSE_KEY "" "" "secret"
 
+# -- Export API token ----------------------------------------------------------
 echo -e "${BOLD}── Export API Token (optional) ──────────────────────────────${RESET}"
 echo "  Used for Splunk scripted inputs and other automation."
 echo ""
@@ -362,20 +385,37 @@ else
 fi
 echo ""
 
+# -- Reverse proxy -------------------------------------------------------------
 echo -e "${BOLD}── Reverse Proxy (optional) ─────────────────────────────────${RESET}"
 echo "  Set this if SignalTrace runs behind nginx, Caddy, or Traefik."
 echo ""
 prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "" ""
 
+# -- Cloudflare Access + DNS plugin -------------------------------------------
 CF_ACCESS_ENABLED_VAL="false"
 CF_ACCESS_AUD_VAL=""
 CF_ACCESS_TEAM_DOMAIN_VAL=""
 CF_ADMIN_SUBDOMAIN=""
+CF_DNS_PLUGIN_ENABLED="false"
+CF_DNS_API_TOKEN=""
 
 if [ "$INSTALL_TYPE" = "3" ]; then
-    echo -e "${BOLD}── Cloudflare Access (optional) ─────────────────────────────${RESET}"
-    echo "  Adds per-user identity and MFA in front of /admin using"
-    echo "  Cloudflare Zero Trust."
+    echo -e "${BOLD}── Cloudflare Access / DNS (optional) ───────────────────────${RESET}"
+    echo "  Adds Cloudflare Zero Trust in front of the admin panel."
+    echo ""
+    echo "  For the Access AUD token:"
+    echo "    Zero Trust Dashboard → Access → Applications → your app → Configure →"
+    echo "    Additional settings → AUD"
+    echo ""
+    echo "  For the team domain:"
+    echo "    Zero Trust Dashboard → Settings → Custom Pages / General → Team domain"
+    echo ""
+    echo "  For the DNS API token used by certbot renewals:"
+    echo "    Cloudflare Dashboard → My Profile → API Tokens → Create Token"
+    echo "    Recommended template/permissions:"
+    echo "      Zone → DNS → Edit"
+    echo "      Zone → Zone → Read"
+    echo "    Scope it to this zone only."
     echo ""
     read -r -p "  Enable Cloudflare Access? [y/N] " do_cf_access
     if [[ "$do_cf_access" =~ ^[Yy]$ ]]; then
@@ -389,9 +429,21 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         echo -e "${CYAN}Admin subdomain${RESET}"
         read -r -p "  Value (e.g. admin.example.com): " CF_ADMIN_SUBDOMAIN
         echo ""
+        echo -e "${CYAN}Cloudflare DNS API token (recommended for renewals)${RESET}"
+        read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
+        echo ""
+        echo ""
+
+        if [ -n "$CF_DNS_API_TOKEN" ]; then
+            CF_DNS_PLUGIN_ENABLED="true"
+        fi
+
         if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
             CF_ACCESS_ENABLED_VAL="true"
             echo -e "  ${GREEN}Cloudflare Access enabled.${RESET}"
+            if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
+                echo -e "  ${GREEN}Cloudflare DNS plugin will be configured for certbot.${RESET}"
+            fi
         else
             echo -e "  ${YELLOW}AUD, team domain, or admin subdomain missing — Cloudflare Access will not be enabled.${RESET}"
         fi
@@ -399,6 +451,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
+# -- Demo mode -----------------------------------------------------------------
 DEMO_MODE_ENABLED=false
 DEMO_APP_NAME="SignalTrace"
 DEMO_BASE_URL=""
@@ -431,6 +484,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
+# -- Optional tuning -----------------------------------------------------------
 echo -e "${BOLD}── Optional Tuning ──────────────────────────────────────────${RESET}"
 echo "  Press Enter to accept defaults for all of these."
 echo ""
@@ -450,6 +504,7 @@ read -r -p "  Self-referrer domain [${_existing_self_referer:-none}]: " SELF_REF
 SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN_INPUT:-$_existing_self_referer}"
 echo ""
 
+# -- Email alerting ------------------------------------------------------------
 EMAIL_SMTP_HOST=""
 EMAIL_SMTP_PORT="587"
 EMAIL_SMTP_USER=""
@@ -517,6 +572,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     fi
 fi
 
+# -- Write config --------------------------------------------------------------
 if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     cat > "$OUTPUT_FILE" << EOF
 SIGNALTRACE_ADMIN_USERNAME="${ADMIN_USERNAME}"
@@ -534,7 +590,7 @@ EOF
 else
     $SUDO mkdir -p "$SCRIPT_DIR/includes"
 
-    $SUDO tee "$OUTPUT_FILE" >/dev/null << EOF
+    $SUDO tee "$OUTPUT_FILE" > /dev/null << EOF
 <?php
 define('ADMIN_USERNAME',      '${ADMIN_USERNAME}');
 define('ADMIN_PASSWORD_HASH', '${ADMIN_PASSWORD_HASH}');
@@ -546,37 +602,37 @@ define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
 
     if [ -n "$MAXMIND_ACCOUNT_ID" ]; then
-        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$MAXMIND_LICENSE_KEY" ]; then
-        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$SELF_REFERER_DOMAIN" ]; then
-        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "// Cloudflare Access" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('CF_ACCESS_ENABLED',     true);" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Cloudflare Access" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_ENABLED',     true);" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ -n "$EMAIL_SMTP_HOST" ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "// Email alerting" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Email alerting" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
     if [ "$DEMO_MODE_ENABLED" = true ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "// Demo mode" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('DEMO_MODE',             true);" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "// Demo mode" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_MODE',             true);" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
+        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" > /dev/null
     fi
 
     $SUDO chown root:www-data "$OUTPUT_FILE"
@@ -587,6 +643,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${GREEN}${BOLD}$(basename "$OUTPUT_FILE") written successfully.${RESET}"
 echo ""
 
+# -- Docker path ---------------------------------------------------------------
 if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     if [ "$INSTALL_TYPE" = "1" ] && [ "$CONTAINER_WAS_RUNNING" = false ] && [ "$DEFER_HASH" = false ]; then
         echo "  Pulling pre-built image..."
@@ -615,6 +672,7 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     exit 0
 fi
 
+# -- Manual install continue ---------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Installing PHP dependencies..."
 echo ""
@@ -627,7 +685,7 @@ if [ -n "$MAXMIND_ACCOUNT_ID" ] && [ -n "$MAXMIND_LICENSE_KEY" ]; then
     echo "Configuring GeoIP..."
     echo ""
     $SUDO mkdir -p /var/lib/GeoIP
-    $SUDO tee /etc/GeoIP.conf >/dev/null << GEOIPCONF
+    $SUDO tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
 AccountID ${MAXMIND_ACCOUNT_ID}
 LicenseKey ${MAXMIND_LICENSE_KEY}
 EditionIDs GeoLite2-ASN GeoLite2-Country
@@ -725,13 +783,28 @@ if [ -f "$DB_FILE" ]; then
 fi
 echo ""
 
+# -- Cloudflare DNS plugin credentials ----------------------------------------
+if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Configuring Cloudflare DNS plugin credentials..."
+    echo ""
+    $SUDO mkdir -p /root/.secrets/certbot
+    $SUDO tee /root/.secrets/certbot/cloudflare.ini > /dev/null << EOF
+dns_cloudflare_api_token = ${CF_DNS_API_TOKEN}
+EOF
+    $SUDO chmod 600 /root/.secrets/certbot/cloudflare.ini
+    echo -e "  ${GREEN}Cloudflare certbot credentials written.${RESET}"
+    echo ""
+fi
+
+# -- Apache --------------------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Configuring Apache..."
 echo ""
 read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
 APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
 
-$SUDO tee /etc/apache2/sites-available/signaltrace.conf >/dev/null << APACHECONF
+$SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
 <VirtualHost *:80>
     ServerName ${APACHE_SERVER_NAME}
     DocumentRoot /var/www/signaltrace/public
@@ -753,7 +826,7 @@ $SUDO tee /etc/apache2/sites-available/signaltrace.conf >/dev/null << APACHECONF
 APACHECONF
 
 if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
-    $SUDO tee /etc/apache2/sites-available/signaltrace-admin.conf >/dev/null << ADMINCONF
+    $SUDO tee /etc/apache2/sites-available/signaltrace-admin.conf > /dev/null << ADMINHTTP
 <VirtualHost *:80>
     ServerName ${CF_ADMIN_SUBDOMAIN}
     DocumentRoot /var/www/signaltrace/public
@@ -772,18 +845,19 @@ if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
     ErrorLog \${APACHE_LOG_DIR}/signaltrace_admin_error.log
     CustomLog \${APACHE_LOG_DIR}/signaltrace_admin_access.log combined
 </VirtualHost>
-ADMINCONF
-    $SUDO a2ensite signaltrace-admin.conf >/dev/null
-    echo -e "  ${GREEN}Admin subdomain vhost created for ${CF_ADMIN_SUBDOMAIN}.${RESET}"
+ADMINHTTP
+    $SUDO a2ensite signaltrace-admin.conf > /dev/null
+    echo -e "  ${GREEN}Admin subdomain HTTP vhost created for ${CF_ADMIN_SUBDOMAIN}.${RESET}"
 fi
 
-$SUDO a2enmod rewrite ssl >/dev/null
-$SUDO a2ensite signaltrace.conf >/dev/null
-$SUDO a2dissite 000-default.conf >/dev/null 2>&1 || true
+$SUDO a2enmod rewrite ssl > /dev/null
+$SUDO a2ensite signaltrace.conf > /dev/null
+$SUDO a2dissite 000-default.conf > /dev/null 2>&1 || true
 $SUDO systemctl restart apache2
 echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
 echo ""
 
+# -- HTTPS ---------------------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${CYAN}HTTPS with Let's Encrypt (optional)${RESET}"
 echo ""
@@ -794,23 +868,75 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
     if [ -z "$LE_EMAIL" ]; then
         echo -e "  ${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
     else
-        echo "  Installing certbot..."
-        $SUDO apt-get install -y certbot python3-certbot-apache -qq
+        if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
+            echo "  Requesting certificate using Cloudflare DNS validation..."
+            if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+                $SUDO certbot certonly \
+                    --dns-cloudflare \
+                    --dns-cloudflare-credentials /root/.secrets/certbot/cloudflare.ini \
+                    --non-interactive \
+                    --agree-tos \
+                    --email "$LE_EMAIL" \
+                    -d "$APACHE_SERVER_NAME" \
+                    -d "$CF_ADMIN_SUBDOMAIN"
+            else
+                $SUDO certbot certonly \
+                    --dns-cloudflare \
+                    --dns-cloudflare-credentials /root/.secrets/certbot/cloudflare.ini \
+                    --non-interactive \
+                    --agree-tos \
+                    --email "$LE_EMAIL" \
+                    -d "$APACHE_SERVER_NAME"
+            fi
+            HTTPS_ENABLED=true
+        else
+            echo "  Requesting certificate using Apache validation..."
+            if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+                $SUDO certbot --apache \
+                    --non-interactive \
+                    --agree-tos \
+                    --email "$LE_EMAIL" \
+                    -d "$APACHE_SERVER_NAME" \
+                    -d "$CF_ADMIN_SUBDOMAIN" \
+                    --redirect
+            else
+                $SUDO certbot --apache \
+                    --non-interactive \
+                    --agree-tos \
+                    --email "$LE_EMAIL" \
+                    -d "$APACHE_SERVER_NAME" \
+                    --redirect
+            fi
+            HTTPS_ENABLED=true
+        fi
 
-        if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
-            echo "  Requesting certificate for ${APACHE_SERVER_NAME} and ${CF_ADMIN_SUBDOMAIN}..."
-            if $SUDO certbot --apache \
-                --non-interactive \
-                --agree-tos \
-                --email "$LE_EMAIL" \
-                -d "$APACHE_SERVER_NAME" \
-                -d "$CF_ADMIN_SUBDOMAIN" \
-                --redirect; then
-                echo -e "  ${GREEN}HTTPS configured.${RESET}"
-                HTTPS_ENABLED=true
+        if [ "${HTTPS_ENABLED:-false}" = true ] && [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
+            $SUDO tee /etc/apache2/sites-available/signaltrace-le-ssl.conf > /dev/null << MAINSSL
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+    ServerName ${APACHE_SERVER_NAME}
+    DocumentRoot /var/www/signaltrace/public
 
-                if [ -f "/etc/apache2/sites-available/signaltrace-admin-le-ssl.conf" ]; then
-                    $SUDO tee /etc/apache2/sites-available/signaltrace-admin-le-ssl.conf >/dev/null << ADMINSSL
+    SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
+
+    <Directory /var/www/signaltrace/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog \${APACHE_LOG_DIR}/signaltrace_error.log
+    CustomLog \${APACHE_LOG_DIR}/signaltrace_access.log combined
+
+    Include /etc/letsencrypt/options-ssl-apache.conf
+    SSLCertificateFile /etc/letsencrypt/live/${APACHE_SERVER_NAME}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/${APACHE_SERVER_NAME}/privkey.pem
+</VirtualHost>
+</IfModule>
+MAINSSL
+            $SUDO a2ensite signaltrace-le-ssl.conf > /dev/null
+
+            if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+                $SUDO tee /etc/apache2/sites-available/signaltrace-admin-le-ssl.conf > /dev/null << ADMINSSL
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
     ServerName ${CF_ADMIN_SUBDOMAIN}
@@ -835,35 +961,25 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
 </VirtualHost>
 </IfModule>
 ADMINSSL
-                    $SUDO systemctl reload apache2
-                    echo -e "  ${GREEN}Admin SSL vhost repaired to avoid rewrite loops.${RESET}"
-                fi
-            else
-                echo -e "  ${YELLOW}Certbot failed. You can rerun it later manually.${RESET}"
+                $SUDO a2ensite signaltrace-admin-le-ssl.conf > /dev/null
             fi
-        else
-            echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
-            if $SUDO certbot --apache \
-                --non-interactive \
-                --agree-tos \
-                --email "$LE_EMAIL" \
-                -d "$APACHE_SERVER_NAME" \
-                --redirect; then
-                echo -e "  ${GREEN}HTTPS configured.${RESET}"
-                HTTPS_ENABLED=true
-            else
-                echo -e "  ${YELLOW}Certbot failed. You can rerun it later manually.${RESET}"
-            fi
+
+            $SUDO systemctl reload apache2
         fi
     fi
 fi
 echo ""
 
+# -- Final output --------------------------------------------------------------
 if [ "${HTTPS_ENABLED:-false}" = true ]; then
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
         echo -e "${CYAN}SignalTrace URLs:${RESET}"
         echo "  Public honeypot: https://${APACHE_SERVER_NAME}"
         echo "  Admin panel:     https://${CF_ADMIN_SUBDOMAIN}"
+        echo ""
+        echo -e "${YELLOW}Cloudflare Access reminder:${RESET}"
+        echo "  Make sure your Zero Trust Access application covers:"
+        echo "    ${CF_ADMIN_SUBDOMAIN}/*"
     else
         echo -e "${CYAN}SignalTrace is available at: https://${APACHE_SERVER_NAME}/admin${RESET}"
     fi
@@ -879,10 +995,15 @@ fi
 
 if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
     echo ""
-    echo -e "${YELLOW}Cloudflare Access is enabled. Remember to:${RESET}"
-    echo "  1. Create an A/AAAA or CNAME for ${APACHE_SERVER_NAME} in Cloudflare with proxy enabled"
-    echo "  2. Create an A/AAAA or CNAME for ${CF_ADMIN_SUBDOMAIN} in Cloudflare with proxy enabled"
-    echo "  3. Configure the Access application for ${CF_ADMIN_SUBDOMAIN} in Zero Trust"
+    echo -e "${YELLOW}Cloudflare setup checklist:${RESET}"
+    echo "  1. Create/proxy DNS records for ${APACHE_SERVER_NAME} and ${CF_ADMIN_SUBDOMAIN}"
+    echo "  2. Create a Zero Trust Access application for ${CF_ADMIN_SUBDOMAIN}/*"
+    echo "  3. Add your policy/users/groups"
+    if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
+        echo "  4. Certbot renewals can use the Cloudflare DNS plugin even while proxied"
+    else
+        echo "  4. Consider rerunning setup later with a Cloudflare DNS API token for renewals"
+    fi
 fi
 
 echo ""
