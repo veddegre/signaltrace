@@ -407,6 +407,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $tokenFilter   = trim((string) ($_GET['token']   ?? ''));
     $ipFilter      = trim((string) ($_GET['ip']      ?? ''));
     $visitorFilter = trim((string) ($_GET['visitor'] ?? ''));
+    $campaignFilter = max(0, (int) ($_GET['campaign'] ?? 0));
     $hostFilter    = trim((string) ($_GET['host']    ?? ''));
     $knownOnly     = isset($_GET['known'])    && $_GET['known']    === '1';
     $dateFrom      = trim((string) ($_GET['date_from'] ?? ''));
@@ -429,6 +430,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $dateFrom !== '' ? $dateFrom : null,
         $dateTo   !== '' ? $dateTo   : null,
         $hostFilter !== '' ? $hostFilter : null,
+        $campaignFilter > 0 ? $campaignFilter : null,
     );
 
     $totalPages  = $pageSize > 0 ? max(1, (int) ceil($totalCount / $pageSize)) : 1;
@@ -439,6 +441,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $links          = getAllLinks($pdo);
     $campaignStats  = getCampaignStats($pdo);
     $campaigns      = getAllCampaigns($pdo);
+    $selectedCampaign = $campaignFilter > 0 ? getCampaignById($pdo, $campaignFilter) : null;
     $tokenCounts = getClickCountsByToken(
         $pdo,
         $knownOnly,
@@ -461,6 +464,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     if ($ipFilter      !== '') $refreshParams['ip']              = $ipFilter;
     if ($visitorFilter !== '') $refreshParams['visitor']         = $visitorFilter;
     if ($hostFilter    !== '') $refreshParams['host']            = $hostFilter;
+    if ($campaignFilter > 0)   $refreshParams['campaign']        = (string) $campaignFilter;
     if ($knownOnly)            $refreshParams['known']           = '1';
     if ($showTopTokens)        $refreshParams['show_top_tokens'] = '1';
     if ($showAll)              $refreshParams['show_all']        = '1';
@@ -494,6 +498,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $hostFilter,
         $campaignStats,
         $campaigns,
+        $selectedCampaign,
     );
 
     exit;
