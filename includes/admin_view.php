@@ -292,6 +292,10 @@ function renderAdminPage(
         return '/admin' . (!empty($params) ? '?' . http_build_query($params) : '');
     };
 
+    $buildDashboardUrl = function (array $overrides = []) use ($buildAdminUrl): string {
+        return $buildAdminUrl(array_merge(['tab' => 'dashboard'], $overrides));
+    };
+
     $buildExportUrl = function () use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
         $params = [];
 
@@ -421,56 +425,56 @@ function renderAdminPage(
                     <?php if ($tokenFilter !== ''): ?>
                         <span class="filter-pill">
                             token: <?= h($tokenFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['token' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['token' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
                     <?php if ($ipFilter !== ''): ?>
                         <span class="filter-pill">
                             ip: <?= h($ipFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['ip' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['ip' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
                     <?php if ($visitorFilter !== ''): ?>
                         <span class="filter-pill">
                             visitor: <?= h($visitorFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['visitor' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['visitor' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
                     <?php if ($hostFilter !== ''): ?>
                         <span class="filter-pill">
                             host: <?= h($hostFilter) ?>
-                            <a href="<?= h($buildAdminUrl(['host' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['host' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
                     <?php if ($dateFrom !== ''): ?>
                         <span class="filter-pill">
                             from: <?= h($dateFrom) ?>
-                            <a href="<?= h($buildAdminUrl(['date_from' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['date_from' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
                     <?php if ($dateTo !== ''): ?>
                         <span class="filter-pill">
                             to: <?= h($dateTo) ?>
-                            <a href="<?= h($buildAdminUrl(['date_to' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['date_to' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
                     <?php if ($knownOnly): ?>
                         <span class="filter-pill">
                             known only
-                            <a href="<?= h($buildAdminUrl(['known' => null])) ?>">×</a>
+                            <a href="<?= h($buildDashboardUrl(['known' => null])) ?>">×</a>
                         </span>
 		    <?php endif; ?>
 
 		    <?php if ($showAll): ?>
 			<span class="filter-pill">
 		            show all
-		            <a href="<?= h($buildAdminUrl(['show_all' => null])) ?>">×</a>
+		            <a href="<?= h($buildDashboardUrl(['show_all' => null])) ?>">×</a>
 		       </span>
 		    <?php endif; ?>
                 </div>
@@ -564,7 +568,7 @@ function renderAdminPage(
                     <?php foreach ($tokenCounts as $row): ?>
                         <tr>
                             <td class="mono">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $row['token']])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['token' => (string) $row['token']])) ?>">
                                     <?= h((string) $row['token']) ?>
                                 </a>
                             </td>
@@ -593,7 +597,7 @@ function renderAdminPage(
             ?>
             <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
                 <h2 style="margin:0;">Behaviorally Flagged IPs <span class="muted" style="font-size:0.8rem;font-weight:400;">(<?= h($windowLabel) ?>)</span></h2>
-                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_behavioral' => $showBehavioralPanel ? '1' : '0'])) ?>">
+                <a class="copy-button" href="<?= h($buildDashboardUrl(['hide_behavioral' => $showBehavioralPanel ? '1' : '0'])) ?>">
                     <?= $showBehavioralPanel ? 'Hide' : 'Show' ?>
                 </a>
             </div>
@@ -620,7 +624,7 @@ function renderAdminPage(
                         ?>
                         <tr>
                             <td class="mono ip-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $flagIp, 'show_all' => '1'])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['ip' => $flagIp, 'show_all' => '1'])) ?>">
                                     <?= h($flagIp) ?>
                                 </a>
                             </td>
@@ -672,7 +676,7 @@ function renderAdminPage(
             ?>
             <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
                 <h2 style="margin:0;">Subdomain Activity <?php if ($dateFrom !== '' || $dateTo !== ''): ?><span class="muted" style="font-size:0.8rem;font-weight:400;">(filtered range)</span><?php else: ?><span class="muted" style="font-size:0.8rem;font-weight:400;">(all time)</span><?php endif; ?></h2>
-                <a class="copy-button" href="<?= h($buildAdminUrl(['hide_subdomains' => $showSubdomainsPanel ? '1' : '0'])) ?>">
+                <a class="copy-button" href="<?= h($buildDashboardUrl(['hide_subdomains' => $showSubdomainsPanel ? '1' : '0'])) ?>">
                     <?= $showSubdomainsPanel ? 'Hide' : 'Show' ?>
                 </a>
             </div>
@@ -689,7 +693,7 @@ function renderAdminPage(
                     <?php foreach ($subdomainSummary as $sub): ?>
                         <tr>
                             <td class="mono">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['host' => $sub['subdomain']])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['host' => $sub['subdomain']])) ?>">
                                     <?= h($sub['subdomain']) ?>
                                 </a>
                             </td>
@@ -810,21 +814,21 @@ function renderAdminPage(
                             <td class="time-col" title="<?= h((string) ($c['clicked_at'] ?? '')) ?>"><?= h($tsDisplay) ?></td>
                             <td class="type-col"><?= h((string) ($c['event_type'] ?? 'click')) ?></td>
                             <td class="mono token-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['token' => $rowToken])) ?>">
                                     <?= h($rowToken) ?>
                                 </a>
                             </td>
                             <?php if ($wildcardMode): ?>
                             <td class="mono hide-mobile">
                                 <?php if ($subdomain !== ''): ?>
-                                    <a class="table-link mono-link" href="<?= h($buildAdminUrl(['host' => $rowHost])) ?>"><?= h($subdomain) ?></a>
+                                    <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['host' => $rowHost])) ?>"><?= h($subdomain) ?></a>
                                 <?php else: ?>
                                     <span class="muted">—</span>
                                 <?php endif; ?>
                             </td>
                             <?php endif; ?>
                             <td class="mono ip-col">
-                                <a class="table-link mono-link" href="<?= h($buildAdminUrl(['ip' => $rowIp])) ?>">
+                                <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['ip' => $rowIp])) ?>">
                                     <?= h($rowIp) ?>
                                 </a>
                             </td>
@@ -850,7 +854,7 @@ function renderAdminPage(
                                         </div>
 					<div>
 					    <span class="mono">IP:</span>
-					    <a class="pill-link mono" href="<?= h($buildAdminUrl(['ip' => $rowIp])) ?>"><?= h($rowIp) ?></a>
+					    <a class="pill-link mono" href="<?= h($buildDashboardUrl(['ip' => $rowIp])) ?>"><?= h($rowIp) ?></a>
 					    <button type="button" class="copy-button" data-copy="<?= h($rowIp) ?>" title="Copy IP">Copy</button>
 					    <a class="copy-button" href="https://www.virustotal.com/gui/ip-address/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Open in VirusTotal">VT</a>
 					    <a class="copy-button" href="https://www.abuseipdb.com/check/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Check AbuseIPDB">Abuse</a>
@@ -878,7 +882,7 @@ function renderAdminPage(
                                         <div><span class="mono">Country:</span> <?= h((string) ($c['ip_country'] ?? '')) ?></div>
                                         <div>
                                             <span class="mono">Visitor:</span>
-                                            <a class="pill-link mono" href="<?= h($buildAdminUrl(['visitor' => $rowVisitor])) ?>"><?= h($rowVisitor) ?></a>
+                                            <a class="pill-link mono" href="<?= h($buildDashboardUrl(['visitor' => $rowVisitor])) ?>"><?= h($rowVisitor) ?></a>
                                             <button type="button" class="copy-button" data-copy="<?= h($rowVisitor) ?>">Copy</button>
                                         </div>
                                         <div><span class="mono">XFF:</span> <?= h((string) ($c['x_forwarded_for'] ?? '')) ?></div>
@@ -908,7 +912,7 @@ function renderAdminPage(
                                         <strong>Request</strong>
                                         <div>
                                             <span class="mono">Token / Path:</span>
-                                            <a class="pill-link mono" href="<?= h($buildAdminUrl(['token' => $rowToken])) ?>"><?= h($rowToken) ?></a>
+                                            <a class="pill-link mono" href="<?= h($buildDashboardUrl(['token' => $rowToken])) ?>"><?= h($rowToken) ?></a>
                                             <button type="button" class="copy-button" data-copy="<?= h($rowToken) ?>">Copy</button>
                                         </div>
                                         <div><span class="mono">Method:</span> <?= h((string) ($c['request_method'] ?? '')) ?></div>
@@ -1021,7 +1025,7 @@ function renderAdminPage(
             <?php if ($totalPages > 1): ?>
             <div class="pagination">
                 <?php if ($currentPage > 1): ?>
-                    <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) ($currentPage - 1)])) ?>">&larr; Prev</a>
+                    <a class="button-link" href="<?= h($buildDashboardUrl(['page' => (string) ($currentPage - 1)])) ?>">&larr; Prev</a>
                 <?php endif; ?>
 
                 <?php
@@ -1032,12 +1036,12 @@ function renderAdminPage(
                     <?php if ($p === $currentPage): ?>
                         <span class="page-current"><?= $p ?></span>
                     <?php else: ?>
-                        <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) $p])) ?>"><?= $p ?></a>
+                        <a class="button-link" href="<?= h($buildDashboardUrl(['page' => (string) $p])) ?>"><?= $p ?></a>
                     <?php endif; ?>
                 <?php endfor; ?>
 
                 <?php if ($currentPage < $totalPages): ?>
-                    <a class="button-link" href="<?= h($buildAdminUrl(['page' => (string) ($currentPage + 1)])) ?>">Next &rarr;</a>
+                    <a class="button-link" href="<?= h($buildDashboardUrl(['page' => (string) ($currentPage + 1)])) ?>">Next &rarr;</a>
                 <?php endif; ?>
 
                 <span class="muted">
@@ -1076,7 +1080,7 @@ function renderAdminPage(
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col">
-                        <button type="button" class="copy-button"
+                        <button type="button" class="btn-small"
                             data-edit-campaign="<?= (int) $campaign['id'] ?>">
                             Edit
                         </button>
@@ -1106,7 +1110,7 @@ function renderAdminPage(
                                 <label style="font-size:0.8125rem;margin:0;">Active</label>
                             </div>
                             <button type="submit">Save</button>
-                            <button type="button" class="copy-button"
+                            <button type="button" class="btn-small"
                                 data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
                                 Cancel
                             </button>
