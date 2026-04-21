@@ -1106,7 +1106,7 @@ function renderAdminPage(
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col">
-                        <a class="button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id']])) ?>">View Activity</a>
+                        <a class="button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
                         <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
                             Edit
                         </button>
