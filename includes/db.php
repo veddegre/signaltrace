@@ -860,6 +860,14 @@ function getAllCampaigns(PDO $pdo): array
     return $stmt->fetchAll();
 }
 
+function getCampaignById(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM campaigns WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $id]);
+    $row = $stmt->fetch();
+    return $row !== false ? $row : null;
+}
+
 function getCampaignStats(PDO $pdo): array
 {
     $stmt = $pdo->query("
@@ -932,11 +940,13 @@ function getRecentClicksAdvancedFiltered(
     bool $knownOnly = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
+    ?string $hostFilter = null,
+    ?int $campaignId = null,
 ): array {
     [$rows] = getRecentClicksAdvancedFilteredPaged(
         $pdo, $limit, 0,
         $tokenFilter, $ipFilter, $visitorFilter,
-        $knownOnly, $dateFrom, $dateTo,
+        $knownOnly, $dateFrom, $dateTo, $hostFilter, $campaignId,
     );
     return $rows;
 }
@@ -956,6 +966,7 @@ function getRecentClicksAdvancedFilteredPaged(
     ?string $dateFrom = null,
     ?string $dateTo = null,
     ?string $hostFilter = null,
+    ?int $campaignId = null,
 ): array {
     $sql = "
         SELECT
@@ -965,9 +976,12 @@ function getRecentClicksAdvancedFilteredPaged(
             l.force_include_in_feed,
             l.include_in_email,
             l.exclude_from_feed,
-            l.include_in_token_webhook
+            l.include_in_token_webhook,
+            l.campaign_id,
+            camp.name AS campaign_name
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
+        LEFT JOIN campaigns camp ON l.campaign_id = camp.id
         WHERE 1 = 1
     ";
 
@@ -995,25 +1009,26 @@ function getRecentClicksAdvancedFilteredPaged(
         $params[':visitorFilter'] = '%' . $visitorFilter . '%';
     }
 
+    if ($campaignId !== null && $campaignId > 0) {
+        $sql .= " AND l.campaign_id = :campaignId ";
+        $params[':campaignId'] = $campaignId;
+    }
+
     if ($hostFilter !== null && $hostFilter !== '' && $hostFilter !== '*') {
         $baseDomain = strtolower(preg_replace('#^https?://#', '', rtrim((string) getSetting($pdo, 'base_url', ''), '/')));
         $baseDomain = preg_replace('/:\d+$/', '', $baseDomain);
 
         if ($hostFilter === '(root)') {
-            // Root domain — match exact base domain
             $sql .= " AND LOWER(c.host) = :hostFilter ";
             $params[':hostFilter'] = $baseDomain;
         } elseif ($baseDomain !== '' && !str_contains($hostFilter, '.')) {
-            // Short subdomain label — match subdomain.basedomain
             $sql .= " AND LOWER(c.host) LIKE :hostFilter ";
             $params[':hostFilter'] = $hostFilter . '.' . $baseDomain;
         } else {
-            // External host or full hostname — partial match
             $sql .= " AND LOWER(c.host) LIKE :hostFilter ";
             $params[':hostFilter'] = '%' . strtolower($hostFilter) . '%';
         }
     }
-    // $hostFilter === '*' means show all — no constraint added
 
     if ($knownOnly) {
         $sql .= " AND c.link_id IS NOT NULL ";
@@ -1029,17 +1044,13 @@ function getRecentClicksAdvancedFilteredPaged(
         $params[':dateTo'] = $dateTo;
     }
 
-    // COUNT query for pagination total
-    $countSql  = "SELECT COUNT(*) FROM clicks c LEFT JOIN links l ON c.link_id = l.id WHERE 1 = 1";
+    $countSql  = "SELECT COUNT(*) FROM clicks c LEFT JOIN links l ON c.link_id = l.id LEFT JOIN campaigns camp ON l.campaign_id = camp.id WHERE 1 = 1";
     $whereOnly = substr($sql, strpos($sql, 'WHERE 1 = 1') + strlen('WHERE 1 = 1'));
     $countSql .= $whereOnly;
 
     $countStmt = $pdo->prepare($countSql);
     foreach ($params as $key => $value) {
-        $countStmt->bindValue($key, $value, PDO::PARAM_STR);
-    }
-    if (isset($params[':minScore'])) {
-        $countStmt->bindValue(':minScore', $params[':minScore'], PDO::PARAM_INT);
+        $countStmt->bindValue($key, $value, $key === ':minScore' || $key === ':campaignId' ? PDO::PARAM_INT : PDO::PARAM_STR);
     }
     $countStmt->execute();
     $totalCount = (int) $countStmt->fetchColumn();
@@ -1047,11 +1058,9 @@ function getRecentClicksAdvancedFilteredPaged(
     $sql .= " ORDER BY c.id DESC LIMIT :limit OFFSET :offset ";
 
     $stmt = $pdo->prepare($sql);
-
     foreach ($params as $key => $value) {
-        $stmt->bindValue($key, $value, PDO::PARAM_STR);
+        $stmt->bindValue($key, $value, $key === ':minScore' || $key === ':campaignId' ? PDO::PARAM_INT : PDO::PARAM_STR);
     }
-
     $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $stmt->execute();
