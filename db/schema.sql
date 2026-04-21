@@ -14,6 +14,17 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 -- ============================================================
+-- Campaigns
+-- ============================================================
+CREATE TABLE IF NOT EXISTS campaigns (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    description TEXT,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT    NOT NULL
+);
+
+-- ============================================================
 -- Tokens (Links)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS links (
@@ -26,6 +37,7 @@ CREATE TABLE IF NOT EXISTS links (
     force_include_in_feed     INTEGER NOT NULL DEFAULT 0,
     include_in_token_webhook  INTEGER NOT NULL DEFAULT 0,
     include_in_email          INTEGER NOT NULL DEFAULT 0,
+    campaign_id               INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
     created_at                TEXT    NOT NULL
 );
 
