@@ -245,6 +245,23 @@ function initializeDatabase(PDO $pdo): void
         }
     }
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT    NOT NULL UNIQUE,
+            description TEXT,
+            active      INTEGER NOT NULL DEFAULT 1,
+            created_at  TEXT    NOT NULL
+        )
+    ");
+
+    // Add campaign_id to links for existing installs
+    try {
+        $pdo->exec("ALTER TABLE links ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL");
+    } catch (\Exception $e) {
+        // Column already exists — ignore
+    }
+
     seedDefaultSettings($pdo);
     seedDefaultSkipPatterns($pdo);
 }
@@ -552,11 +569,11 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false): bool
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false, ?int $campaignId = null): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO links (token, destination, description, active, exclude_from_feed, force_include_in_feed, include_in_token_webhook, include_in_email, created_at)
-        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed, :include_in_token_webhook, :include_in_email, :created_at)
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, force_include_in_feed, include_in_token_webhook, include_in_email, campaign_id, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed, :include_in_token_webhook, :include_in_email, :campaign_id, :created_at)
     ");
 
     return $stmt->execute([
@@ -567,11 +584,12 @@ function createLink(PDO $pdo, string $token, string $destination, string $descri
         ':force_include_in_feed'   => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
         ':include_in_email'        => $includeInEmail ? 1 : 0,
+        ':campaign_id'             => $campaignId,
         ':created_at'              => date('c'),
     ]);
 }
 
-function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false, ?int $campaignId = null): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
@@ -581,7 +599,8 @@ function updateLink(PDO $pdo, int $id, string $token, string $destination, strin
             exclude_from_feed        = :exclude_from_feed,
             force_include_in_feed    = :force_include_in_feed,
             include_in_token_webhook = :include_in_token_webhook,
-            include_in_email         = :include_in_email
+            include_in_email         = :include_in_email,
+            campaign_id              = :campaign_id
         WHERE id = :id
     ");
 
@@ -594,6 +613,7 @@ function updateLink(PDO $pdo, int $id, string $token, string $destination, strin
         ':force_include_in_feed'   => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
         ':include_in_email'        => $includeInEmail ? 1 : 0,
+        ':campaign_id'             => $campaignId,
     ]);
 }
 
@@ -818,14 +838,89 @@ function getAllLinks(PDO $pdo): array
     $stmt = $pdo->query("
         SELECT
             l.*,
-            COUNT(c.id) AS click_count
+            c.name AS campaign_name,
+            COUNT(cl.id) AS click_count
         FROM links l
-        LEFT JOIN clicks c ON l.id = c.link_id
+        LEFT JOIN campaigns c  ON l.campaign_id = c.id
+        LEFT JOIN clicks   cl  ON l.id = cl.link_id
         GROUP BY l.id
         ORDER BY l.id DESC
     ");
 
     return $stmt->fetchAll();
+}
+
+// ============================================================
+// Campaign Functions
+// ============================================================
+
+function getAllCampaigns(PDO $pdo): array
+{
+    $stmt = $pdo->query("SELECT * FROM campaigns ORDER BY id DESC");
+    return $stmt->fetchAll();
+}
+
+function getCampaignStats(PDO $pdo): array
+{
+    $stmt = $pdo->query("
+        SELECT
+            c.id,
+            c.name,
+            c.description,
+            c.active,
+            c.created_at,
+            COUNT(DISTINCT l.id)   AS token_count,
+            COUNT(cl.id)           AS total_hits,
+            COUNT(DISTINCT cl.ip)  AS unique_ips,
+            MIN(cl.clicked_at)     AS first_hit,
+            MAX(cl.clicked_at)     AS last_hit
+        FROM campaigns c
+        LEFT JOIN links  l  ON l.campaign_id = c.id
+        LEFT JOIN clicks cl ON cl.link_id    = l.id
+        GROUP BY c.id
+        ORDER BY c.id DESC
+    ");
+    return $stmt->fetchAll();
+}
+
+function createCampaign(PDO $pdo, string $name, string $description = ''): bool
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO campaigns (name, description, active, created_at)
+        VALUES (:name, :description, 1, :created_at)
+    ");
+    return $stmt->execute([
+        ':name'        => $name,
+        ':description' => $description,
+        ':created_at'  => date('c'),
+    ]);
+}
+
+function updateCampaign(PDO $pdo, int $id, string $name, string $description = '', bool $active = true): bool
+{
+    $stmt = $pdo->prepare("
+        UPDATE campaigns
+        SET name        = :name,
+            description = :description,
+            active      = :active
+        WHERE id = :id
+    ");
+    return $stmt->execute([
+        ':id'          => $id,
+        ':name'        => $name,
+        ':description' => $description,
+        ':active'      => $active ? 1 : 0,
+    ]);
+}
+
+function deleteCampaign(PDO $pdo, int $id): bool
+{
+    // Nullify campaign_id on associated tokens before deleting
+    $stmt = $pdo->prepare("UPDATE links SET campaign_id = NULL WHERE campaign_id = :id");
+    $stmt->execute([':id' => $id]);
+
+    $stmt = $pdo->prepare("DELETE FROM campaigns WHERE id = :id");
+    return $stmt->execute([':id' => $id]);
 }
 
 function getRecentClicksAdvancedFiltered(
