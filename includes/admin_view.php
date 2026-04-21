@@ -140,6 +140,8 @@ function renderAdminPage(
     string $refreshUrl,
     ?array $ipSummary = null,
     string $hostFilter = '',
+    array $campaignStats = [],
+    array $campaigns = [],
 ): void {
     $pdo       = db();
     $csrfToken = generateCsrfToken();
@@ -1047,10 +1049,96 @@ function renderAdminPage(
         </div>
 
 	<div class="tab-content" id="content-links">
+
+        <?php if (!empty($campaignStats)): ?>
+        <h2>Campaigns</h2>
+        <div class="table-wrap" style="margin-bottom: 1.5rem;">
+            <table class="compact-table">
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Tokens</th>
+                    <th>Total Hits</th>
+                    <th>Unique IPs</th>
+                    <th>First Hit</th>
+                    <th>Last Hit</th>
+                    <th>Active</th>
+                    <th class="actions-col">Actions</th>
+                </tr>
+                <?php foreach ($campaignStats as $campaign): ?>
+                <tr>
+                    <td><strong><?= h((string) $campaign['name']) ?></strong></td>
+                    <td class="muted"><?= h((string) ($campaign['description'] ?? '')) ?></td>
+                    <td><?= (int) $campaign['token_count'] ?></td>
+                    <td><?= (int) $campaign['total_hits'] ?></td>
+                    <td><?= (int) $campaign['unique_ips'] ?></td>
+                    <td class="muted"><?= $campaign['first_hit'] !== null ? h((string) $campaign['first_hit']) : '—' ?></td>
+                    <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
+                    <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
+                    <td class="actions-col">
+                        <button type="button" class="copy-button"
+                            onclick="document.getElementById('edit-campaign-<?= (int) $campaign['id'] ?>').style.display='block';this.closest('tr').style.display='none'">
+                            Edit
+                        </button>
+                        <form method="post" action="/admin/delete-campaign" class="inline-action-form"
+                              data-confirm="Delete this campaign? Tokens will not be deleted but will be unassigned.">
+                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                            <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;">
+                    <td colspan="9">
+                        <form method="post" action="/admin/update-campaign" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:8px 0;">
+                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                            <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
+                            <div>
+                                <label style="font-size:0.8125rem;">Name</label>
+                                <input type="text" name="campaign_name" required value="<?= h((string) $campaign['name']) ?>" style="width:180px;">
+                            </div>
+                            <div>
+                                <label style="font-size:0.8125rem;">Description</label>
+                                <input type="text" name="campaign_description" value="<?= h((string) ($campaign['description'] ?? '')) ?>" style="width:220px;">
+                            </div>
+                            <div style="display:flex;align-items:center;gap:4px;padding-bottom:2px;">
+                                <input type="checkbox" name="campaign_active" value="1" <?= ((int) $campaign['active'] === 1) ? 'checked' : '' ?>>
+                                <label style="font-size:0.8125rem;margin:0;">Active</label>
+                            </div>
+                            <button type="submit">Save</button>
+                            <button type="button" class="copy-button"
+                                onclick="this.closest('tr').style.display='none'">
+                                Cancel
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <form method="post" action="/admin/create-campaign" style="margin-bottom:2rem;">
+            <h2>Create Campaign</h2>
+            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                <div>
+                    <label for="campaign_name" style="font-size:0.8125rem;">Name</label>
+                    <input id="campaign_name" type="text" name="campaign_name" required placeholder="Q2 Phishing Simulation" style="width:220px;">
+                </div>
+                <div>
+                    <label for="campaign_description" style="font-size:0.8125rem;">Description</label>
+                    <input id="campaign_description" type="text" name="campaign_description" placeholder="Optional description" style="width:280px;">
+                </div>
+                <button type="submit">Create Campaign</button>
+            </div>
+        </form>
+
 	    <?php if ($editLink !== null): ?>
 	    <form method="post" action="/admin/update-link">
 	        <h2>Edit Token</h2>
 
+	        <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
 	        <input type="hidden" name="id" value="<?= (int) $editLink['id'] ?>">
 
 	        <label for="edit_token">Token / Path</label>
@@ -1061,6 +1149,18 @@ function renderAdminPage(
 
 	        <label for="edit_description">Description</label>
 	        <input id="edit_description" type="text" name="description" value="<?= h((string) ($editLink['description'] ?? '')) ?>">
+
+            <?php if (!empty($campaigns)): ?>
+            <label for="edit_campaign_id">Campaign</label>
+            <select id="edit_campaign_id" name="campaign_id">
+                <option value="">— None —</option>
+                <?php foreach ($campaigns as $c): ?>
+                <option value="<?= (int) $c['id'] ?>" <?= ((int) ($editLink['campaign_id'] ?? 0) === (int) $c['id']) ? 'selected' : '' ?>>
+                    <?= h((string) $c['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
 
 	        <div style="margin-bottom: 12px;">
 	            <label style="display: inline-flex; align-items: center; gap: 6px;">
@@ -1105,6 +1205,7 @@ function renderAdminPage(
 	<?php endif; ?>
             <form method="post" action="/admin/create-link">
                 <h2>Create Token</h2>
+                <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
                 <label for="token">Token / Path</label>
                 <input id="token" type="text" name="token" required placeholder="payroll or abc123">
 
@@ -1113,6 +1214,16 @@ function renderAdminPage(
 
                 <label for="description">Description</label>
                 <input id="description" type="text" name="description" placeholder="Optional description">
+
+                <?php if (!empty($campaigns)): ?>
+                <label for="campaign_id">Campaign</label>
+                <select id="campaign_id" name="campaign_id">
+                    <option value="">— None —</option>
+                    <?php foreach ($campaigns as $c): ?>
+                    <option value="<?= (int) $c['id'] ?>"><?= h((string) $c['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php endif; ?>
 
                 <div style="margin-bottom: 12px;">
                     <label style="display: inline-flex; align-items: center; gap: 6px;">
@@ -1156,6 +1267,7 @@ function renderAdminPage(
                         <th>ID</th>
                         <th>Token / Path</th>
                         <th>Description</th>
+                        <th>Campaign</th>
                         <th>Destination</th>
                         <th>Active</th>
 			<th>Clicks</th>
@@ -1185,6 +1297,13 @@ function renderAdminPage(
 		        </a>
 		    </td>
 		    <td><?= h((string) ($link['description'] ?? '')) ?></td>
+		    <td class="muted">
+		        <?php if (!empty($link['campaign_name'])): ?>
+		            <span class="badge badge-uncertain"><?= h((string) $link['campaign_name']) ?></span>
+		        <?php else: ?>
+		            —
+		        <?php endif; ?>
+		    </td>
 		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
 		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
 		    <td><?= (int) $link['click_count'] ?></td>
