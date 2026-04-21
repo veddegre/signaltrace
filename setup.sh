@@ -831,61 +831,34 @@ GEOIPCONF
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Setting file ownership and permissions..."
 
-    $SUDO chown root:root "$INSTALL_DIR"
-    $SUDO chmod 755 "$INSTALL_DIR"
+    # includes/, public/, db/, vendor/ — root-owned, web server read-only
+    sudo chown -R root:www-data "${INSTALL_DIR}/includes/"
+    sudo chmod 750 "${INSTALL_DIR}/includes/"
+    sudo find "${INSTALL_DIR}/includes/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}includes/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/includes" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/includes"
-        $SUDO find "${INSTALL_DIR}/includes" -type d -exec chmod 750 {} \;
-        $SUDO find "${INSTALL_DIR}/includes" -type f -exec chmod 640 {} \;
-        echo -e "  ${GREEN}includes/ — root:www-data, dirs 750 files 640${RESET}"
-    fi
+    sudo chown -R root:www-data "${INSTALL_DIR}/public/"
+    sudo chmod 750 "${INSTALL_DIR}/public/"
+    sudo find "${INSTALL_DIR}/public/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}public/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/public" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/public"
-        $SUDO find "${INSTALL_DIR}/public" -type d -exec chmod 755 {} \;
-        $SUDO find "${INSTALL_DIR}/public" -type f -exec chmod 644 {} \;
-        echo -e "  ${GREEN}public/ — root:www-data, dirs 755 files 644${RESET}"
-    fi
+    sudo chown -R root:www-data "${INSTALL_DIR}/db/"
+    sudo chmod 750 "${INSTALL_DIR}/db/"
+    sudo find "${INSTALL_DIR}/db/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}db/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/db" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/db"
-        $SUDO find "${INSTALL_DIR}/db" -type d -exec chmod 750 {} \;
-        $SUDO find "${INSTALL_DIR}/db" -type f -exec chmod 640 {} \;
-        echo -e "  ${GREEN}db/ — root:www-data, dirs 750 files 640${RESET}"
-    fi
+    sudo chown -R root:www-data "${INSTALL_DIR}/vendor/"
+    sudo find "${INSTALL_DIR}/vendor/" -type d -exec chmod 750 {} \;
+    sudo find "${INSTALL_DIR}/vendor/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}vendor/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/vendor" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/vendor"
-        $SUDO find "${INSTALL_DIR}/vendor" -type d -exec chmod 755 {} \;
-        $SUDO find "${INSTALL_DIR}/vendor" -type f -exec chmod 644 {} \;
-        echo -e "  ${GREEN}vendor/ — root:www-data, dirs 755 files 644${RESET}"
-    fi
-
-    for optional_dir in docs docker grafana splunk .github; do
-        if [ -d "${INSTALL_DIR}/${optional_dir}" ]; then
-            $SUDO chown -R root:root "${INSTALL_DIR}/${optional_dir}"
-            $SUDO find "${INSTALL_DIR}/${optional_dir}" -type d -exec chmod 755 {} \;
-            $SUDO find "${INSTALL_DIR}/${optional_dir}" -type f -exec chmod 644 {} \;
-        fi
-    done
-
-    $SUDO find "$INSTALL_DIR" -maxdepth 1 -type f -exec chown root:root {} \;
-    $SUDO find "$INSTALL_DIR" -maxdepth 1 -type f -exec chmod 644 {} \;
-
-    if [ -f "${INSTALL_DIR}/setup.sh" ]; then
-        $SUDO chown root:root "${INSTALL_DIR}/setup.sh"
-        $SUDO chmod 755 "${INSTALL_DIR}/setup.sh"
-    fi
-
-    # SQLite writable area
-    $SUDO mkdir -p "$DB_DIR"
-    $SUDO chown -R www-data:www-data "$DB_DIR"
-    $SUDO find "$DB_DIR" -type d -exec chmod 770 {} \;
-    $SUDO find "$DB_DIR" -type f -exec chmod 660 {} \;
-
+    # data/ — web server needs write on database and directory only
+    sudo chown root:www-data "$DB_DIR"
+    sudo chmod 770 "$DB_DIR"
     if [ -f "$DB_FILE" ]; then
-        echo -e "  ${GREEN}data/database.db — www-data:www-data, 660${RESET}"
+        sudo chown root:www-data "$DB_FILE"
+        sudo chmod 660 "$DB_FILE"
+        echo -e "  ${GREEN}data/database.db — root:www-data (660)${RESET}"
     fi
     echo ""
 
