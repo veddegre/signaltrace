@@ -1081,6 +1081,7 @@ function renderAdminPage(
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col">
                         <button type="button" class="btn-small"
+                            class="primary-button"
                             data-edit-campaign="<?= (int) $campaign['id'] ?>">
                             Edit
                         </button>
@@ -1111,6 +1112,7 @@ function renderAdminPage(
                             </div>
                             <button type="submit">Save</button>
                             <button type="button" class="btn-small"
+                                class="primary-button"
                                 data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
                                 Cancel
                             </button>
