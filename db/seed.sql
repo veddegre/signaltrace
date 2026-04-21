@@ -5,13 +5,22 @@
 PRAGMA foreign_keys = ON;
 
 -- ============================================================
+-- Sample Campaigns
+-- ============================================================
+INSERT OR IGNORE INTO campaigns (name, description, active, created_at) VALUES
+    ('Quarterly Payroll Review', 'Simulated payroll-themed awareness campaign with multiple related tokens.', 1, datetime('now')),
+    ('Vendor Invoice Follow-up', 'Invoice-themed campaign showing how multiple tokens roll up into one investigation view.', 1, datetime('now'));
+
+-- ============================================================
 -- Sample Tokens
 -- ============================================================
-INSERT OR IGNORE INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at) VALUES
-    ('/payroll',     'https://example.com/login',    'Payroll portal simulation', 1, 0, 1, datetime('now')),
-    ('/invoice',     'https://example.com/invoice',  'Invoice access link',       1, 0, 1, datetime('now')),
-    ('/benefits',    'https://example.com/benefits', 'Benefits portal',           1, 0, 0, datetime('now')),
-    ('/hello.world', 'https://example.com',          'Test token',                1, 0, 0, datetime('now'));
+INSERT OR IGNORE INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, campaign_id, created_at) VALUES
+    ('/payroll',     'https://example.com/login',    'Payroll portal simulation', 1, 0, 1, (SELECT id FROM campaigns WHERE name = 'Quarterly Payroll Review'), datetime('now')),
+    ('/payroll-doc', 'https://example.com/login',    'Payroll document follow-up token', 1, 0, 0, (SELECT id FROM campaigns WHERE name = 'Quarterly Payroll Review'), datetime('now')),
+    ('/invoice',     'https://example.com/invoice',  'Invoice access link',       1, 0, 1, (SELECT id FROM campaigns WHERE name = 'Vendor Invoice Follow-up'), datetime('now')),
+    ('/invoice-remit', 'https://example.com/invoice', 'Invoice remittance follow-up token', 1, 0, 0, (SELECT id FROM campaigns WHERE name = 'Vendor Invoice Follow-up'), datetime('now')),
+    ('/benefits',    'https://example.com/benefits', 'Benefits portal',           1, 0, 0, NULL, datetime('now')),
+    ('/hello.world', 'https://example.com',          'Test token',                1, 0, 0, NULL, datetime('now'));
 
 -- ============================================================
 -- Sample Clicks
