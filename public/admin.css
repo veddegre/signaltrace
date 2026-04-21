@@ -1042,25 +1042,11 @@ tr:hover td { background: var(--surface-alt); }
 }
 
 
-/* Campaign form alignment */
-.campaign-form-action {
-    display: flex;
-    align-items: flex-end;
-    padding-bottom: 1rem;
+/* Campaign action buttons */
+.actions-col .btn-small,
+.inline-action-form .btn-small {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 500;
 }
 
-.campaign-form-action button {
-    align-self: flex-end;
-}
-
-@media (max-width: 700px) {
-    .campaign-form-action {
-        width: 100%;
-        padding-bottom: 0;
-    }
-
-    .campaign-form-action button {
-        width: 100%;
-        justify-content: center;
-    }
-}
