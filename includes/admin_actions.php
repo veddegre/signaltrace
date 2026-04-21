@@ -1168,8 +1168,9 @@ function handleWebhookPreset(): void
 
 function handleCreateCampaign(PDO $pdo): void
 {
-    $name        = trim((string) ($_POST['campaign_name'] ?? ''));
-    $description = trim((string) ($_POST['campaign_description'] ?? ''));
+    $name           = trim((string) ($_POST['campaign_name'] ?? ''));
+    $description    = trim((string) ($_POST['campaign_description'] ?? ''));
+    $webhookEnabled = isset($_POST['campaign_webhook_enabled']) && $_POST['campaign_webhook_enabled'] === '1';
 
     if ($name === '') {
         http_response_code(400);
@@ -1178,7 +1179,7 @@ function handleCreateCampaign(PDO $pdo): void
     }
 
     try {
-        createCampaign($pdo, $name, $description);
+        createCampaign($pdo, $name, $description, $webhookEnabled);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -1191,8 +1192,9 @@ function handleCreateCampaign(PDO $pdo): void
 function handleUpdateCampaign(PDO $pdo): void
 {
     $id          = (int) ($_POST['campaign_id'] ?? 0);
-    $name        = trim((string) ($_POST['campaign_name'] ?? ''));
-    $description = trim((string) ($_POST['campaign_description'] ?? ''));
+    $name           = trim((string) ($_POST['campaign_name'] ?? ''));
+    $description    = trim((string) ($_POST['campaign_description'] ?? ''));
+    $webhookEnabled = isset($_POST['campaign_webhook_enabled']) && $_POST['campaign_webhook_enabled'] === '1';
     $active      = isset($_POST['campaign_active']) && $_POST['campaign_active'] === '1';
 
     if ($id <= 0) {
@@ -1208,7 +1210,7 @@ function handleUpdateCampaign(PDO $pdo): void
     }
 
     try {
-        updateCampaign($pdo, $id, $name, $description, $active);
+        updateCampaign($pdo, $id, $name, $description, $active, $webhookEnabled);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
