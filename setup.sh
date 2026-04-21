@@ -946,26 +946,68 @@ ADMINCONF
         else
             echo "  Installing certbot..."
             sudo apt-get install -y certbot python3-certbot-apache -qq
-            echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
 
-            # Include admin subdomain in certificate if configured
-            LE_DOMAINS="$APACHE_SERVER_NAME"
             if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
-                LE_DOMAINS="${LE_DOMAINS},${CF_ADMIN_SUBDOMAIN}"
-            fi
+                # Get the main domain cert via HTTP challenge
+                echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
+                if sudo certbot --apache \
+                    --non-interactive \
+                    --agree-tos \
+                    --email "$LE_EMAIL" \
+                    --domains "$APACHE_SERVER_NAME" \
+                    --expand \
+                    --redirect; then
+                    echo -e "  ${GREEN}Certificate issued for ${APACHE_SERVER_NAME}.${RESET}"
+                    HTTPS_ENABLED=true
+                else
+                    echo -e "  ${YELLOW}Certbot failed for ${APACHE_SERVER_NAME}.${RESET}"
+                fi
 
-            if sudo certbot --apache \
-                --non-interactive \
-                --agree-tos \
-                --email "$LE_EMAIL" \
-                --domains "$LE_DOMAINS" \
-                --expand \
-                --redirect; then
-                echo -e "  ${GREEN}HTTPS configured. Certificate will auto-renew.${RESET}"
-                HTTPS_ENABLED=true
+                # Admin subdomain cannot use HTTP challenge — Cloudflare Access
+                # intercepts the ACME validation request before it reaches the server.
+                # The user must obtain this cert manually after setup using one of:
+                #   Option A — Cloudflare DNS plugin (recommended):
+                #     sudo apt install python3-certbot-dns-cloudflare
+                #     sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials ~/.cf-credentials \
+                #       --domains ${CF_ADMIN_SUBDOMAIN}
+                #     sudo certbot install --cert-name ${CF_ADMIN_SUBDOMAIN} --apache
+                #   Option B — temporarily pause Cloudflare Access, then run:
+                #     sudo certbot --apache --domains ${CF_ADMIN_SUBDOMAIN} --expand
+                echo ""
+                echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+                echo -e "${YELLOW}HTTPS for ${CF_ADMIN_SUBDOMAIN} requires manual setup.${RESET}"
+                echo ""
+                echo "  Cloudflare Access blocks the ACME HTTP challenge, so Let's Encrypt"
+                echo "  cannot auto-validate the admin subdomain. To get the cert:"
+                echo ""
+                echo "  Option A — Cloudflare DNS plugin (recommended):"
+                echo "    sudo apt install python3-certbot-dns-cloudflare"
+                echo "    # Create ~/.cf-credentials with your Cloudflare API token"
+                echo "    sudo certbot certonly --dns-cloudflare \\"
+                echo "      --dns-cloudflare-credentials ~/.cf-credentials \\"
+                echo "      --domains ${CF_ADMIN_SUBDOMAIN}"
+                echo "    sudo certbot install --cert-name ${CF_ADMIN_SUBDOMAIN} --apache"
+                echo ""
+                echo "  Option B — temporarily pause Cloudflare Access, then run:"
+                echo "    sudo certbot --apache --expand --domains ${APACHE_SERVER_NAME},${CF_ADMIN_SUBDOMAIN}"
+                echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+                echo ""
             else
-                echo -e "  ${YELLOW}Certbot failed. Make sure your domain is pointed at this server and try:${RESET}"
-                echo "  sudo certbot --apache"
+                # No CF Access — standard HTTP challenge for all domains
+                echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
+                if sudo certbot --apache \
+                    --non-interactive \
+                    --agree-tos \
+                    --email "$LE_EMAIL" \
+                    --domains "$APACHE_SERVER_NAME" \
+                    --expand \
+                    --redirect; then
+                    echo -e "  ${GREEN}HTTPS configured. Certificate will auto-renew.${RESET}"
+                    HTTPS_ENABLED=true
+                else
+                    echo -e "  ${YELLOW}Certbot failed. Make sure your domain is pointed at this server and try:${RESET}"
+                    echo "  sudo certbot --apache"
+                fi
             fi
         fi
     fi
