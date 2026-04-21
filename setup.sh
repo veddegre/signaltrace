@@ -159,6 +159,51 @@ EOF
     fi
 }
 
+fix_permissions() {
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Setting file ownership and permissions..."
+
+    $SUDO chown root:root "$INSTALL_DIR"
+    $SUDO chmod 755 "$INSTALL_DIR"
+
+    if [ -d "${INSTALL_DIR}/includes" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/includes"
+        $SUDO find "${INSTALL_DIR}/includes" -type d -exec chmod 750 {} \;
+        $SUDO find "${INSTALL_DIR}/includes" -type f -exec chmod 640 {} \;
+        echo -e "${GREEN}  includes/ — root:www-data, dirs 750 files 640${RESET}"
+    fi
+
+    if [ -d "${INSTALL_DIR}/public" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/public"
+        $SUDO find "${INSTALL_DIR}/public" -type d -exec chmod 755 {} \;
+        $SUDO find "${INSTALL_DIR}/public" -type f -exec chmod 644 {} \;
+        echo -e "${GREEN}  public/ — root:www-data, dirs 755 files 644${RESET}"
+    fi
+
+    if [ -d "${INSTALL_DIR}/db" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/db"
+        $SUDO find "${INSTALL_DIR}/db" -type d -exec chmod 750 {} \;
+        $SUDO find "${INSTALL_DIR}/db" -type f -exec chmod 640 {} \;
+        echo -e "${GREEN}  db/ — root:www-data, dirs 750 files 640${RESET}"
+    fi
+
+    if [ -d "${INSTALL_DIR}/vendor" ]; then
+        $SUDO chown -R root:www-data "${INSTALL_DIR}/vendor"
+        $SUDO find "${INSTALL_DIR}/vendor" -type d -exec chmod 755 {} \;
+        $SUDO find "${INSTALL_DIR}/vendor" -type f -exec chmod 644 {} \;
+        echo -e "${GREEN}  vendor/ — root:www-data, dirs 755 files 644${RESET}"
+    fi
+
+    if [ -d "${INSTALL_DIR}/data" ]; then
+        $SUDO chown -R www-data:www-data "${INSTALL_DIR}/data"
+        $SUDO find "${INSTALL_DIR}/data" -type d -exec chmod 770 {} \;
+        $SUDO find "${INSTALL_DIR}/data" -type f -exec chmod 660 {} \;
+        echo -e "${GREEN}  data/ — www-data:www-data, dirs 770 files 660${RESET}"
+    fi
+
+    echo ""
+}
+
 # -- Install type --------------------------------------------------------------
 echo -e "${CYAN}Install type${RESET}"
 echo "  1) Docker — pre-built image (fastest, no build step)"
@@ -346,51 +391,63 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
     SCRIPT_DIR="$INSTALL_DIR"
     OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
+
+    if [ "$INSTALL_ACTION" = "update_files_only" ]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        read -r -p "  Run Composer install too? [y/N] " do_composer_update_only
+        echo ""
+
+         if [[ "$do_composer_update_only" =~ ^[Yy]$ ]]; then
+             echo "Installing PHP dependencies..."
+             echo ""
+             cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+             echo -e "${GREEN}  PHP dependencies installed.${RESET}"
+             echo ""
+        fi
+        
+    fix_permissions
+    echo -e "${GREEN}Application files updated. Existing configuration and database were preserved.${RESET}"
+    echo ""
+    exit 0
+fi
 else
     OUTPUT_FILE="$SCRIPT_DIR/.env"
 fi
 
 # -- Existing config -----------------------------------------------------------
 if [ -f "$OUTPUT_FILE" ]; then
-    if [ "$INSTALL_ACTION" = "update_files_only" ]; then
-        MODIFY_EXISTING=true
-        RUN_SYSTEM_TASKS=false
-        echo -e "${GREEN}Keeping existing config.local.php without prompting for settings.${RESET}"
-        echo ""
-    else
-        echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
-        echo ""
-        echo "  1) Update it — keep existing values as defaults, change only sections you choose"
-        echo "  2) Overwrite it — start fresh, all values will be re-prompted"
-        echo "  3) Keep it exactly as-is"
-        echo "  4) Abort — exit without changing anything"
-        echo ""
-        read -r -p "  Choice [1]: " existing_choice
-        case "${existing_choice:-1}" in
-            2)
-                echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
-                ;;
-            3)
-                MODIFY_EXISTING=true
-                RUN_SYSTEM_TASKS=false
-                echo -e "  ${GREEN}Keeping existing config exactly as-is.${RESET}"
-                ;;
-            4)
-                echo "Aborted. Your existing file was not changed."
-                exit 0
-                ;;
-            *)
-                MODIFY_EXISTING=true
-                echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
-                ;;
-        esac
-        echo ""
-    fi
+    echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
+    echo ""
+    echo "  1) Update it — keep existing values as defaults, change only sections you choose"
+    echo "  2) Overwrite it — start fresh, all values will be re-prompted"
+    echo "  3) Keep it exactly as-is"
+    echo "  4) Abort — exit without changing anything"
+    echo ""
+    read -r -p "  Choice [1]: " existing_choice
+    case "${existing_choice:-1}" in
+        2)
+            echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
+            ;;
+        3)
+            MODIFY_EXISTING=true
+            RUN_SYSTEM_TASKS=false
+            echo -e "  ${GREEN}Keeping existing config exactly as-is.${RESET}"
+            ;;
+        4)
+            echo "Aborted. Your existing file was not changed."
+            exit 0
+            ;;
+        *)
+            MODIFY_EXISTING=true
+            echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
+            ;;
+    esac
+    echo ""
 fi
 
-if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ] && [ "$INSTALL_ACTION" != "update_files_only" ]; then
+if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ]; then
     echo "  System/infrastructure tasks are things like:"
-    echo "  • composer update"
+    echo "  • composer install"
     echo "  • GeoIP config/write"
     echo "  • database handling"
     echo "  • file permissions"
@@ -1033,13 +1090,7 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     exit 0
 fi
 
-# -- Fast exit for files-only/config-only updates ------------------------------
-if [ "$INSTALL_ACTION" = "update_files_only" ]; then
-    echo -e "${GREEN}Application files updated. Existing configuration and database were preserved.${RESET}"
-    echo ""
-    exit 0
-fi
-
+# -- Config-only update exit ---------------------------------------------------
 if [ "$MODIFY_EXISTING" = true ] && [ "$RUN_SYSTEM_TASKS" != "true" ]; then
     echo -e "${GREEN}Config updated without re-running system/infrastructure tasks.${RESET}"
     echo ""
@@ -1148,48 +1199,7 @@ case "$DB_ACTION" in
 esac
 echo ""
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Setting file ownership and permissions..."
-
-$SUDO chown root:root "$INSTALL_DIR"
-$SUDO chmod 755 "$INSTALL_DIR"
-
-if [ -d "${INSTALL_DIR}/includes" ]; then
-    $SUDO chown -R root:www-data "${INSTALL_DIR}/includes"
-    $SUDO find "${INSTALL_DIR}/includes" -type d -exec chmod 750 {} \;
-    $SUDO find "${INSTALL_DIR}/includes" -type f -exec chmod 640 {} \;
-    echo -e "${GREEN}  includes/ — root:www-data, dirs 750 files 640${RESET}"
-fi
-
-if [ -d "${INSTALL_DIR}/public" ]; then
-    $SUDO chown -R root:www-data "${INSTALL_DIR}/public"
-    $SUDO find "${INSTALL_DIR}/public" -type d -exec chmod 755 {} \;
-    $SUDO find "${INSTALL_DIR}/public" -type f -exec chmod 644 {} \;
-    echo -e "${GREEN}  public/ — root:www-data, dirs 755 files 644${RESET}"
-fi
-
-if [ -d "${INSTALL_DIR}/db" ]; then
-    $SUDO chown -R root:www-data "${INSTALL_DIR}/db"
-    $SUDO find "${INSTALL_DIR}/db" -type d -exec chmod 750 {} \;
-    $SUDO find "${INSTALL_DIR}/db" -type f -exec chmod 640 {} \;
-    echo -e "${GREEN}  db/ — root:www-data, dirs 750 files 640${RESET}"
-fi
-
-if [ -d "${INSTALL_DIR}/vendor" ]; then
-    $SUDO chown -R root:www-data "${INSTALL_DIR}/vendor"
-    $SUDO find "${INSTALL_DIR}/vendor" -type d -exec chmod 755 {} \;
-    $SUDO find "${INSTALL_DIR}/vendor" -type f -exec chmod 644 {} \;
-    echo -e "${GREEN}  vendor/ — root:www-data, dirs 755 files 644${RESET}"
-fi
-
-$SUDO mkdir -p "$DB_DIR"
-$SUDO chown -R www-data:www-data "$DB_DIR"
-$SUDO find "$DB_DIR" -type d -exec chmod 770 {} \;
-$SUDO find "$DB_DIR" -type f -exec chmod 660 {} \;
-if [ -f "$DB_FILE" ]; then
-    echo -e "${GREEN}  data/database.db — www-data:www-data, 660${RESET}"
-fi
-echo ""
+fix_permissions
 
 if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1270,6 +1280,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${CYAN}HTTPS with Let's Encrypt (optional)${RESET}"
 echo ""
+
 if [ "$_existing_https_enabled" = "true" ]; then
     https_prompt_label="Y/n"
     https_prompt_default="Y"
