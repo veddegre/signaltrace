@@ -1080,9 +1080,7 @@ function renderAdminPage(
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col">
-                        <button type="button" class="btn-small"
-                            class="primary-button"
-                            data-edit-campaign="<?= (int) $campaign['id'] ?>">
+                        <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
                             Edit
                         </button>
                         <form method="post" action="/admin/delete-campaign" class="inline-action-form"
@@ -1111,9 +1109,7 @@ function renderAdminPage(
                                 <label style="font-size:0.8125rem;margin:0;">Active</label>
                             </div>
                             <button type="submit">Save</button>
-                            <button type="button" class="btn-small"
-                                class="primary-button"
-                                data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
+                            <button type="button" class="primary-button" data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
                                 Cancel
                             </button>
                         </form>
