@@ -856,12 +856,27 @@ function maybeFireTokenAlert(PDO $pdo, array $requestData): void
         return;
     }
 
-    // Check the per-token opt-in flag.
     $linkId = (int) $requestData['link_id'];
-    $stmt = $pdo->prepare("SELECT include_in_token_webhook FROM links WHERE id = :id LIMIT 1");
+    $stmt = $pdo->prepare("
+        SELECT l.include_in_token_webhook,
+               l.campaign_id,
+               COALESCE(c.webhook_enabled, 0) AS campaign_webhook_enabled,
+               c.name AS campaign_name
+        FROM links l
+        LEFT JOIN campaigns c ON c.id = l.campaign_id
+        WHERE l.id = :id
+        LIMIT 1
+    ");
     $stmt->execute([':id' => $linkId]);
-    $includeInWebhook = (int) ($stmt->fetchColumn() ?: 0);
-    if ($includeInWebhook !== 1) {
+    $linkMeta = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$linkMeta) {
+        return;
+    }
+
+    $includeInWebhook       = (int) ($linkMeta['include_in_token_webhook'] ?? 0) === 1;
+    $campaignWebhookEnabled = (int) ($linkMeta['campaign_webhook_enabled'] ?? 0) === 1;
+
+    if (!$includeInWebhook && !$campaignWebhookEnabled) {
         return;
     }
 
@@ -871,6 +886,10 @@ function maybeFireTokenAlert(PDO $pdo, array $requestData): void
     if (!shouldSendTokenAlert($pdo, $token, $visitorHash)) {
         return;
     }
+
+    $requestData['campaign_id']   = $linkMeta['campaign_id'] !== null ? (int) $linkMeta['campaign_id'] : null;
+    $requestData['campaign_name'] = (string) ($linkMeta['campaign_name'] ?? '');
+    $requestData['webhook_source'] = $includeInWebhook ? 'token' : 'campaign';
 
     fireTokenWebhookAlert($pdo, $requestData);
 }
@@ -934,6 +953,10 @@ function fireTokenWebhookAlert(PDO $pdo, array $requestData): void
     $country = (string) ($requestData['ip_country']       ?? '');
     $time    = date('Y-m-d H:i:s T');
 
+    $campaignId   = $requestData['campaign_id'] ?? null;
+    $campaignName = (string) ($requestData['campaign_name'] ?? '');
+    $webhookSource = (string) ($requestData['webhook_source'] ?? 'token');
+
     $rawUa = (string) ($requestData['user_agent'] ?? '');
     $ua    = mb_substr(preg_replace('/[\x00-\x1f\x7f]/', '', $rawUa), 0, 300);
 
@@ -943,16 +966,19 @@ function fireTokenWebhookAlert(PDO $pdo, array $requestData): void
     if ($template !== '') {
         $esc = fn(string $v): string => trim((string) json_encode($v), '"');
         $replacements = [
-            '{{ip}}'       => $esc($ip),
-            '{{token}}'    => $esc($token),
-            '{{label}}'    => $esc($label),
-            '{{score}}'    => (string) $score,
-            '{{org}}'      => $esc($org),
-            '{{asn}}'      => $esc($asn),
-            '{{country}}'  => $esc($country),
-            '{{ua}}'       => $esc($ua),
-            '{{time}}'     => $esc($time),
-            '{{triggers}}' => $esc($reasons),
+            '{{ip}}'            => $esc($ip),
+            '{{token}}'         => $esc($token),
+            '{{label}}'         => $esc($label),
+            '{{score}}'         => (string) $score,
+            '{{org}}'           => $esc($org),
+            '{{asn}}'           => $esc($asn),
+            '{{country}}'       => $esc($country),
+            '{{ua}}'            => $esc($ua),
+            '{{time}}'          => $esc($time),
+            '{{triggers}}'      => $esc($reasons),
+            '{{campaign_id}}'   => $esc($campaignId !== null ? (string) $campaignId : ''),
+            '{{campaign_name}}' => $esc($campaignName),
+            '{{webhook_source}}'=> $esc($webhookSource),
         ];
         $json = str_replace(array_keys($replacements), array_values($replacements), $template);
 
@@ -964,36 +990,45 @@ function fireTokenWebhookAlert(PDO $pdo, array $requestData): void
         $isSlack = str_contains($url, 'hooks.slack.com') || str_contains($url, 'discord.com/api/webhooks');
 
         if ($isSlack) {
+            $fields = [
+                ['title' => 'IP',           'value' => $ip,              'short' => true],
+                ['title' => 'Token',        'value' => $token,           'short' => true],
+                ['title' => 'Label',        'value' => $label,           'short' => true],
+                ['title' => 'Score',        'value' => (string) $score,  'short' => true],
+                ['title' => 'Org/ASN',      'value' => "$org (AS$asn)",  'short' => true],
+                ['title' => 'Country',      'value' => $country,         'short' => true],
+                ['title' => 'Signals',      'value' => $reasons,         'short' => false],
+                ['title' => 'UA',           'value' => $ua,              'short' => false],
+                ['title' => 'Time',         'value' => $time,            'short' => true],
+                ['title' => 'Webhook Via',  'value' => $webhookSource,   'short' => true],
+            ];
+            if ($campaignName !== '') {
+                $fields[] = ['title' => 'Campaign', 'value' => $campaignName, 'short' => true];
+            }
+
             $payload = [
                 'text'        => '🔔 *SignalTrace Token Hit*',
                 'attachments' => [[
                     'color'  => '#4f78f1',
-                    'fields' => [
-                        ['title' => 'IP',           'value' => $ip,              'short' => true],
-                        ['title' => 'Token',        'value' => $token,           'short' => true],
-                        ['title' => 'Label',        'value' => $label,           'short' => true],
-                        ['title' => 'Score',        'value' => (string) $score,  'short' => true],
-                        ['title' => 'Org/ASN',      'value' => "$org (AS$asn)",  'short' => true],
-                        ['title' => 'Country',      'value' => $country,         'short' => true],
-                        ['title' => 'Signals',      'value' => $reasons,         'short' => false],
-                        ['title' => 'UA',           'value' => $ua,              'short' => false],
-                        ['title' => 'Time',         'value' => $time,            'short' => true],
-                    ],
+                    'fields' => $fields,
                 ]],
             ];
         } else {
             $payload = [
-                'event'    => 'signaltrace_token_hit',
-                'ip'       => $ip,
-                'token'    => $token,
-                'label'    => $label,
-                'score'    => $score,
-                'triggers' => $reasons,
-                'org'      => $org,
-                'asn'      => $asn,
-                'country'  => $country,
-                'ua'       => $ua,
-                'time'     => $time,
+                'event'          => 'signaltrace_token_hit',
+                'ip'             => $ip,
+                'token'          => $token,
+                'label'          => $label,
+                'score'          => $score,
+                'triggers'       => $reasons,
+                'org'            => $org,
+                'asn'            => $asn,
+                'country'        => $country,
+                'ua'             => $ua,
+                'time'           => $time,
+                'campaign_id'    => $campaignId,
+                'campaign_name'  => $campaignName !== '' ? $campaignName : null,
+                'webhook_source' => $webhookSource,
             ];
         }
 
