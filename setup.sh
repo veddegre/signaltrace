@@ -1055,7 +1055,7 @@ fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Installing PHP dependencies..."
 echo ""
-cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer update --no-dev --no-interaction
+cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 echo -e "${GREEN}  PHP dependencies installed.${RESET}"
 echo ""
 
@@ -1270,12 +1270,16 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${CYAN}HTTPS with Let's Encrypt (optional)${RESET}"
 echo ""
-default_https_prompt="N"
 if [ "$_existing_https_enabled" = "true" ]; then
-    default_https_prompt="Y"
+    https_prompt_label="Y/n"
+    https_prompt_default="Y"
+else
+    https_prompt_label="y/N"
+    https_prompt_default="N"
 fi
-read -r -p "  Set up HTTPS now? [${default_https_prompt}/n] " do_letsencrypt
-do_letsencrypt="${do_letsencrypt:-$default_https_prompt}"
+
+read -r -p "  Set up HTTPS now? [${https_prompt_label}] " do_letsencrypt
+do_letsencrypt="${do_letsencrypt:-$https_prompt_default}"
 
 if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
     echo ""
