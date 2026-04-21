@@ -1105,6 +1105,7 @@ function renderAdminPage(
                     <td class="muted"><?= $campaign['first_hit'] !== null ? h((string) $campaign['first_hit']) : '—' ?></td>
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
+                    <td><?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'Fallback' : '—' ?></td>
                     <td class="actions-col">
                         <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
                         <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
@@ -1119,7 +1120,7 @@ function renderAdminPage(
                     </td>
                 </tr>
                 <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;">
-                    <td colspan="9">
+                    <td colspan="10">
                         <form method="post" action="/admin/update-campaign" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:8px 0;">
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
                             <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
@@ -1134,6 +1135,10 @@ function renderAdminPage(
                             <div style="display:flex;align-items:center;gap:4px;padding-bottom:2px;">
                                 <input type="checkbox" name="campaign_active" value="1" <?= ((int) $campaign['active'] === 1) ? 'checked' : '' ?>>
                                 <label style="font-size:0.8125rem;margin:0;">Active</label>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;padding-bottom:2px;min-width:220px;">
+                                <input type="checkbox" name="campaign_webhook_enabled" value="1" <?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                <label style="font-size:0.8125rem;margin:0;text-transform:none;letter-spacing:0;">Fallback to token webhook</label>
                             </div>
                             <button type="submit">Save</button>
                             <button type="button" class="primary-button" data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
@@ -1158,6 +1163,10 @@ function renderAdminPage(
                 <div>
                     <label for="campaign_description" style="font-size:0.8125rem;">Description</label>
                     <input id="campaign_description" type="text" name="campaign_description" placeholder="Optional description" style="width:280px;">
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;padding-bottom:1rem;min-width:240px;">
+                    <input id="campaign_webhook_enabled" type="checkbox" name="campaign_webhook_enabled" value="1">
+                    <label for="campaign_webhook_enabled" style="font-size:0.8125rem;margin:0;text-transform:none;letter-spacing:0;">Fallback to token webhook</label>
                 </div>
                 <div class="campaign-form-action" style="display:flex;align-items:flex-end;padding-bottom:1rem;">
                     <button type="submit" style="align-self:flex-end;">Create Campaign</button>
