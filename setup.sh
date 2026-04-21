@@ -2,24 +2,13 @@
 # SignalTrace setup script
 # Supports Docker and manual installs.
 # Can be run from inside the cloned repo, or downloaded standalone:
-#   curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/veddegre/signaltrace/main/setup.sh | sudo bash
 
 set -e
 
 REPO_URL="https://github.com/veddegre/signaltrace.git"
 INSTALL_DIR="/var/www/signaltrace"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-SUDO=""
-if [ "$(id -u)" -ne 0 ]; then
-    SUDO="sudo"
-fi
-
-require_sudo() {
-    if [ -n "$SUDO" ]; then
-        $SUDO -v
-    fi
-}
 
 # -- Colours ------------------------------------------------------------------
 RED='\033[0;31m'
@@ -79,15 +68,13 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
-# -- For manual installs: install packages and stage repo into INSTALL_DIR -----
+# -- For manual installs: install packages and clone repo first ---------------
 if [ "$INSTALL_TYPE" = "3" ]; then
-    require_sudo
-
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing system packages..."
     echo ""
-    $SUDO apt-get update -qq
-    $SUDO apt-get install -y \
+    sudo apt-get update -qq
+    sudo apt-get install -y \
         apache2 \
         php \
         php-sqlite3 \
@@ -99,48 +86,37 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         unzip \
         git \
         software-properties-common
-
-    if ! command -v geoipupdate >/dev/null 2>&1; then
-        $SUDO add-apt-repository -y ppa:maxmind/ppa
-        $SUDO apt-get update -qq
-        $SUDO apt-get install -y geoipupdate
+    if ! command -v geoipupdate &>/dev/null; then
+        sudo add-apt-repository -y ppa:maxmind/ppa
+        sudo apt-get update -qq
+        sudo apt-get install -y geoipupdate
     fi
-
-    $SUDO a2enmod rewrite >/dev/null
+    sudo a2enmod rewrite
     echo -e "  ${GREEN}System packages installed.${RESET}"
     echo ""
 
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Staging SignalTrace into ${INSTALL_DIR}..."
-    echo ""
-
-    if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
+    # Clone repo if not already running from inside it
+    if [ ! -f "$SCRIPT_DIR/db/schema.sql" ]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Cloning SignalTrace repository..."
+        echo ""
         if [ -d "$INSTALL_DIR" ]; then
             echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
-            read -r -p "  Remove and replace it with the current source? [y/N] " replace_install
-            if [[ "$replace_install" =~ ^[Yy]$ ]]; then
-                $SUDO rm -rf "$INSTALL_DIR"
+            read -r -p "  Remove and re-clone? [y/N] " reclone
+            if [[ "$reclone" =~ ^[Yy]$ ]]; then
+                sudo rm -rf "$INSTALL_DIR"
             else
-                echo -e "${RED}Manual install requires files to live in ${INSTALL_DIR}.${RESET}"
-                echo "Aborted to avoid mixing files from two locations."
-                exit 1
+                echo "  Using existing directory."
             fi
         fi
-
-        if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
-            $SUDO mkdir -p "$INSTALL_DIR"
-            $SUDO cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
-            echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
-        else
-            $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
-            echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
+        if [ ! -d "$INSTALL_DIR" ]; then
+            sudo git clone "$REPO_URL" "$INSTALL_DIR"
         fi
-    else
-        echo -e "  ${GREEN}Already running from ${INSTALL_DIR}.${RESET}"
+        SCRIPT_DIR="$INSTALL_DIR"
+        echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
+        echo ""
     fi
-    echo ""
 
-    SCRIPT_DIR="$INSTALL_DIR"
     OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
 else
     OUTPUT_FILE="$SCRIPT_DIR/.env"
@@ -172,14 +148,16 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo ""
 fi
 
-# -- Helpers -------------------------------------------------------------------
+# -- Helper: read existing value from config.local.php -------------------------
 read_existing_php() {
     local key="$1"
     if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
+        # Extract the value from define('KEY', 'value'); or define('KEY', value);
         grep -oP "define\('${key}',\s*'?\K[^';)]*" "$OUTPUT_FILE" 2>/dev/null | head -1
     fi
 }
 
+# -- Helper: read existing value from .env ------------------------------------
 read_existing_env() {
     local key="$1"
     if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
@@ -187,6 +165,7 @@ read_existing_env() {
     fi
 }
 
+# -- Helper functions ----------------------------------------------------------
 prompt() {
     local label="$1"
     local var="$2"
@@ -195,7 +174,7 @@ prompt() {
     local secret="$5"
 
     echo -e "${CYAN}${label}${RESET}"
-    [ -n "$hint" ] && echo "  $hint"
+    [ -n "$hint" ] && echo -e "  ${hint}"
     if [ -n "$default" ]; then
         if [ "$secret" = "secret" ]; then
             read -r -s -p "  Value [${default}]: " input
@@ -203,7 +182,7 @@ prompt() {
         else
             read -r -p "  Value [${default}]: " input
         fi
-        eval "$var=\"\${input:-$default}\""
+        eval "$var=\"${input:-$default}\""
     else
         if [ "$secret" = "secret" ]; then
             read -r -s -p "  Value (leave blank to skip): " input
@@ -211,7 +190,7 @@ prompt() {
         else
             read -r -p "  Value (leave blank to skip): " input
         fi
-        eval "$var=\"\${input}\""
+        eval "$var=\"${input}\""
     fi
     echo ""
 }
@@ -222,7 +201,7 @@ generate_hash_php() {
 }
 
 generate_salt() {
-    if command -v openssl >/dev/null 2>&1; then
+    if command -v openssl &>/dev/null; then
         openssl rand -hex 64
     else
         php -r "echo bin2hex(random_bytes(64)) . PHP_EOL;"
@@ -231,10 +210,10 @@ generate_salt() {
 
 find_free_port() {
     local port=8080
-    while ss -tln 2>/dev/null | grep -q ":${port} "; do
+    while ss -tlnp 2>/dev/null | grep -q ":${port} "; do
         port=$((port + 1))
     done
-    echo "$port"
+    echo $port
 }
 
 # -- Shared: admin username ----------------------------------------------------
@@ -250,6 +229,7 @@ if [ "$MODIFY_EXISTING" = true ]; then
     read -r -s -p "  New password (blank to keep existing): " ADMIN_PASSWORD
     echo ""
     if [ -z "$ADMIN_PASSWORD" ]; then
+        # Keep existing hash — read it from the file
         ADMIN_PASSWORD_HASH=$(read_existing_php "ADMIN_PASSWORD_HASH")
         DEFER_HASH=false
         echo -e "  ${GREEN}Keeping existing password hash.${RESET}"
@@ -262,7 +242,6 @@ if [ "$MODIFY_EXISTING" = true ]; then
             ADMIN_PASSWORD_HASH=$(read_existing_php "ADMIN_PASSWORD_HASH")
             ADMIN_PASSWORD=""
             DEFER_HASH=false
-            echo ""
         fi
     fi
 else
@@ -286,13 +265,14 @@ else
 fi
 
 DEFER_HASH=false
+
 if [ -n "$ADMIN_PASSWORD" ]; then
     if [ "$INSTALL_TYPE" = "2" ]; then
         echo "  Generating bcrypt hash..."
         ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
         echo -e "  ${GREEN}Hash generated.${RESET}"
     else
-        if command -v php >/dev/null 2>&1; then
+        if command -v php &>/dev/null; then
             echo "  Generating bcrypt hash..."
             ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
             echo -e "  ${GREEN}Hash generated.${RESET}"
@@ -337,7 +317,7 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^signaltrace$"; then
         CONTAINER_WAS_RUNNING=true
         echo "  Stopping existing container to free port..."
-        docker compose stop >/dev/null 2>&1 || true
+        docker compose stop 2>/dev/null
         echo ""
     fi
 
@@ -374,7 +354,7 @@ if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
     SIGNALTRACE_EXPORT_API_TOKEN=""
     echo -e "  ${YELLOW}Export API token disabled.${RESET}"
 elif [ -z "$EXPORT_TOKEN_INPUT" ]; then
-    if command -v openssl >/dev/null 2>&1; then
+    if command -v openssl &>/dev/null; then
         SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
         echo -e "  ${GREEN}Token auto-generated.${RESET}"
     else
@@ -397,6 +377,7 @@ prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "" ""
 CF_ACCESS_ENABLED_VAL="false"
 CF_ACCESS_AUD_VAL=""
 CF_ACCESS_TEAM_DOMAIN_VAL=""
+CF_ADMIN_SUBDOMAIN=""
 
 if [ "$INSTALL_TYPE" = "3" ]; then
     echo -e "${BOLD}── Cloudflare Access (optional) ─────────────────────────────${RESET}"
@@ -414,6 +395,12 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         echo -e "${CYAN}Cloudflare team domain${RESET}"
         echo "  Found in Zero Trust → Settings → Teams tab (e.g. yourteam.cloudflareaccess.com)"
         read -r -p "  Value: " CF_ACCESS_TEAM_DOMAIN_VAL
+        echo ""
+        echo -e "${CYAN}Admin subdomain${RESET}"
+        echo "  The subdomain Cloudflare Access will protect (e.g. admin.example.com)."
+        echo "  A dedicated Apache vhost will be created for this subdomain that"
+        echo "  routes all traffic to /admin. Leave blank to skip the vhost."
+        read -r -p "  Value (e.g. admin.yourdomain.com): " CF_ADMIN_SUBDOMAIN
         echo ""
         if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ]; then
             CF_ACCESS_ENABLED_VAL="true"
@@ -434,7 +421,7 @@ DEMO_ADMIN_USERNAME_DISPLAY="demo"
 DEMO_ADMIN_PASSWORD_DISPLAY=""
 
 if [ "$INSTALL_TYPE" = "3" ]; then
-    echo -e "${BOLD}── Demo Mode (optional) ─────────────────────────────────────${RESET}"
+    echo -e "${BOLD}── Demo Mode (optional) ──────────────────────────────────────${RESET}"
     echo "  Demo mode shows a banner with a reset countdown and locks"
     echo "  certain settings so visitors cannot change them."
     echo ""
@@ -476,7 +463,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
-# -- Optional tuning -----------------------------------------------------------
+
 echo -e "${BOLD}── Optional Tuning ──────────────────────────────────────────${RESET}"
 echo "  Press Enter to accept defaults for all of these."
 echo ""
@@ -539,6 +526,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
             3)
                 echo -e "  ${YELLOW}Email alerting will be removed from config.local.php.${RESET}"
                 echo ""
+                # Leave EMAIL_SMTP_HOST blank so nothing gets written
                 ;;
             *)
                 EMAIL_SMTP_HOST=$(read_existing_php "EMAIL_SMTP_HOST")
@@ -642,9 +630,8 @@ AUTH_LOCKOUT_SECS="${AUTH_LOCKOUT_SECS}"
 SELF_REFERER_DOMAIN="${SELF_REFERER_DOMAIN}"
 EOF
 else
-    $SUDO mkdir -p "$SCRIPT_DIR/includes"
-
-    $SUDO tee "$OUTPUT_FILE" >/dev/null << EOF
+    # Manual install — write config.local.php
+    cat > "$OUTPUT_FILE" << EOF
 <?php
 define('ADMIN_USERNAME',      '${ADMIN_USERNAME}');
 define('ADMIN_PASSWORD_HASH', '${ADMIN_PASSWORD_HASH}');
@@ -656,41 +643,38 @@ define('AUTH_LOCKOUT_SECS',   ${AUTH_LOCKOUT_SECS});
 EOF
 
     if [ -n "$MAXMIND_ACCOUNT_ID" ]; then
-        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('MAXMIND_ACCOUNT_ID',  '${MAXMIND_ACCOUNT_ID}');" >> "$OUTPUT_FILE"
     fi
     if [ -n "$MAXMIND_LICENSE_KEY" ]; then
-        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('MAXMIND_LICENSE_KEY', '${MAXMIND_LICENSE_KEY}');" >> "$OUTPUT_FILE"
     fi
     if [ -n "$SELF_REFERER_DOMAIN" ]; then
-        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "define('SELF_REFERER_DOMAIN', '${SELF_REFERER_DOMAIN}');" >> "$OUTPUT_FILE"
     fi
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "// Cloudflare Access" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('CF_ACCESS_ENABLED',     true);" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "" >> "$OUTPUT_FILE"
+        echo "// Cloudflare Access" >> "$OUTPUT_FILE"
+        echo "define('CF_ACCESS_ENABLED',     true);" >> "$OUTPUT_FILE"
+        echo "define('CF_ACCESS_AUD',         '${CF_ACCESS_AUD_VAL}');" >> "$OUTPUT_FILE"
+        echo "define('CF_ACCESS_TEAM_DOMAIN', '${CF_ACCESS_TEAM_DOMAIN_VAL}');" >> "$OUTPUT_FILE"
     fi
     if [ -n "$EMAIL_SMTP_HOST" ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "" >> "$OUTPUT_FILE"
+        echo "// Email alerting — SMTP credentials (configure thresholds and recipients in Settings)" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_HOST',       '${EMAIL_SMTP_HOST}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_PORT',       ${EMAIL_SMTP_PORT});" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_ENCRYPTION', '${EMAIL_SMTP_ENCRYPTION}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_USER',       '${EMAIL_SMTP_USER}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_PASS',       '${EMAIL_SMTP_PASS}');" >> "$OUTPUT_FILE"
+        echo "define('EMAIL_SMTP_FROM',       '${EMAIL_SMTP_FROM}');" >> "$OUTPUT_FILE"
     fi
     if [ "$DEMO_MODE_ENABLED" = true ]; then
-        echo "" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "// Demo mode" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('DEMO_MODE',             true);" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
-        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" | $SUDO tee -a "$OUTPUT_FILE" >/dev/null
+        echo "" >> "$OUTPUT_FILE"
+        echo "// Demo mode" >> "$OUTPUT_FILE"
+        echo "define('DEMO_MODE',             true);" >> "$OUTPUT_FILE"
+        echo "define('DEMO_ADMIN_USERNAME',   '${DEMO_ADMIN_USERNAME_DISPLAY}');" >> "$OUTPUT_FILE"
+        echo "define('DEMO_ADMIN_PASSWORD',   '${DEMO_ADMIN_PASSWORD_DISPLAY}');" >> "$OUTPUT_FILE"
     fi
-
-    $SUDO chown root:www-data "$OUTPUT_FILE"
-    $SUDO chmod 640 "$OUTPUT_FILE"
 fi
 
 # -- Deferred hash generation (Docker, no local PHP) --------------------------
@@ -703,7 +687,7 @@ if [ "$DEFER_HASH" = true ]; then
         echo "  Pulling pre-built image to generate hash..."
         docker pull ghcr.io/veddegre/signaltrace:latest
     else
-        if ! docker image inspect signaltrace-signaltrace >/dev/null 2>&1; then
+        if ! docker image inspect signaltrace-signaltrace &>/dev/null; then
             echo "  Building container image first..."
             docker compose build
         fi
@@ -711,9 +695,9 @@ if [ "$DEFER_HASH" = true ]; then
 
     echo "  Starting container to generate hash..."
     if [ "$INSTALL_TYPE" = "1" ]; then
-        docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d >/dev/null 2>&1
+        docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml up -d 2>/dev/null
     else
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d 2>/dev/null
     fi
     sleep 3
 
@@ -735,7 +719,7 @@ if [ "$DEFER_HASH" = true ]; then
     CONTAINER_WAS_RUNNING=true
 fi
 
-# -- Done writing config -------------------------------------------------------
+# -- Done ----------------------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}${BOLD}$(basename "$OUTPUT_FILE") written successfully.${RESET}"
 echo ""
@@ -750,28 +734,30 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
         docker compose build
         echo ""
     fi
-
     if [ "$INSTALL_TYPE" = "1" ]; then
         COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml"
     else
         COMPOSE_CMD="docker compose"
     fi
-
-    $COMPOSE_CMD up -d
     if [ "$CONTAINER_WAS_RUNNING" = true ]; then
+        $COMPOSE_CMD up -d
         echo -e "  ${GREEN}Container restarted.${RESET}"
     else
+        $COMPOSE_CMD up -d
         echo -e "  ${GREEN}Container started.${RESET}"
     fi
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
-
 else
     # ── Composer dependencies -------------------------------------------------
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Installing PHP dependencies..."
     echo ""
-    cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer update --no-dev --no-interaction
+    cd "$SCRIPT_DIR" && composer update --no-dev --no-interaction
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: composer update failed.${RESET}"
+        exit 1
+    fi
     echo -e "  ${GREEN}PHP dependencies installed.${RESET}"
     echo ""
 
@@ -780,8 +766,8 @@ else
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "Configuring GeoIP..."
         echo ""
-        $SUDO mkdir -p /var/lib/GeoIP
-        $SUDO tee /etc/GeoIP.conf >/dev/null << GEOIPCONF
+        sudo mkdir -p /var/lib/GeoIP
+        sudo tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
 AccountID ${MAXMIND_ACCOUNT_ID}
 LicenseKey ${MAXMIND_LICENSE_KEY}
 EditionIDs GeoLite2-ASN GeoLite2-Country
@@ -789,7 +775,7 @@ DatabaseDirectory /var/lib/GeoIP
 GEOIPCONF
         echo "  /etc/GeoIP.conf written."
         echo "  Downloading GeoIP databases..."
-        if $SUDO geoipupdate; then
+        if sudo geoipupdate; then
             echo -e "  ${GREEN}GeoIP databases downloaded to /var/lib/GeoIP/.${RESET}"
         else
             echo -e "  ${YELLOW}Warning: geoipupdate failed. Run 'sudo geoipupdate' manually once credentials are correct.${RESET}"
@@ -817,22 +803,25 @@ GEOIPCONF
 
     if [ "${SKIP_DB:-false}" = false ]; then
         echo "Initialising database..."
-        $SUDO mkdir -p "$DB_DIR"
-        [ -f "$DB_FILE" ] && $SUDO rm -f "$DB_FILE"
-        $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
+        sudo mkdir -p "$DB_DIR"
+        [ -f "$DB_FILE" ] && sudo rm -f "$DB_FILE"
+        sudo sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
         echo -e "  ${GREEN}Database initialised.${RESET}"
         echo ""
 
         read -r -p "  Load sample data so the dashboard has something to show? [y/N] " doseed
         if [[ "$doseed" =~ ^[Yy]$ ]]; then
-            $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
+            sudo sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
             echo -e "  ${GREEN}Sample data loaded.${RESET}"
         fi
 
+        # Seed demo settings into the database so they are correct from first boot.
+        # These fields are locked in the UI when DEMO_MODE is true so they cannot
+        # be changed through the Settings form.
         if [ "$DEMO_MODE_ENABLED" = true ]; then
-            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
-            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
-            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
+            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
+            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
+            sudo sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
             echo -e "  ${GREEN}Demo settings seeded into database.${RESET}"
         fi
     fi
@@ -842,61 +831,34 @@ GEOIPCONF
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Setting file ownership and permissions..."
 
-    $SUDO chown root:root "$INSTALL_DIR"
-    $SUDO chmod 755 "$INSTALL_DIR"
+    # includes/, public/, db/, vendor/ — root-owned, web server read-only
+    sudo chown -R root:www-data "${INSTALL_DIR}/includes/"
+    sudo chmod 750 "${INSTALL_DIR}/includes/"
+    sudo chmod 640 "${INSTALL_DIR}/includes/"*.php
+    echo -e "  ${GREEN}includes/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/includes" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/includes"
-        $SUDO find "${INSTALL_DIR}/includes" -type d -exec chmod 750 {} \;
-        $SUDO find "${INSTALL_DIR}/includes" -type f -exec chmod 640 {} \;
-        echo -e "  ${GREEN}includes/ — root:www-data, dirs 750 files 640${RESET}"
-    fi
+    sudo chown -R root:www-data "${INSTALL_DIR}/public/"
+    sudo chmod 750 "${INSTALL_DIR}/public/"
+    sudo find "${INSTALL_DIR}/public/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}public/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/public" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/public"
-        $SUDO find "${INSTALL_DIR}/public" -type d -exec chmod 755 {} \;
-        $SUDO find "${INSTALL_DIR}/public" -type f -exec chmod 644 {} \;
-        echo -e "  ${GREEN}public/ — root:www-data, dirs 755 files 644${RESET}"
-    fi
+    sudo chown -R root:www-data "${INSTALL_DIR}/db/"
+    sudo chmod 750 "${INSTALL_DIR}/db/"
+    sudo chmod 640 "${INSTALL_DIR}/db/"*
+    echo -e "  ${GREEN}db/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/db" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/db"
-        $SUDO find "${INSTALL_DIR}/db" -type d -exec chmod 750 {} \;
-        $SUDO find "${INSTALL_DIR}/db" -type f -exec chmod 640 {} \;
-        echo -e "  ${GREEN}db/ — root:www-data, dirs 750 files 640${RESET}"
-    fi
+    sudo chown -R root:www-data "${INSTALL_DIR}/vendor/"
+    sudo find "${INSTALL_DIR}/vendor/" -type d -exec chmod 750 {} \;
+    sudo find "${INSTALL_DIR}/vendor/" -type f -exec chmod 640 {} \;
+    echo -e "  ${GREEN}vendor/ — root:www-data (640)${RESET}"
 
-    if [ -d "${INSTALL_DIR}/vendor" ]; then
-        $SUDO chown -R root:www-data "${INSTALL_DIR}/vendor"
-        $SUDO find "${INSTALL_DIR}/vendor" -type d -exec chmod 755 {} \;
-        $SUDO find "${INSTALL_DIR}/vendor" -type f -exec chmod 644 {} \;
-        echo -e "  ${GREEN}vendor/ — root:www-data, dirs 755 files 644${RESET}"
-    fi
-
-    for optional_dir in docs docker grafana splunk .github; do
-        if [ -d "${INSTALL_DIR}/${optional_dir}" ]; then
-            $SUDO chown -R root:root "${INSTALL_DIR}/${optional_dir}"
-            $SUDO find "${INSTALL_DIR}/${optional_dir}" -type d -exec chmod 755 {} \;
-            $SUDO find "${INSTALL_DIR}/${optional_dir}" -type f -exec chmod 644 {} \;
-        fi
-    done
-
-    $SUDO find "$INSTALL_DIR" -maxdepth 1 -type f -exec chown root:root {} \;
-    $SUDO find "$INSTALL_DIR" -maxdepth 1 -type f -exec chmod 644 {} \;
-
-    if [ -f "${INSTALL_DIR}/setup.sh" ]; then
-        $SUDO chown root:root "${INSTALL_DIR}/setup.sh"
-        $SUDO chmod 755 "${INSTALL_DIR}/setup.sh"
-    fi
-
-    # SQLite writable area
-    $SUDO mkdir -p "$DB_DIR"
-    $SUDO chown -R www-data:www-data "$DB_DIR"
-    $SUDO find "$DB_DIR" -type d -exec chmod 770 {} \;
-    $SUDO find "$DB_DIR" -type f -exec chmod 660 {} \;
-
+    # data/ — web server needs write on database and directory only
+    sudo chown root:www-data "$DB_DIR"
+    sudo chmod 770 "$DB_DIR"
     if [ -f "$DB_FILE" ]; then
-        echo -e "  ${GREEN}data/database.db — www-data:www-data, 660${RESET}"
+        sudo chown root:www-data "$DB_FILE"
+        sudo chmod 660 "$DB_FILE"
+        echo -e "  ${GREEN}data/database.db — root:www-data (660)${RESET}"
     fi
     echo ""
 
@@ -907,7 +869,7 @@ GEOIPCONF
     read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
     APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
 
-    $SUDO tee /etc/apache2/sites-available/signaltrace.conf >/dev/null << APACHECONF
+    sudo tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
 <VirtualHost *:80>
     ServerName ${APACHE_SERVER_NAME}
     DocumentRoot /var/www/signaltrace/public
@@ -928,10 +890,67 @@ GEOIPCONF
 </VirtualHost>
 APACHECONF
 
-    $SUDO a2enmod rewrite ssl >/dev/null
-    $SUDO a2ensite signaltrace.conf >/dev/null
-    $SUDO a2dissite 000-default.conf >/dev/null 2>&1 || true
-    $SUDO systemctl restart apache2
+    # ── Admin subdomain vhost (Cloudflare Access) -----------------------------
+    if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+        sudo tee /etc/apache2/sites-available/signaltrace-admin.conf > /dev/null << ADMINCONF
+<VirtualHost *:80>
+    ServerName ${CF_ADMIN_SUBDOMAIN}
+    DocumentRoot /var/www/signaltrace/public
+
+    SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+
+    <Directory /var/www/signaltrace/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog  \${APACHE_LOG_DIR}/signaltrace_admin_error.log
+    CustomLog \${APACHE_LOG_DIR}/signaltrace_admin_access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName ${CF_ADMIN_SUBDOMAIN}
+    DocumentRoot /var/www/signaltrace/public
+
+    SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
+
+    # Route all traffic on this subdomain to /admin so that
+    # https://admin.yourdomain.com routes cleanly to the admin panel.
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/admin
+    RewriteCond %{REQUEST_URI} !^/admin\.css
+    RewriteCond %{REQUEST_URI} !^/signaltrace_transparent\.png
+    RewriteCond %{REQUEST_URI} !^/favicon
+    RewriteCond %{REQUEST_URI} !^/health
+    RewriteRule ^(.*)$ /admin [L]
+
+    SSLEngine on
+    # Paths filled in by certbot — run: sudo certbot --apache
+    # SSLCertificateFile    /etc/letsencrypt/live/${CF_ADMIN_SUBDOMAIN}/fullchain.pem
+    # SSLCertificateKeyFile /etc/letsencrypt/live/${CF_ADMIN_SUBDOMAIN}/privkey.pem
+
+    <Directory /var/www/signaltrace/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog  \${APACHE_LOG_DIR}/signaltrace_admin_error.log
+    CustomLog \${APACHE_LOG_DIR}/signaltrace_admin_access.log combined
+</VirtualHost>
+ADMINCONF
+
+        sudo a2ensite signaltrace-admin.conf > /dev/null
+        echo -e "  ${GREEN}Admin subdomain vhost created for ${CF_ADMIN_SUBDOMAIN}.${RESET}"
+    fi
+
+    sudo a2enmod rewrite ssl
+    sudo a2ensite signaltrace.conf
+    sudo a2dissite 000-default.conf 2>/dev/null || true
+    sudo systemctl restart apache2
     echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
     echo ""
 
@@ -949,13 +968,20 @@ APACHECONF
             echo -e "  ${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
         else
             echo "  Installing certbot..."
-            $SUDO apt-get install -y certbot python3-certbot-apache -qq
+            sudo apt-get install -y certbot python3-certbot-apache -qq
             echo "  Requesting certificate for ${APACHE_SERVER_NAME}..."
-            if $SUDO certbot --apache \
+
+            # Include admin subdomain in certificate if configured
+            LE_DOMAINS="$APACHE_SERVER_NAME"
+            if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+                LE_DOMAINS="${LE_DOMAINS},${CF_ADMIN_SUBDOMAIN}"
+            fi
+
+            if sudo certbot --apache \
                 --non-interactive \
                 --agree-tos \
                 --email "$LE_EMAIL" \
-                --domains "$APACHE_SERVER_NAME" \
+                --domains "$LE_DOMAINS" \
                 --redirect; then
                 echo -e "  ${GREEN}HTTPS configured. Certificate will auto-renew.${RESET}"
                 HTTPS_ENABLED=true
@@ -968,10 +994,10 @@ APACHECONF
     echo ""
 
     if [ "${HTTPS_ENABLED:-false}" = true ]; then
-        if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
+        if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
             echo -e "${CYAN}SignalTrace URLs:${RESET}"
-            echo "  Public: https://${APACHE_SERVER_NAME}"
-            echo "  Admin (Cloudflare Access): https://admin.${APACHE_SERVER_NAME}"
+            echo "  Public honeypot: https://${APACHE_SERVER_NAME}"
+            echo "  Admin panel:     https://${CF_ADMIN_SUBDOMAIN}"
         else
             echo -e "${CYAN}SignalTrace is available at: https://${APACHE_SERVER_NAME}/admin${RESET}"
         fi
@@ -982,14 +1008,16 @@ APACHECONF
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ]; then
         echo ""
         echo -e "${YELLOW}Cloudflare Access is enabled. Remember to:${RESET}"
-        echo "  1. Create an A record for your domain in Cloudflare with the proxy enabled (orange cloud)"
-        echo "  2. Create an A/CNAME for admin.${APACHE_SERVER_NAME} if you use a separate admin host"
-        echo "  3. Configure the Access application for your domain in Zero Trust"
+        echo "  1. Create an A record for ${APACHE_SERVER_NAME} in Cloudflare with proxy enabled (orange cloud)"
+        if [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+        echo "  2. Create an A/CNAME for ${CF_ADMIN_SUBDOMAIN} pointing at this server with proxy enabled"
+        echo "  3. Configure the Access application for ${CF_ADMIN_SUBDOMAIN} in Zero Trust"
+        fi
         echo "  4. See the wiki for the full setup guide"
     fi
 fi
-
 echo ""
+
 if [ -n "$SIGNALTRACE_EXPORT_API_TOKEN" ]; then
     echo -e "${YELLOW}Note: save your export API token — it will not be shown again:${RESET}"
     echo "  $SIGNALTRACE_EXPORT_API_TOKEN"
