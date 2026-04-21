@@ -899,16 +899,11 @@ APACHECONF
 
     SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
 
-    # Route all traffic on this subdomain to /admin so that
-    # https://admin.yourdomain.com routes cleanly to the admin panel.
     RewriteEngine On
+    # Allow ACME challenge through for cert validation
     RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
-    RewriteCond %{REQUEST_URI} !^/admin
-    RewriteCond %{REQUEST_URI} !^/admin\.css
-    RewriteCond %{REQUEST_URI} !^/signaltrace_transparent\.png
-    RewriteCond %{REQUEST_URI} !^/favicon
-    RewriteCond %{REQUEST_URI} !^/health
-    RewriteRule ^(.*)$ /admin [L]
+    # Redirect bare root to /admin (external redirect so browser URL updates)
+    RewriteRule ^/?$ /admin [R=302,L]
 
     <Directory /var/www/signaltrace/public>
         AllowOverride All
@@ -978,18 +973,31 @@ ADMINCONF
                 echo -e "${YELLOW}HTTPS for ${CF_ADMIN_SUBDOMAIN} requires manual setup.${RESET}"
                 echo ""
                 echo "  Cloudflare Access blocks the ACME HTTP challenge, so Let's Encrypt"
-                echo "  cannot auto-validate the admin subdomain. To get the cert:"
+                echo "  cannot auto-validate the admin subdomain. Three options:"
                 echo ""
-                echo "  Option A — Cloudflare DNS plugin (recommended):"
+                echo "  Option A — Cloudflare Origin Certificate (recommended):"
+                echo "    Since traffic proxies through Cloudflare, you don't need Let's Encrypt."
+                echo "    Cloudflare issues a 15-year origin cert trusted by their edge."
+                echo "    1. Cloudflare dashboard → SSL/TLS → Origin Server → Create Certificate"
+                echo "    2. Save the cert and key to your server (e.g. /etc/ssl/cloudflare/)"
+                echo "    3. Update the admin vhost SSL paths and reload Apache:"
+                echo "       SSLCertificateFile    /etc/ssl/cloudflare/origin.pem"
+                echo "       SSLCertificateKeyFile /etc/ssl/cloudflare/origin.key"
+                echo "    4. Set Cloudflare SSL/TLS mode to Full (Strict)"
+                echo "    This option works with renewal automatically — no cron needed."
+                echo ""
+                echo "  Option B — Cloudflare DNS plugin (automated Let's Encrypt renewal):"
                 echo "    sudo apt install python3-certbot-dns-cloudflare"
-                echo "    # Create ~/.cf-credentials with your Cloudflare API token"
+                echo "    # Create ~/.cf-credentials with dns_cloudflare_api_token = YOUR_TOKEN"
                 echo "    sudo certbot certonly --dns-cloudflare \\"
                 echo "      --dns-cloudflare-credentials ~/.cf-credentials \\"
                 echo "      --domains ${CF_ADMIN_SUBDOMAIN}"
                 echo "    sudo certbot install --cert-name ${CF_ADMIN_SUBDOMAIN} --apache"
+                echo "    DNS validation bypasses CF Access so renewal works unattended."
                 echo ""
-                echo "  Option B — temporarily pause Cloudflare Access, then run:"
+                echo "  Option C — temporarily pause Cloudflare Access, then run:"
                 echo "    sudo certbot --apache --expand --domains ${APACHE_SERVER_NAME},${CF_ADMIN_SUBDOMAIN}"
+                echo "    Note: auto-renewal will fail when CF Access is re-enabled."
                 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
                 echo ""
             else
