@@ -37,6 +37,8 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+RUN_SYSTEM_TASKS=true
+
 echo ""
 echo -e "${BOLD}SignalTrace Setup${RESET}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -183,6 +185,28 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo ""
 fi
 
+if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ]; then
+    echo "  System/infrastructure tasks are things like:"
+    echo "  • composer update"
+    echo "  • GeoIP config/write"
+    echo "  • database initialisation"
+    echo "  • file permissions"
+    echo "  • Apache vhost rewrite"
+    echo "  • Let's Encrypt / certbot"
+    echo ""
+    read -r -p "  Re-run system/infrastructure tasks too? [y/N] " rerun_system_tasks
+    if [[ "$rerun_system_tasks" =~ ^[Yy]$ ]]; then
+        RUN_SYSTEM_TASKS=true
+    else
+        RUN_SYSTEM_TASKS=false
+    fi
+    echo ""
+fi
+
+if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" != "3" ]; then
+    RUN_SYSTEM_TASKS=false
+fi
+
 # -- Helpers -------------------------------------------------------------------
 read_existing_php() {
     local key="$1"
@@ -293,13 +317,13 @@ else
         read -r -s -p "  Password: " ADMIN_PASSWORD
         echo ""
         if [ -z "$ADMIN_PASSWORD" ]; then
-            echo -e "  ${RED}Error: password cannot be blank.${RESET}"
+            echo -e "${RED}Error: password cannot be blank.${RESET}"
             continue
         fi
         read -r -s -p "  Confirm password: " ADMIN_PASSWORD_CONFIRM
         echo ""
         if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
-            echo -e "  ${RED}Passwords do not match. Try again.${RESET}"
+            echo -e "${RED}Passwords do not match. Try again.${RESET}"
             echo ""
         else
             break
@@ -312,13 +336,13 @@ if [ -n "$ADMIN_PASSWORD" ]; then
     if command -v php >/dev/null 2>&1; then
         echo "  Generating bcrypt hash..."
         ADMIN_PASSWORD_HASH=$(generate_hash_php "$ADMIN_PASSWORD")
-        echo -e "  ${GREEN}Hash generated.${RESET}"
+        echo -e "${GREEN}Hash generated.${RESET}"
     elif python3 -c "import bcrypt" 2>/dev/null; then
         echo "  Generating bcrypt hash..."
         ADMIN_PASSWORD_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw('${ADMIN_PASSWORD}'.encode(), bcrypt.gensalt()).decode())")
-        echo -e "  ${GREEN}Hash generated.${RESET}"
+        echo -e "${GREEN}Hash generated.${RESET}"
     else
-        echo -e "  ${YELLOW}PHP not found — hash will be generated later.${RESET}"
+        echo -e "${YELLOW}PHP not found — hash will be generated later.${RESET}"
         ADMIN_PASSWORD_HASH="__DEFER__"
         DEFER_HASH=true
     fi
@@ -340,7 +364,7 @@ fi
 if [ -z "$VISITOR_HASH_SALT" ]; then
     echo "  Generating salt..."
     VISITOR_HASH_SALT=$(generate_salt)
-    echo -e "  ${GREEN}Salt generated.${RESET}"
+    echo -e "${GREEN}Salt generated.${RESET}"
 fi
 echo ""
 
@@ -403,27 +427,64 @@ else
 fi
 
 # -- Export API token ----------------------------------------------------------
+_existing_export_token=$(read_existing_php "EXPORT_API_TOKEN")
+
 echo -e "${BOLD}── Export API Token (optional) ──────────────────────────────${RESET}"
 echo "  Used for Splunk scripted inputs and other automation."
 echo ""
-echo "  Press Enter to auto-generate  |  Type a value to use your own  |  Type 'none' to skip"
-echo ""
-read -r -p "  Value: " EXPORT_TOKEN_INPUT
 
-if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
-    SIGNALTRACE_EXPORT_API_TOKEN=""
-    echo -e "  ${YELLOW}Export API token disabled.${RESET}"
-elif [ -z "$EXPORT_TOKEN_INPUT" ]; then
-    if command -v openssl >/dev/null 2>&1; then
-        SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
-        echo -e "  ${GREEN}Token auto-generated.${RESET}"
-    else
-        SIGNALTRACE_EXPORT_API_TOKEN=""
-        echo -e "  ${YELLOW}openssl not found — token skipped.${RESET}"
-    fi
+if [ "$MODIFY_EXISTING" = true ] && [ -n "$_existing_export_token" ]; then
+    section_choice_existing "Export API Token"
+    case "$SECTION_CHOICE" in
+        2)
+            echo "  Press Enter to auto-generate  |  Type a value to use your own  |  Type 'none' to disable"
+            echo ""
+            read -r -p "  Value: " EXPORT_TOKEN_INPUT
+            if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
+                SIGNALTRACE_EXPORT_API_TOKEN=""
+                echo -e "${YELLOW}  Export API token disabled.${RESET}"
+            elif [ -z "$EXPORT_TOKEN_INPUT" ]; then
+                if command -v openssl >/dev/null 2>&1; then
+                    SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
+                    echo -e "${GREEN}  Token auto-generated.${RESET}"
+                else
+                    SIGNALTRACE_EXPORT_API_TOKEN="$_existing_export_token"
+                    echo -e "${YELLOW}  openssl not found — keeping existing token.${RESET}"
+                fi
+            else
+                SIGNALTRACE_EXPORT_API_TOKEN="$EXPORT_TOKEN_INPUT"
+                echo -e "${GREEN}  Token set.${RESET}"
+            fi
+            ;;
+        3)
+            SIGNALTRACE_EXPORT_API_TOKEN=""
+            echo -e "${YELLOW}  Export API token disabled.${RESET}"
+            ;;
+        *)
+            SIGNALTRACE_EXPORT_API_TOKEN="$_existing_export_token"
+            echo -e "${GREEN}  Keeping existing export API token.${RESET}"
+            ;;
+    esac
 else
-    SIGNALTRACE_EXPORT_API_TOKEN="$EXPORT_TOKEN_INPUT"
-    echo -e "  ${GREEN}Token set.${RESET}"
+    echo "  Press Enter to auto-generate  |  Type a value to use your own  |  Type 'none' to skip"
+    echo ""
+    read -r -p "  Value: " EXPORT_TOKEN_INPUT
+
+    if [ "${EXPORT_TOKEN_INPUT,,}" = "none" ]; then
+        SIGNALTRACE_EXPORT_API_TOKEN=""
+        echo -e "${YELLOW}  Export API token disabled.${RESET}"
+    elif [ -z "$EXPORT_TOKEN_INPUT" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+            SIGNALTRACE_EXPORT_API_TOKEN=$(openssl rand -hex 32)
+            echo -e "${GREEN}  Token auto-generated.${RESET}"
+        else
+            SIGNALTRACE_EXPORT_API_TOKEN=""
+            echo -e "${YELLOW}  openssl not found — token skipped.${RESET}"
+        fi
+    else
+        SIGNALTRACE_EXPORT_API_TOKEN="$EXPORT_TOKEN_INPUT"
+        echo -e "${GREEN}  Token set.${RESET}"
+    fi
 fi
 echo ""
 
@@ -432,7 +493,15 @@ echo -e "${BOLD}── Reverse Proxy (optional) ──────────�
 echo "  Set this if SignalTrace runs behind nginx, Caddy, or Traefik."
 echo ""
 _existing_proxy_ip=$(read_existing_php "TRUSTED_PROXY_IP")
-prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "${_existing_proxy_ip:-}" ""
+if [ "$MODIFY_EXISTING" = true ] && [ -n "$_existing_proxy_ip" ]; then
+    echo -e "${CYAN}Trusted proxy IP${RESET}"
+    echo "  Leave blank to keep existing."
+    read -r -p "  Value [${_existing_proxy_ip}]: " proxy_ip_input
+    SIGNALTRACE_TRUSTED_PROXY_IP="${proxy_ip_input:-$_existing_proxy_ip}"
+    echo ""
+else
+    prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "${_existing_proxy_ip:-}" ""
+fi
 
 # -- Cloudflare Access + DNS plugin -------------------------------------------
 CF_ACCESS_ENABLED_VAL="false"
@@ -799,12 +868,24 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
 
     $COMPOSE_CMD up -d
     if [ "$CONTAINER_WAS_RUNNING" = true ]; then
-        echo -e "  ${GREEN}Container restarted.${RESET}"
+        echo -e "${GREEN}  Container restarted.${RESET}"
     else
-        echo -e "  ${GREEN}Container started.${RESET}"
+        echo -e "${GREEN}  Container started.${RESET}"
     fi
     echo ""
     echo -e "${CYAN}Available at: http://localhost:${SIGNALTRACE_PORT}/admin${RESET}"
+    exit 0
+fi
+
+# -- Config-only update exit ---------------------------------------------------
+if [ "$MODIFY_EXISTING" = true ] && [ "$RUN_SYSTEM_TASKS" != "true" ]; then
+    echo -e "${GREEN}Config updated without re-running system/infrastructure tasks.${RESET}"
+    echo ""
+    if [ -n "$SIGNALTRACE_EXPORT_API_TOKEN" ]; then
+        echo -e "${YELLOW}Note: save your export API token — it will not be shown again:${RESET}"
+        echo "  $SIGNALTRACE_EXPORT_API_TOKEN"
+        echo ""
+    fi
     exit 0
 fi
 
@@ -813,7 +894,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Installing PHP dependencies..."
 echo ""
 cd "$SCRIPT_DIR" && COMPOSER_ALLOW_SUPERUSER=1 $SUDO composer update --no-dev --no-interaction
-echo -e "  ${GREEN}PHP dependencies installed.${RESET}"
+echo -e "${GREEN}  PHP dependencies installed.${RESET}"
 echo ""
 
 if [ -n "$MAXMIND_ACCOUNT_ID" ] && [ -n "$MAXMIND_LICENSE_KEY" ]; then
@@ -830,9 +911,9 @@ EOF
     echo "  /etc/GeoIP.conf written."
     echo "  Downloading GeoIP databases..."
     if $SUDO geoipupdate; then
-        echo -e "  ${GREEN}GeoIP databases downloaded to /var/lib/GeoIP/.${RESET}"
+        echo -e "${GREEN}  GeoIP databases downloaded to /var/lib/GeoIP/.${RESET}"
     else
-        echo -e "  ${YELLOW}Warning: geoipupdate failed.${RESET}"
+        echo -e "${YELLOW}  Warning: geoipupdate failed.${RESET}"
     fi
     echo ""
 else
@@ -858,20 +939,20 @@ if [ "${SKIP_DB:-false}" = false ]; then
     $SUDO mkdir -p "$DB_DIR"
     [ -f "$DB_FILE" ] && $SUDO rm -f "$DB_FILE"
     $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
-    echo -e "  ${GREEN}Database initialised.${RESET}"
+    echo -e "${GREEN}  Database initialised.${RESET}"
     echo ""
 
     read -r -p "  Load sample data so the dashboard has something to show? [y/N] " doseed
     if [[ "$doseed" =~ ^[Yy]$ ]]; then
         $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
-        echo -e "  ${GREEN}Sample data loaded.${RESET}"
+        echo -e "${GREEN}  Sample data loaded.${RESET}"
     fi
 
     if [ "$DEMO_MODE_ENABLED" = true ]; then
         $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
         $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
         $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
-        echo -e "  ${GREEN}Demo settings seeded into database.${RESET}"
+        echo -e "${GREEN}  Demo settings seeded into database.${RESET}"
     fi
 fi
 echo ""
@@ -886,28 +967,28 @@ if [ -d "${INSTALL_DIR}/includes" ]; then
     $SUDO chown -R root:www-data "${INSTALL_DIR}/includes"
     $SUDO find "${INSTALL_DIR}/includes" -type d -exec chmod 750 {} \;
     $SUDO find "${INSTALL_DIR}/includes" -type f -exec chmod 640 {} \;
-    echo -e "  ${GREEN}includes/ — root:www-data, dirs 750 files 640${RESET}"
+    echo -e "${GREEN}  includes/ — root:www-data, dirs 750 files 640${RESET}"
 fi
 
 if [ -d "${INSTALL_DIR}/public" ]; then
     $SUDO chown -R root:www-data "${INSTALL_DIR}/public"
     $SUDO find "${INSTALL_DIR}/public" -type d -exec chmod 755 {} \;
     $SUDO find "${INSTALL_DIR}/public" -type f -exec chmod 644 {} \;
-    echo -e "  ${GREEN}public/ — root:www-data, dirs 755 files 644${RESET}"
+    echo -e "${GREEN}  public/ — root:www-data, dirs 755 files 644${RESET}"
 fi
 
 if [ -d "${INSTALL_DIR}/db" ]; then
     $SUDO chown -R root:www-data "${INSTALL_DIR}/db"
     $SUDO find "${INSTALL_DIR}/db" -type d -exec chmod 750 {} \;
     $SUDO find "${INSTALL_DIR}/db" -type f -exec chmod 640 {} \;
-    echo -e "  ${GREEN}db/ — root:www-data, dirs 750 files 640${RESET}"
+    echo -e "${GREEN}  db/ — root:www-data, dirs 750 files 640${RESET}"
 fi
 
 if [ -d "${INSTALL_DIR}/vendor" ]; then
     $SUDO chown -R root:www-data "${INSTALL_DIR}/vendor"
     $SUDO find "${INSTALL_DIR}/vendor" -type d -exec chmod 755 {} \;
     $SUDO find "${INSTALL_DIR}/vendor" -type f -exec chmod 644 {} \;
-    echo -e "  ${GREEN}vendor/ — root:www-data, dirs 755 files 644${RESET}"
+    echo -e "${GREEN}  vendor/ — root:www-data, dirs 755 files 644${RESET}"
 fi
 
 $SUDO mkdir -p "$DB_DIR"
@@ -915,7 +996,7 @@ $SUDO chown -R www-data:www-data "$DB_DIR"
 $SUDO find "$DB_DIR" -type d -exec chmod 770 {} \;
 $SUDO find "$DB_DIR" -type f -exec chmod 660 {} \;
 if [ -f "$DB_FILE" ]; then
-    echo -e "  ${GREEN}data/database.db — www-data:www-data, 660${RESET}"
+    echo -e "${GREEN}  data/database.db — www-data:www-data, 660${RESET}"
 fi
 echo ""
 
@@ -928,7 +1009,7 @@ if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
 dns_cloudflare_api_token = ${CF_DNS_API_TOKEN}
 EOF
     $SUDO chmod 600 /root/.secrets/certbot/cloudflare.ini
-    echo -e "  ${GREEN}Cloudflare certbot credentials written.${RESET}"
+    echo -e "${GREEN}  Cloudflare certbot credentials written.${RESET}"
     echo ""
 fi
 
@@ -981,14 +1062,14 @@ if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
 </VirtualHost>
 EOF
     $SUDO a2ensite signaltrace-admin.conf > /dev/null
-    echo -e "  ${GREEN}Admin subdomain HTTP vhost created for ${CF_ADMIN_SUBDOMAIN}.${RESET}"
+    echo -e "${GREEN}  Admin subdomain HTTP vhost created for ${CF_ADMIN_SUBDOMAIN}.${RESET}"
 fi
 
 $SUDO a2enmod rewrite ssl > /dev/null
 $SUDO a2ensite signaltrace.conf > /dev/null
 $SUDO a2dissite 000-default.conf > /dev/null 2>&1 || true
 $SUDO systemctl restart apache2
-echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
+echo -e "${GREEN}  Apache configured and restarted.${RESET}"
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -999,7 +1080,7 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
     echo ""
     read -r -p "  Email address for Let's Encrypt notifications: " LE_EMAIL
     if [ -z "$LE_EMAIL" ]; then
-        echo -e "  ${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
+        echo -e "${YELLOW}No email provided — skipping HTTPS setup.${RESET}"
     else
         if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
             echo "  Requesting certificate using Cloudflare DNS validation..."
