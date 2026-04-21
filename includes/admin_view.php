@@ -1130,8 +1130,8 @@ function renderAdminPage(
                     <label for="campaign_description" style="font-size:0.8125rem;">Description</label>
                     <input id="campaign_description" type="text" name="campaign_description" placeholder="Optional description" style="width:280px;">
                 </div>
-                <div class="campaign-form-action">
-                    <button type="submit">Create Campaign</button>
+                <div class="campaign-form-action" style="display:flex;align-items:flex-end;padding-bottom:1rem;">
+                    <button type="submit" style="align-self:flex-end;">Create Campaign</button>
                 </div>
             </div>
         </form>
@@ -2597,6 +2597,32 @@ function renderAdminPage(
                     }
                 }, refreshSecs * 1000);
             }
+
+
+            /* ── Campaign edit buttons ─────────────────────────────── */
+            document.querySelectorAll('[data-edit-campaign]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var campaignId = btn.dataset.editCampaign;
+                    var editRow = document.getElementById('edit-campaign-' + campaignId);
+                    var displayRow = btn.closest('tr');
+                    if (editRow && displayRow) {
+                        editRow.style.display = 'table-row';
+                        if (getComputedStyle(editRow).display === 'none') {
+                            editRow.style.display = 'block';
+                        }
+                        displayRow.style.display = 'none';
+                    }
+                });
+            });
+
+            document.querySelectorAll('[data-cancel-campaign-edit]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var cancelRow = btn.closest('tr');
+                    var summaryRow = cancelRow ? cancelRow.previousElementSibling : null;
+                    if (cancelRow) cancelRow.style.display = 'none';
+                    if (summaryRow) summaryRow.style.display = 'table-row';
+                });
+            });
 
             /* ── Webhook test buttons ─────────────────────────────────── */
             function setupWebhookTest(btnId, resultId, endpoint) {
