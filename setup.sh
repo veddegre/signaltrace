@@ -10,10 +10,8 @@
 # - For manual installs, the app is staged into /var/www/signaltrace.
 # - If Cloudflare Access + admin subdomain are enabled, Apache handles:
 #     https://admin.example.com/  ->  https://admin.example.com/admin
-#   The app itself does not need special redirect logic for that.
 # - If you provide a Cloudflare DNS API token, the script will use the
-#   certbot Cloudflare DNS plugin so certificates can renew even while
-#   Cloudflare proxying is enabled.
+#   certbot Cloudflare DNS plugin so certificates can renew while proxied.
 
 set -e
 
@@ -119,7 +117,7 @@ if [ "$INSTALL_TYPE" = "3" ]; then
         $SUDO apt-get install -y geoipupdate
     fi
 
-    $SUDO a2enmod rewrite ssl >/dev/null
+    $SUDO a2enmod rewrite >/dev/null
     echo -e "  ${GREEN}System packages installed.${RESET}"
     echo ""
 
@@ -164,7 +162,7 @@ MODIFY_EXISTING=false
 if [ -f "$OUTPUT_FILE" ]; then
     echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
     echo ""
-    echo "  1) Update it — keep existing values as defaults, change only what you re-enter"
+    echo "  1) Update it — keep existing values as defaults, change only sections you choose"
     echo "  2) Overwrite it — start fresh, all values will be re-prompted"
     echo "  3) Abort — exit without changing anything"
     echo ""
@@ -179,16 +177,24 @@ if [ -f "$OUTPUT_FILE" ]; then
             ;;
         *)
             MODIFY_EXISTING=true
-            echo -e "  ${GREEN}Will update existing values — press Enter to keep current value.${RESET}"
+            echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
             ;;
     esac
     echo ""
 fi
 
+# -- Helpers -------------------------------------------------------------------
 read_existing_php() {
     local key="$1"
-    if [ "$MODIFY_EXISTING" = true ] && [ -f "$OUTPUT_FILE" ]; then
+    if [ -f "$OUTPUT_FILE" ]; then
         grep -oP "define\('${key}',\s*'?\K[^';)]*" "$OUTPUT_FILE" 2>/dev/null | head -1
+    fi
+}
+
+read_existing_php_literal() {
+    local key="$1"
+    if [ -f "$OUTPUT_FILE" ]; then
+        grep -oP "define\('${key}',\s*\K[^;)]+" "$OUTPUT_FILE" 2>/dev/null | head -1 | tr -d ' '
     fi
 }
 
@@ -218,6 +224,18 @@ prompt() {
         fi
         eval "$var=\"\${input}\""
     fi
+    echo ""
+}
+
+section_choice_existing() {
+    local label="$1"
+    echo -e "${BOLD}${label}${RESET}"
+    echo "  1) Keep existing"
+    echo "  2) Reconfigure"
+    echo "  3) Remove/disable"
+    echo ""
+    read -r -p "  Choice [1]: " SECTION_CHOICE
+    SECTION_CHOICE="${SECTION_CHOICE:-1}"
     echo ""
 }
 
@@ -354,11 +372,35 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
 fi
 
 # -- GeoIP ---------------------------------------------------------------------
+MAXMIND_ACCOUNT_ID=""
+MAXMIND_LICENSE_KEY=""
+_existing_mm_account=$(read_existing_php "MAXMIND_ACCOUNT_ID")
+_existing_mm_license=$(read_existing_php "MAXMIND_LICENSE_KEY")
+
 echo -e "${BOLD}── GeoIP Enrichment (optional but recommended) ──────────────${RESET}"
 echo "  Sign up free at https://www.maxmind.com to get these."
 echo ""
-prompt "MaxMind Account ID" MAXMIND_ACCOUNT_ID "" ""
-prompt "MaxMind License Key" MAXMIND_LICENSE_KEY "" "" "secret"
+
+if [ "$MODIFY_EXISTING" = true ] && { [ -n "$_existing_mm_account" ] || [ -n "$_existing_mm_license" ]; }; then
+    section_choice_existing "GeoIP"
+    case "$SECTION_CHOICE" in
+        2)
+            prompt "MaxMind Account ID" MAXMIND_ACCOUNT_ID "$_existing_mm_account" ""
+            prompt "MaxMind License Key" MAXMIND_LICENSE_KEY "$_existing_mm_license" "" "secret"
+            ;;
+        3)
+            MAXMIND_ACCOUNT_ID=""
+            MAXMIND_LICENSE_KEY=""
+            ;;
+        *)
+            MAXMIND_ACCOUNT_ID="$_existing_mm_account"
+            MAXMIND_LICENSE_KEY="$_existing_mm_license"
+            ;;
+    esac
+else
+    prompt "MaxMind Account ID" MAXMIND_ACCOUNT_ID "${_existing_mm_account:-}" ""
+    prompt "MaxMind License Key" MAXMIND_LICENSE_KEY "${_existing_mm_license:-}" "" "secret"
+fi
 
 # -- Export API token ----------------------------------------------------------
 echo -e "${BOLD}── Export API Token (optional) ──────────────────────────────${RESET}"
@@ -389,7 +431,8 @@ echo ""
 echo -e "${BOLD}── Reverse Proxy (optional) ─────────────────────────────────${RESET}"
 echo "  Set this if SignalTrace runs behind nginx, Caddy, or Traefik."
 echo ""
-prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "" ""
+_existing_proxy_ip=$(read_existing_php "TRUSTED_PROXY_IP")
+prompt "Trusted proxy IP" SIGNALTRACE_TRUSTED_PROXY_IP "${_existing_proxy_ip:-}" ""
 
 # -- Cloudflare Access + DNS plugin -------------------------------------------
 CF_ACCESS_ENABLED_VAL="false"
@@ -399,53 +442,77 @@ CF_ADMIN_SUBDOMAIN=""
 CF_DNS_PLUGIN_ENABLED="false"
 CF_DNS_API_TOKEN=""
 
+_existing_cf_enabled=$(read_existing_php_literal "CF_ACCESS_ENABLED")
+_existing_cf_aud=$(read_existing_php "CF_ACCESS_AUD")
+_existing_cf_team=$(read_existing_php "CF_ACCESS_TEAM_DOMAIN")
+
 if [ "$INSTALL_TYPE" = "3" ]; then
     echo -e "${BOLD}── Cloudflare Access / DNS (optional) ───────────────────────${RESET}"
     echo "  Adds Cloudflare Zero Trust in front of the admin panel."
     echo ""
     echo "  For the Access AUD token:"
-    echo "    Zero Trust Dashboard → Access → Applications → your app → Configure →"
-    echo "    Additional settings → AUD"
+    echo "    Zero Trust Dashboard → Access → Applications → your app → Configure → Additional settings → AUD"
     echo ""
     echo "  For the team domain:"
-    echo "    Zero Trust Dashboard → Settings → Custom Pages / General → Team domain"
+    echo "    Zero Trust Dashboard → Settings → General / Team domain"
     echo ""
     echo "  For the DNS API token used by certbot renewals:"
     echo "    Cloudflare Dashboard → My Profile → API Tokens → Create Token"
-    echo "    Recommended template/permissions:"
+    echo "    Recommended permissions:"
     echo "      Zone → DNS → Edit"
     echo "      Zone → Zone → Read"
     echo "    Scope it to this zone only."
     echo ""
-    read -r -p "  Enable Cloudflare Access? [y/N] " do_cf_access
-    if [[ "$do_cf_access" =~ ^[Yy]$ ]]; then
-        echo ""
-        echo -e "${CYAN}Cloudflare Access AUD token${RESET}"
-        read -r -p "  Value: " CF_ACCESS_AUD_VAL
-        echo ""
-        echo -e "${CYAN}Cloudflare team domain${RESET}"
-        read -r -p "  Value (e.g. yourteam.cloudflareaccess.com): " CF_ACCESS_TEAM_DOMAIN_VAL
-        echo ""
-        echo -e "${CYAN}Admin subdomain${RESET}"
-        read -r -p "  Value (e.g. admin.example.com): " CF_ADMIN_SUBDOMAIN
-        echo ""
-        echo -e "${CYAN}Cloudflare DNS API token (recommended for renewals)${RESET}"
-        read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
-        echo ""
-        echo ""
 
-        if [ -n "$CF_DNS_API_TOKEN" ]; then
-            CF_DNS_PLUGIN_ENABLED="true"
-        fi
-
-        if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
-            CF_ACCESS_ENABLED_VAL="true"
-            echo -e "  ${GREEN}Cloudflare Access enabled.${RESET}"
-            if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
-                echo -e "  ${GREEN}Cloudflare DNS plugin will be configured for certbot.${RESET}"
+    if [ "$MODIFY_EXISTING" = true ] && { [ "$_existing_cf_enabled" = "true" ] || [ -n "$_existing_cf_aud" ]; }; then
+        section_choice_existing "Cloudflare Access / DNS"
+        case "$SECTION_CHOICE" in
+            2)
+                prompt "Cloudflare Access AUD token" CF_ACCESS_AUD_VAL "$_existing_cf_aud" ""
+                prompt "Cloudflare team domain" CF_ACCESS_TEAM_DOMAIN_VAL "$_existing_cf_team" "e.g. yourteam.cloudflareaccess.com"
+                prompt "Admin subdomain" CF_ADMIN_SUBDOMAIN "" "e.g. admin.example.com"
+                echo -e "${CYAN}Cloudflare DNS API token${RESET}"
+                read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
+                echo ""
+                echo ""
+                if [ -n "$CF_DNS_API_TOKEN" ]; then
+                    CF_DNS_PLUGIN_ENABLED="true"
+                fi
+                if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+                    CF_ACCESS_ENABLED_VAL="true"
+                fi
+                ;;
+            3)
+                CF_ACCESS_ENABLED_VAL="false"
+                CF_ACCESS_AUD_VAL=""
+                CF_ACCESS_TEAM_DOMAIN_VAL=""
+                CF_ADMIN_SUBDOMAIN=""
+                CF_DNS_PLUGIN_ENABLED="false"
+                CF_DNS_API_TOKEN=""
+                ;;
+            *)
+                CF_ACCESS_ENABLED_VAL="true"
+                CF_ACCESS_AUD_VAL="$_existing_cf_aud"
+                CF_ACCESS_TEAM_DOMAIN_VAL="$_existing_cf_team"
+                ;;
+        esac
+    else
+        read -r -p "  Enable Cloudflare Access? [y/N] " do_cf_access
+        if [[ "$do_cf_access" =~ ^[Yy]$ ]]; then
+            echo ""
+            prompt "Cloudflare Access AUD token" CF_ACCESS_AUD_VAL "" ""
+            prompt "Cloudflare team domain" CF_ACCESS_TEAM_DOMAIN_VAL "" "e.g. yourteam.cloudflareaccess.com"
+            prompt "Admin subdomain" CF_ADMIN_SUBDOMAIN "" "e.g. admin.example.com"
+            echo -e "${CYAN}Cloudflare DNS API token${RESET}"
+            read -r -s -p "  Value (leave blank to skip DNS plugin setup): " CF_DNS_API_TOKEN
+            echo ""
+            echo ""
+            if [ -n "$CF_DNS_API_TOKEN" ]; then
+                CF_DNS_PLUGIN_ENABLED="true"
             fi
-        else
-            echo -e "  ${YELLOW}AUD, team domain, or admin subdomain missing — Cloudflare Access will not be enabled.${RESET}"
+            if [ -n "$CF_ACCESS_AUD_VAL" ] && [ -n "$CF_ACCESS_TEAM_DOMAIN_VAL" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
+                CF_ACCESS_ENABLED_VAL="true"
+            fi
         fi
     fi
     echo ""
@@ -459,27 +526,62 @@ DEMO_DEFAULT_REDIRECT_URL="https://example.com/"
 DEMO_ADMIN_USERNAME_DISPLAY="demo"
 DEMO_ADMIN_PASSWORD_DISPLAY=""
 
+_existing_demo_mode=$(read_existing_php_literal "DEMO_MODE")
+_existing_demo_user=$(read_existing_php "DEMO_ADMIN_USERNAME")
+_existing_demo_pass=$(read_existing_php "DEMO_ADMIN_PASSWORD")
+
 if [ "$INSTALL_TYPE" = "3" ]; then
     echo -e "${BOLD}── Demo Mode (optional) ─────────────────────────────────────${RESET}"
     echo ""
-    read -r -p "  Enable demo mode? [y/N] " do_demo
-    if [[ "$do_demo" =~ ^[Yy]$ ]]; then
-        DEMO_MODE_ENABLED=true
-        echo ""
-        read -r -p "  App Name [SignalTrace]: " demo_app_name_input
-        DEMO_APP_NAME="${demo_app_name_input:-SignalTrace}"
-        echo ""
-        read -r -p "  Base URL: " DEMO_BASE_URL
-        echo ""
-        read -r -p "  Default Redirect URL [https://example.com/]: " demo_redirect_input
-        DEMO_DEFAULT_REDIRECT_URL="${demo_redirect_input:-https://example.com/}"
-        echo ""
-        read -r -p "  Demo username to display [demo]: " demo_user_input
-        DEMO_ADMIN_USERNAME_DISPLAY="${demo_user_input:-demo}"
-        echo ""
-        read -r -p "  Demo password to display: " DEMO_ADMIN_PASSWORD_DISPLAY
-        echo ""
-        echo -e "  ${GREEN}Demo mode enabled.${RESET}"
+
+    if [ "$MODIFY_EXISTING" = true ] && [ "$_existing_demo_mode" = "true" ]; then
+        section_choice_existing "Demo Mode"
+        case "$SECTION_CHOICE" in
+            2)
+                DEMO_MODE_ENABLED=true
+                read -r -p "  App Name [SignalTrace]: " demo_app_name_input
+                DEMO_APP_NAME="${demo_app_name_input:-SignalTrace}"
+                echo ""
+                read -r -p "  Base URL: " DEMO_BASE_URL
+                echo ""
+                read -r -p "  Default Redirect URL [https://example.com/]: " demo_redirect_input
+                DEMO_DEFAULT_REDIRECT_URL="${demo_redirect_input:-https://example.com/}"
+                echo ""
+                read -r -p "  Demo username to display [${_existing_demo_user:-demo}]: " demo_user_input
+                DEMO_ADMIN_USERNAME_DISPLAY="${demo_user_input:-${_existing_demo_user:-demo}}"
+                echo ""
+                read -r -p "  Demo password to display [${_existing_demo_pass:-}]: " demo_pass_input
+                DEMO_ADMIN_PASSWORD_DISPLAY="${demo_pass_input:-$_existing_demo_pass}"
+                echo ""
+                ;;
+            3)
+                DEMO_MODE_ENABLED=false
+                ;;
+            *)
+                DEMO_MODE_ENABLED=true
+                DEMO_ADMIN_USERNAME_DISPLAY="${_existing_demo_user:-demo}"
+                DEMO_ADMIN_PASSWORD_DISPLAY="${_existing_demo_pass:-}"
+                ;;
+        esac
+    else
+        read -r -p "  Enable demo mode? [y/N] " do_demo
+        if [[ "$do_demo" =~ ^[Yy]$ ]]; then
+            DEMO_MODE_ENABLED=true
+            echo ""
+            read -r -p "  App Name [SignalTrace]: " demo_app_name_input
+            DEMO_APP_NAME="${demo_app_name_input:-SignalTrace}"
+            echo ""
+            read -r -p "  Base URL: " DEMO_BASE_URL
+            echo ""
+            read -r -p "  Default Redirect URL [https://example.com/]: " demo_redirect_input
+            DEMO_DEFAULT_REDIRECT_URL="${demo_redirect_input:-https://example.com/}"
+            echo ""
+            read -r -p "  Demo username to display [demo]: " demo_user_input
+            DEMO_ADMIN_USERNAME_DISPLAY="${demo_user_input:-demo}"
+            echo ""
+            read -r -p "  Demo password to display: " DEMO_ADMIN_PASSWORD_DISPLAY
+            echo ""
+        fi
     fi
     echo ""
 fi
@@ -514,61 +616,95 @@ EMAIL_SMTP_ENCRYPTION="tls"
 
 if [ "$INSTALL_TYPE" = "3" ]; then
     _existing_smtp_host=$(read_existing_php "EMAIL_SMTP_HOST")
+    _existing_smtp_port=$(read_existing_php "EMAIL_SMTP_PORT")
+    _existing_smtp_enc=$(read_existing_php "EMAIL_SMTP_ENCRYPTION")
+    _existing_smtp_user=$(read_existing_php "EMAIL_SMTP_USER")
+    _existing_smtp_pass=$(read_existing_php "EMAIL_SMTP_PASS")
+    _existing_smtp_from=$(read_existing_php "EMAIL_SMTP_FROM")
+
     echo -e "${BOLD}── Email Alerting (optional) ────────────────────────────────${RESET}"
     echo ""
-    if [ -n "$_existing_smtp_host" ]; then
-        echo "  1) Keep existing email configuration"
-        echo "  2) Reconfigure email alerting"
-        echo "  3) Remove email alerting"
-        echo ""
-        read -r -p "  Choice [1]: " email_choice
-        case "${email_choice:-1}" in
-            2) do_email="y" ;;
-            3) ;;
+
+    if [ "$MODIFY_EXISTING" = true ] && [ -n "$_existing_smtp_host" ]; then
+        section_choice_existing "Email Alerting"
+        case "$SECTION_CHOICE" in
+            2)
+                read -r -p "  SMTP host [${_existing_smtp_host:-smtp.example.com}]: " EMAIL_SMTP_HOST_INPUT
+                EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST_INPUT:-$_existing_smtp_host}"
+                echo ""
+                read -r -p "  SMTP port [${_existing_smtp_port:-587}]: " EMAIL_SMTP_PORT_INPUT
+                EMAIL_SMTP_PORT="${EMAIL_SMTP_PORT_INPUT:-${_existing_smtp_port:-587}}"
+                echo ""
+                echo "  1) TLS / STARTTLS"
+                echo "  2) SSL"
+                echo "  3) None"
+                read -r -p "  Choice [1]: " EMAIL_ENC_INPUT
+                case "${EMAIL_ENC_INPUT:-1}" in
+                    2) EMAIL_SMTP_ENCRYPTION="ssl" ;;
+                    3) EMAIL_SMTP_ENCRYPTION="none" ;;
+                    *) EMAIL_SMTP_ENCRYPTION="tls" ;;
+                esac
+                echo ""
+                read -r -p "  SMTP username [${_existing_smtp_user:-}]: " EMAIL_SMTP_USER_INPUT
+                EMAIL_SMTP_USER="${EMAIL_SMTP_USER_INPUT:-$_existing_smtp_user}"
+                echo ""
+                echo "  Leave blank to keep existing password."
+                read -r -s -p "  SMTP password: " EMAIL_SMTP_PASS
+                echo ""
+                if [ -z "$EMAIL_SMTP_PASS" ]; then
+                    EMAIL_SMTP_PASS="$_existing_smtp_pass"
+                fi
+                echo ""
+                read -r -p "  From address [${_existing_smtp_from:-$EMAIL_SMTP_USER}]: " EMAIL_SMTP_FROM_INPUT
+                EMAIL_SMTP_FROM="${EMAIL_SMTP_FROM_INPUT:-${_existing_smtp_from:-$EMAIL_SMTP_USER}}"
+                echo ""
+                ;;
+            3)
+                EMAIL_SMTP_HOST=""
+                EMAIL_SMTP_PORT="587"
+                EMAIL_SMTP_USER=""
+                EMAIL_SMTP_PASS=""
+                EMAIL_SMTP_FROM=""
+                EMAIL_SMTP_ENCRYPTION="tls"
+                ;;
             *)
-                EMAIL_SMTP_HOST=$(read_existing_php "EMAIL_SMTP_HOST")
-                EMAIL_SMTP_PORT=$(read_existing_php "EMAIL_SMTP_PORT")
-                EMAIL_SMTP_ENCRYPTION=$(read_existing_php "EMAIL_SMTP_ENCRYPTION")
-                EMAIL_SMTP_USER=$(read_existing_php "EMAIL_SMTP_USER")
-                EMAIL_SMTP_PASS=$(read_existing_php "EMAIL_SMTP_PASS")
-                EMAIL_SMTP_FROM=$(read_existing_php "EMAIL_SMTP_FROM")
-                do_email="n"
+                EMAIL_SMTP_HOST="$_existing_smtp_host"
+                EMAIL_SMTP_PORT="${_existing_smtp_port:-587}"
+                EMAIL_SMTP_USER="$_existing_smtp_user"
+                EMAIL_SMTP_PASS="$_existing_smtp_pass"
+                EMAIL_SMTP_FROM="$_existing_smtp_from"
+                EMAIL_SMTP_ENCRYPTION="${_existing_smtp_enc:-tls}"
                 ;;
         esac
     else
         read -r -p "  Configure email alerting? [y/N] " do_email
         echo ""
-    fi
-
-    if [[ "$do_email" =~ ^[Yy]$ ]]; then
-        read -r -p "  SMTP host [${_existing_smtp_host:-smtp.example.com}]: " EMAIL_SMTP_HOST_INPUT
-        EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST_INPUT:-$_existing_smtp_host}"
-        echo ""
-        _existing_smtp_port=$(read_existing_php "EMAIL_SMTP_PORT")
-        read -r -p "  SMTP port [${_existing_smtp_port:-587}]: " EMAIL_SMTP_PORT_INPUT
-        EMAIL_SMTP_PORT="${EMAIL_SMTP_PORT_INPUT:-${_existing_smtp_port:-587}}"
-        echo ""
-        echo "  1) TLS / STARTTLS"
-        echo "  2) SSL"
-        echo "  3) None"
-        read -r -p "  Choice [1]: " EMAIL_ENC_INPUT
-        case "${EMAIL_ENC_INPUT:-1}" in
-            2) EMAIL_SMTP_ENCRYPTION="ssl" ;;
-            3) EMAIL_SMTP_ENCRYPTION="none" ;;
-            *) EMAIL_SMTP_ENCRYPTION="tls" ;;
-        esac
-        echo ""
-        _existing_smtp_user=$(read_existing_php "EMAIL_SMTP_USER")
-        read -r -p "  SMTP username [${_existing_smtp_user:-}]: " EMAIL_SMTP_USER_INPUT
-        EMAIL_SMTP_USER="${EMAIL_SMTP_USER_INPUT:-$_existing_smtp_user}"
-        echo ""
-        read -r -s -p "  SMTP password: " EMAIL_SMTP_PASS
-        echo ""
-        echo ""
-        _existing_smtp_from=$(read_existing_php "EMAIL_SMTP_FROM")
-        read -r -p "  From address [${_existing_smtp_from:-$EMAIL_SMTP_USER}]: " EMAIL_SMTP_FROM_INPUT
-        EMAIL_SMTP_FROM="${EMAIL_SMTP_FROM_INPUT:-${_existing_smtp_from:-$EMAIL_SMTP_USER}}"
-        echo ""
+        if [[ "$do_email" =~ ^[Yy]$ ]]; then
+            read -r -p "  SMTP host [smtp.example.com]: " EMAIL_SMTP_HOST_INPUT
+            EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST_INPUT:-smtp.example.com}"
+            echo ""
+            read -r -p "  SMTP port [587]: " EMAIL_SMTP_PORT_INPUT
+            EMAIL_SMTP_PORT="${EMAIL_SMTP_PORT_INPUT:-587}"
+            echo ""
+            echo "  1) TLS / STARTTLS"
+            echo "  2) SSL"
+            echo "  3) None"
+            read -r -p "  Choice [1]: " EMAIL_ENC_INPUT
+            case "${EMAIL_ENC_INPUT:-1}" in
+                2) EMAIL_SMTP_ENCRYPTION="ssl" ;;
+                3) EMAIL_SMTP_ENCRYPTION="none" ;;
+                *) EMAIL_SMTP_ENCRYPTION="tls" ;;
+            esac
+            echo ""
+            read -r -p "  SMTP username: " EMAIL_SMTP_USER
+            echo ""
+            read -r -s -p "  SMTP password: " EMAIL_SMTP_PASS
+            echo ""
+            echo ""
+            read -r -p "  From address [${EMAIL_SMTP_USER}]: " EMAIL_SMTP_FROM_INPUT
+            EMAIL_SMTP_FROM="${EMAIL_SMTP_FROM_INPUT:-$EMAIL_SMTP_USER}"
+            echo ""
+        fi
     fi
 fi
 
@@ -685,12 +821,12 @@ if [ -n "$MAXMIND_ACCOUNT_ID" ] && [ -n "$MAXMIND_LICENSE_KEY" ]; then
     echo "Configuring GeoIP..."
     echo ""
     $SUDO mkdir -p /var/lib/GeoIP
-    $SUDO tee /etc/GeoIP.conf > /dev/null << GEOIPCONF
+    $SUDO tee /etc/GeoIP.conf > /dev/null << EOF
 AccountID ${MAXMIND_ACCOUNT_ID}
 LicenseKey ${MAXMIND_LICENSE_KEY}
 EditionIDs GeoLite2-ASN GeoLite2-Country
 DatabaseDirectory /var/lib/GeoIP
-GEOIPCONF
+EOF
     echo "  /etc/GeoIP.conf written."
     echo "  Downloading GeoIP databases..."
     if $SUDO geoipupdate; then
@@ -783,7 +919,6 @@ if [ -f "$DB_FILE" ]; then
 fi
 echo ""
 
-# -- Cloudflare DNS plugin credentials ----------------------------------------
 if [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Configuring Cloudflare DNS plugin credentials..."
@@ -797,14 +932,13 @@ EOF
     echo ""
 fi
 
-# -- Apache --------------------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Configuring Apache..."
 echo ""
 read -r -p "  ServerName (your domain or IP, e.g. signaltrace.example.com): " APACHE_SERVER_NAME
 APACHE_SERVER_NAME="${APACHE_SERVER_NAME:-localhost}"
 
-$SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECONF
+$SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << EOF
 <VirtualHost *:80>
     ServerName ${APACHE_SERVER_NAME}
     DocumentRoot /var/www/signaltrace/public
@@ -823,10 +957,10 @@ $SUDO tee /etc/apache2/sites-available/signaltrace.conf > /dev/null << APACHECON
     ErrorLog \${APACHE_LOG_DIR}/signaltrace_error.log
     CustomLog \${APACHE_LOG_DIR}/signaltrace_access.log combined
 </VirtualHost>
-APACHECONF
+EOF
 
 if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
-    $SUDO tee /etc/apache2/sites-available/signaltrace-admin.conf > /dev/null << ADMINHTTP
+    $SUDO tee /etc/apache2/sites-available/signaltrace-admin.conf > /dev/null << EOF
 <VirtualHost *:80>
     ServerName ${CF_ADMIN_SUBDOMAIN}
     DocumentRoot /var/www/signaltrace/public
@@ -845,7 +979,7 @@ if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
     ErrorLog \${APACHE_LOG_DIR}/signaltrace_admin_error.log
     CustomLog \${APACHE_LOG_DIR}/signaltrace_admin_access.log combined
 </VirtualHost>
-ADMINHTTP
+EOF
     $SUDO a2ensite signaltrace-admin.conf > /dev/null
     echo -e "  ${GREEN}Admin subdomain HTTP vhost created for ${CF_ADMIN_SUBDOMAIN}.${RESET}"
 fi
@@ -857,7 +991,6 @@ $SUDO systemctl restart apache2
 echo -e "  ${GREEN}Apache configured and restarted.${RESET}"
 echo ""
 
-# -- HTTPS ---------------------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${CYAN}HTTPS with Let's Encrypt (optional)${RESET}"
 echo ""
@@ -911,7 +1044,7 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
         fi
 
         if [ "${HTTPS_ENABLED:-false}" = true ] && [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then
-            $SUDO tee /etc/apache2/sites-available/signaltrace-le-ssl.conf > /dev/null << MAINSSL
+            $SUDO tee /etc/apache2/sites-available/signaltrace-le-ssl.conf > /dev/null << EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
     ServerName ${APACHE_SERVER_NAME}
@@ -932,11 +1065,11 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
     SSLCertificateKeyFile /etc/letsencrypt/live/${APACHE_SERVER_NAME}/privkey.pem
 </VirtualHost>
 </IfModule>
-MAINSSL
+EOF
             $SUDO a2ensite signaltrace-le-ssl.conf > /dev/null
 
             if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
-                $SUDO tee /etc/apache2/sites-available/signaltrace-admin-le-ssl.conf > /dev/null << ADMINSSL
+                $SUDO tee /etc/apache2/sites-available/signaltrace-admin-le-ssl.conf > /dev/null << EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
     ServerName ${CF_ADMIN_SUBDOMAIN}
@@ -960,7 +1093,7 @@ MAINSSL
     SSLCertificateKeyFile /etc/letsencrypt/live/${APACHE_SERVER_NAME}/privkey.pem
 </VirtualHost>
 </IfModule>
-ADMINSSL
+EOF
                 $SUDO a2ensite signaltrace-admin-le-ssl.conf > /dev/null
             fi
 
@@ -970,7 +1103,6 @@ ADMINSSL
 fi
 echo ""
 
-# -- Final output --------------------------------------------------------------
 if [ "${HTTPS_ENABLED:-false}" = true ]; then
     if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
         echo -e "${CYAN}SignalTrace URLs:${RESET}"
