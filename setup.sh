@@ -899,39 +899,16 @@ APACHECONF
 
     SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
 
-    RewriteEngine On
-    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
-    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
-
-    <Directory /var/www/signaltrace/public>
-        AllowOverride All
-        Require all granted
-    </Directory>
-
-    ErrorLog  \${APACHE_LOG_DIR}/signaltrace_admin_error.log
-    CustomLog \${APACHE_LOG_DIR}/signaltrace_admin_access.log combined
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName ${CF_ADMIN_SUBDOMAIN}
-    DocumentRoot /var/www/signaltrace/public
-
-    SetEnvIf Authorization "^(.*)$" HTTP_AUTHORIZATION=\$1
-
     # Route all traffic on this subdomain to /admin so that
     # https://admin.yourdomain.com routes cleanly to the admin panel.
     RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
     RewriteCond %{REQUEST_URI} !^/admin
     RewriteCond %{REQUEST_URI} !^/admin\.css
     RewriteCond %{REQUEST_URI} !^/signaltrace_transparent\.png
     RewriteCond %{REQUEST_URI} !^/favicon
     RewriteCond %{REQUEST_URI} !^/health
     RewriteRule ^(.*)$ /admin [L]
-
-    SSLEngine on
-    # Paths filled in by certbot — run: sudo certbot --apache
-    # SSLCertificateFile    /etc/letsencrypt/live/${CF_ADMIN_SUBDOMAIN}/fullchain.pem
-    # SSLCertificateKeyFile /etc/letsencrypt/live/${CF_ADMIN_SUBDOMAIN}/privkey.pem
 
     <Directory /var/www/signaltrace/public>
         AllowOverride All
