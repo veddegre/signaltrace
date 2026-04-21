@@ -1042,25 +1042,41 @@ tr:hover td { background: var(--surface-alt); }
 }
 
 
-/* Campaign action buttons */
-.actions-col .btn-small,
-.inline-action-form .btn-small {
-    font-family: var(--font-ui);
-    font-size: 0.75rem;
-    font-weight: 500;
+/* Campaign action layout */
+.campaign-action-row {
+    min-width: 340px;
+    justify-content: flex-start;
+    align-items: center;
 }
 
-
-
-/* Primary button for non-submit buttons */
-.primary-button {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-    font-weight: 600;
+.campaign-action-row .inline-action-form {
+    margin: 0;
 }
 
-.primary-button:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+.campaign-action-row .button-link {
+    text-decoration: none;
+}
+
+.campaign-action-row .button-link:hover {
+    text-decoration: none;
+}
+
+.compact-table th.actions-col,
+.compact-table td.actions-col {
+    width: 360px;
+    min-width: 360px;
+    max-width: 360px;
+}
+
+@media (max-width: 700px) {
+    .campaign-action-row {
+        min-width: 0;
+    }
+
+    .compact-table th.actions-col,
+    .compact-table td.actions-col {
+        width: 260px;
+        min-width: 260px;
+        max-width: 260px;
+    }
 }
