@@ -7,7 +7,7 @@ PRAGMA foreign_keys = ON;
 -- ============================================================
 -- Sample Campaigns
 -- ============================================================
-INSERT OR IGNORE INTO campaigns (name, description, active, created_at) VALUES
+INSERT OR IGNORE INTO campaigns (name, description, active, webhook_enabled, created_at) VALUES
     ('Quarterly Payroll Review', 'Simulated payroll-themed awareness campaign with multiple related tokens.', 1, datetime('now')),
     ('Vendor Invoice Follow-up', 'Invoice-themed campaign showing how multiple tokens roll up into one investigation view.', 1, datetime('now'));
 
