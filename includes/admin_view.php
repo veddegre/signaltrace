@@ -142,6 +142,7 @@ function renderAdminPage(
     string $hostFilter = '',
     array $campaignStats = [],
     array $campaigns = [],
+    ?array $selectedCampaign = null,
 ): void {
     $pdo       = db();
     $csrfToken = generateCsrfToken();
@@ -160,6 +161,7 @@ function renderAdminPage(
 
     $dateFrom       = trim((string) ($_GET['date_from'] ?? ''));
     $dateTo         = trim((string) ($_GET['date_to']   ?? ''));
+    $campaignFilter = max(0, (int) ($_GET['campaign'] ?? '0'));
     $showAll        = isset($_GET['show_all'])        && $_GET['show_all']        === '1';
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
     $hostFilter     = trim((string) ($_GET['host']    ?? ''));
@@ -193,6 +195,7 @@ function renderAdminPage(
         $tokenFilter !== ''
         || $ipFilter !== ''
         || $visitorFilter !== ''
+        || $campaignFilter > 0
         || $hostFilter !== ''
         || $knownOnly
         || $showAll
@@ -243,7 +246,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $activeTab): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -254,6 +257,9 @@ function renderAdminPage(
         }
         if ($visitorFilter !== '') {
             $params['visitor'] = $visitorFilter;
+        }
+        if ($campaignFilter > 0) {
+            $params['campaign'] = (string) $campaignFilter;
         }
         if ($knownOnly) {
             $params['known'] = '1';
@@ -307,6 +313,9 @@ function renderAdminPage(
         }
         if ($visitorFilter !== '') {
             $params['visitor'] = $visitorFilter;
+        }
+        if ($campaignFilter > 0) {
+            $params['campaign'] = (string) $campaignFilter;
         }
         if ($knownOnly) {
             $params['known'] = '1';
@@ -372,6 +381,14 @@ function renderAdminPage(
 	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Filter by token or path">
 	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="Filter by IP">
 	                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Filter by visitor hash">
+                    <select name="campaign">
+                        <option value="">All campaigns</option>
+                        <?php foreach ($campaigns as $campaignOption): ?>
+                        <option value="<?= (int) $campaignOption['id'] ?>" <?= $campaignFilter === (int) $campaignOption['id'] ? 'selected' : '' ?>>
+                            <?= h((string) $campaignOption['name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
 	                <?php if ($wildcardMode): ?>
 	                <input type="text" name="host" value="<?= h($hostFilter) ?>" placeholder="Filter by subdomain or host" class="hide-mobile">
 	                <?php endif; ?>
@@ -408,6 +425,7 @@ function renderAdminPage(
                     if ($tokenFilter   !== '') $exportParams['token']    = $tokenFilter;
                     if ($ipFilter      !== '') $exportParams['ip']       = $ipFilter;
                     if ($visitorFilter !== '') $exportParams['visitor']  = $visitorFilter;
+                    if ($campaignFilter > 0)   $exportParams['campaign'] = (string) $campaignFilter;
                     if ($hostFilter    !== '') $exportParams['host']     = $hostFilter;
                     if ($knownOnly)            $exportParams['known']    = '1';
                     if ($dateFrom      !== '') $exportParams['date_from'] = $dateFrom;
@@ -440,6 +458,13 @@ function renderAdminPage(
                         <span class="filter-pill">
                             visitor: <?= h($visitorFilter) ?>
                             <a href="<?= h($buildDashboardUrl(['visitor' => null])) ?>">×</a>
+                        </span>
+                    <?php endif; ?>
+
+                    <?php if ($campaignFilter > 0): ?>
+                        <span class="filter-pill">
+                            campaign: <?= h((string) ($selectedCampaign['name'] ?? ('#' . $campaignFilter))) ?>
+                            <a href="<?= h($buildDashboardUrl(['campaign' => null])) ?>">×</a>
                         </span>
                     <?php endif; ?>
 
@@ -959,6 +984,7 @@ function renderAdminPage(
                                         if ($tokenFilter   !== '') $filterHiddens .= '<input type="hidden" name="_filter_token"     value="' . h($tokenFilter)   . '">';
                                         if ($ipFilter      !== '') $filterHiddens .= '<input type="hidden" name="_filter_ip"        value="' . h($ipFilter)      . '">';
                                         if ($visitorFilter !== '') $filterHiddens .= '<input type="hidden" name="_filter_visitor"   value="' . h($visitorFilter) . '">';
+                                        if ($campaignFilter > 0)   $filterHiddens .= '<input type="hidden" name="_filter_campaign"  value="' . (int) $campaignFilter . '">';
                                         if ($knownOnly)            $filterHiddens .= '<input type="hidden" name="_filter_known"     value="1">';
                                         if ($dateFrom      !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
                                         if ($dateTo        !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
@@ -1071,7 +1097,7 @@ function renderAdminPage(
                 </tr>
                 <?php foreach ($campaignStats as $campaign): ?>
                 <tr>
-                    <td><strong><?= h((string) $campaign['name']) ?></strong></td>
+                    <td><strong><a class="table-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id']])) ?>"><?= h((string) $campaign['name']) ?></a></strong></td>
                     <td class="muted"><?= h((string) ($campaign['description'] ?? '')) ?></td>
                     <td><?= (int) $campaign['token_count'] ?></td>
                     <td><?= (int) $campaign['total_hits'] ?></td>
@@ -1080,6 +1106,7 @@ function renderAdminPage(
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col">
+                        <a class="button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id']])) ?>">View Activity</a>
                         <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
                             Edit
                         </button>
