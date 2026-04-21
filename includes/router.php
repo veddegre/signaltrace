@@ -436,7 +436,9 @@ function handleAdminPage(PDO $pdo, array $settings): void
     // large-offset queries on subsequent requests.
     $currentPage = min($currentPage, $totalPages);
 
-    $links       = getAllLinks($pdo);
+    $links          = getAllLinks($pdo);
+    $campaignStats  = getCampaignStats($pdo);
+    $campaigns      = getAllCampaigns($pdo);
     $tokenCounts = getClickCountsByToken(
         $pdo,
         $knownOnly,
@@ -490,6 +492,8 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $refreshUrl,
         $ipSummary,
         $hostFilter,
+        $campaignStats,
+        $campaigns,
     );
 
     exit;
