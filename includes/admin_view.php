@@ -1077,7 +1077,7 @@ function renderAdminPage(
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col">
                         <button type="button" class="copy-button"
-                            onclick="document.getElementById('edit-campaign-<?= (int) $campaign['id'] ?>').style.display='block';this.closest('tr').style.display='none'">
+                            data-edit-campaign="<?= (int) $campaign['id'] ?>">
                             Edit
                         </button>
                         <form method="post" action="/admin/delete-campaign" class="inline-action-form"
@@ -1107,7 +1107,7 @@ function renderAdminPage(
                             </div>
                             <button type="submit">Save</button>
                             <button type="button" class="copy-button"
-                                onclick="this.closest('tr').style.display='none'">
+                                data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
                                 Cancel
                             </button>
                         </form>
@@ -1130,7 +1130,9 @@ function renderAdminPage(
                     <label for="campaign_description" style="font-size:0.8125rem;">Description</label>
                     <input id="campaign_description" type="text" name="campaign_description" placeholder="Optional description" style="width:280px;">
                 </div>
-                <button type="submit">Create Campaign</button>
+                <div class="campaign-form-action">
+                    <button type="submit">Create Campaign</button>
+                </div>
             </div>
         </form>
 
@@ -2270,7 +2272,9 @@ function renderAdminPage(
         /* --------------------------------------------------------
            TAB MANAGEMENT
            -------------------------------------------------------- */
-        function showTab(name) {
+        function showTab(name, updateUrl) {
+            if (typeof updateUrl === 'undefined') updateUrl = true;
+
             document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
             document.querySelectorAll('.tab-content').forEach(function (c) { c.classList.remove('active'); });
             var tab     = document.getElementById('tab-' + name);
@@ -2279,6 +2283,16 @@ function renderAdminPage(
                 tab.classList.add('active');
                 content.classList.add('active');
                 localStorage.setItem('activeTab', name);
+
+                if (updateUrl) {
+                    var url = new URL(window.location.href);
+                    if (name === 'dashboard') {
+                        url.searchParams.delete('tab');
+                    } else {
+                        url.searchParams.set('tab', name);
+                    }
+                    history.replaceState(null, '', url.pathname + (url.search ? url.search : '') + url.hash);
+                }
             }
         }
 
@@ -2484,6 +2498,34 @@ function renderAdminPage(
                 return;
             }
 
+            // Campaign edit toggle
+            var campaignEditEl = e.target.closest('[data-edit-campaign]');
+            if (campaignEditEl) {
+                var campaignId = campaignEditEl.dataset.editCampaign;
+                var editRow = document.getElementById('edit-campaign-' + campaignId);
+                var displayRow = campaignEditEl.closest('tr');
+                if (editRow && displayRow) {
+                    editRow.style.display = 'table-row';
+                    displayRow.style.display = 'none';
+                }
+                return;
+            }
+
+            // Campaign edit cancel
+            var campaignCancelEl = e.target.closest('[data-cancel-campaign-edit]');
+            if (campaignCancelEl) {
+                var cancelId = campaignCancelEl.dataset.cancelCampaignEdit;
+                var cancelRow = campaignCancelEl.closest('tr');
+                var summaryRow = cancelRow ? cancelRow.previousElementSibling : null;
+                if (cancelRow) {
+                    cancelRow.style.display = 'none';
+                }
+                if (summaryRow) {
+                    summaryRow.style.display = 'table-row';
+                }
+                return;
+            }
+
             // Details toggle — data-details="row-id"
             var detailsEl = e.target.closest('[data-details]');
             if (detailsEl) {
@@ -2543,7 +2585,7 @@ function renderAdminPage(
                 var sameOrigin = ref !== '' && ref.indexOf(window.location.origin + '/admin') === 0;
                 saved = sameOrigin ? (localStorage.getItem('activeTab') || 'dashboard') : 'dashboard';
             }
-            showTab(saved);
+            showTab(saved, false);
 
             /* Auto-refresh — only fires when the dashboard tab is active */
             var refreshSecs = <?= (int) $autoRefreshSecs ?>;
