@@ -1107,16 +1107,18 @@ function renderAdminPage(
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td><?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'Fallback' : '—' ?></td>
                     <td class="actions-col">
-                        <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
-                        <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
-                            Edit
-                        </button>
-                        <form method="post" action="/admin/delete-campaign" class="inline-action-form"
-                              data-confirm="Delete this campaign? Tokens will not be deleted but will be unassigned.">
-                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
-                            <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
-                            <button type="submit">Delete</button>
-                        </form>
+                        <div class="button-row campaign-action-row">
+                            <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
+                            <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
+                                Edit
+                            </button>
+                            <form method="post" action="/admin/delete-campaign" class="inline-action-form"
+                                  data-confirm="Delete this campaign? Tokens will not be deleted but will be unassigned.">
+                                <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
+                                <button type="submit" class="danger-button">Delete</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;">
