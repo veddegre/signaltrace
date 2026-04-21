@@ -6,12 +6,11 @@
 #
 # Notes:
 # - Run with: bash setup.sh
-# - The script will prompt for sudo when needed.
-# - For manual installs, the app is staged into /var/www/signaltrace.
-# - If Cloudflare Access + admin subdomain are enabled, Apache handles:
-#     https://admin.example.com/  ->  https://admin.example.com/admin
-# - If you provide a Cloudflare DNS API token, the script will use the
-#   certbot Cloudflare DNS plugin so certificates can renew while proxied.
+# - The script prompts for sudo when needed.
+# - Manual installs are staged into /var/www/signaltrace.
+# - Cloudflare admin subdomain uses Apache redirect:
+#     https://admin.example.com/ -> https://admin.example.com/admin
+# - If a Cloudflare DNS API token is provided, certbot can renew while proxied.
 
 set -e
 
@@ -38,6 +37,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 RUN_SYSTEM_TASKS=true
+INSTALL_ACTION="fresh"
 
 echo ""
 echo -e "${BOLD}SignalTrace Setup${RESET}"
@@ -89,6 +89,11 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 fi
 
+# -- Existing install/update strategy -----------------------------------------
+PRESERVE_CONFIG=true
+PRESERVE_DATA=true
+TMP_BACKUP_DIR=""
+
 # -- Manual install prep -------------------------------------------------------
 if [ "$INSTALL_TYPE" = "3" ]; then
     require_sudo
@@ -124,35 +129,102 @@ if [ "$INSTALL_TYPE" = "3" ]; then
     echo ""
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Staging SignalTrace into ${INSTALL_DIR}..."
+    echo "Preparing SignalTrace in ${INSTALL_DIR}..."
     echo ""
 
-    if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
-        if [ -d "$INSTALL_DIR" ]; then
-            echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
-            read -r -p "  Remove and replace it with the current source? [y/N] " replace_install
-            if [[ "$replace_install" =~ ^[Yy]$ ]]; then
-                $SUDO rm -rf "$INSTALL_DIR"
-            else
-                echo -e "${RED}Manual install requires files to live in ${INSTALL_DIR}.${RESET}"
-                echo "Aborted to avoid mixing files from two locations."
-                exit 1
-            fi
-        fi
+    if [ -d "$INSTALL_DIR" ]; then
+        echo -e "${YELLOW}${INSTALL_DIR} already exists.${RESET}"
+        echo ""
+        echo "How would you like to proceed?"
+        echo "  1) Update application files only"
+        echo "     - keeps config.local.php"
+        echo "     - keeps data/ and database"
+        echo "  2) Update application files and review settings"
+        echo "     - keeps config.local.php unless you choose to overwrite it later"
+        echo "     - keeps data/ and database unless you later choose to reset them"
+        echo "  3) Fresh reinstall"
+        echo "     - deletes application files"
+        echo "     - deletes config.local.php"
+        echo "     - deletes data/ and database"
+        echo "  4) Abort"
+        echo ""
+        read -r -p "  Choice [1]: " install_action_choice
 
-        if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
-            $SUDO mkdir -p "$INSTALL_DIR"
-            $SUDO cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
-            echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
-        else
-            $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
-            echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
-        fi
-    else
-        echo -e "  ${GREEN}Already running from ${INSTALL_DIR}.${RESET}"
+        case "${install_action_choice:-1}" in
+            2)
+                INSTALL_ACTION="update_and_review"
+                PRESERVE_CONFIG=true
+                PRESERVE_DATA=true
+                ;;
+            3)
+                INSTALL_ACTION="fresh"
+                PRESERVE_CONFIG=false
+                PRESERVE_DATA=false
+                ;;
+            4)
+                echo "Aborted."
+                exit 0
+                ;;
+            *)
+                INSTALL_ACTION="update_files_only"
+                PRESERVE_CONFIG=true
+                PRESERVE_DATA=true
+                ;;
+        esac
     fi
-    echo ""
 
+    if [ "$INSTALL_ACTION" = "update_files_only" ] || [ "$INSTALL_ACTION" = "update_and_review" ]; then
+        TMP_BACKUP_DIR="$(mktemp -d)"
+        echo "Backing up preserved files..."
+        echo ""
+
+        if [ "$PRESERVE_CONFIG" = true ] && [ -f "${INSTALL_DIR}/includes/config.local.php" ]; then
+            $SUDO mkdir -p "${TMP_BACKUP_DIR}/includes"
+            $SUDO cp -a "${INSTALL_DIR}/includes/config.local.php" "${TMP_BACKUP_DIR}/includes/"
+            echo -e "  ${GREEN}Preserved config.local.php${RESET}"
+        fi
+
+        if [ "$PRESERVE_DATA" = true ] && [ -d "${INSTALL_DIR}/data" ]; then
+            $SUDO cp -a "${INSTALL_DIR}/data" "${TMP_BACKUP_DIR}/"
+            echo -e "  ${GREEN}Preserved data/${RESET}"
+        fi
+        echo ""
+    fi
+
+    if [ -d "$INSTALL_DIR" ]; then
+        $SUDO rm -rf "$INSTALL_DIR"
+    fi
+    $SUDO mkdir -p "$INSTALL_DIR"
+
+    if [ -f "$SCRIPT_DIR/db/schema.sql" ]; then
+        $SUDO cp -a "$SCRIPT_DIR"/. "$INSTALL_DIR"/
+        echo -e "  ${GREEN}Copied repository into ${INSTALL_DIR}.${RESET}"
+    else
+        $SUDO git clone "$REPO_URL" "$INSTALL_DIR"
+        echo -e "  ${GREEN}Repository cloned to ${INSTALL_DIR}.${RESET}"
+    fi
+
+    if [ -n "$TMP_BACKUP_DIR" ]; then
+        echo ""
+        echo "Restoring preserved files..."
+        echo ""
+
+        if [ -f "${TMP_BACKUP_DIR}/includes/config.local.php" ]; then
+            $SUDO mkdir -p "${INSTALL_DIR}/includes"
+            $SUDO cp -a "${TMP_BACKUP_DIR}/includes/config.local.php" "${INSTALL_DIR}/includes/"
+            echo -e "  ${GREEN}Restored config.local.php${RESET}"
+        fi
+
+        if [ -d "${TMP_BACKUP_DIR}/data" ]; then
+            $SUDO rm -rf "${INSTALL_DIR}/data"
+            $SUDO cp -a "${TMP_BACKUP_DIR}/data" "${INSTALL_DIR}/"
+            echo -e "  ${GREEN}Restored data/${RESET}"
+        fi
+
+        $SUDO rm -rf "$TMP_BACKUP_DIR"
+    fi
+
+    echo ""
     SCRIPT_DIR="$INSTALL_DIR"
     OUTPUT_FILE="$SCRIPT_DIR/includes/config.local.php"
 else
@@ -162,34 +234,47 @@ fi
 # -- Existing config -----------------------------------------------------------
 MODIFY_EXISTING=false
 if [ -f "$OUTPUT_FILE" ]; then
-    echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
-    echo ""
-    echo "  1) Update it — keep existing values as defaults, change only sections you choose"
-    echo "  2) Overwrite it — start fresh, all values will be re-prompted"
-    echo "  3) Abort — exit without changing anything"
-    echo ""
-    read -r -p "  Choice [1]: " existing_choice
-    case "${existing_choice:-1}" in
-        2)
-            echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
-            ;;
-        3)
-            echo "Aborted. Your existing file was not changed."
-            exit 0
-            ;;
-        *)
-            MODIFY_EXISTING=true
-            echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
-            ;;
-    esac
-    echo ""
+    if [ "$INSTALL_ACTION" = "update_files_only" ]; then
+        MODIFY_EXISTING=true
+        RUN_SYSTEM_TASKS=false
+        echo -e "${GREEN}Keeping existing config.local.php without prompting for settings.${RESET}"
+        echo ""
+    else
+        echo -e "${YELLOW}$(basename "$OUTPUT_FILE") already exists.${RESET}"
+        echo ""
+        echo "  1) Update it — keep existing values as defaults, change only sections you choose"
+        echo "  2) Overwrite it — start fresh, all values will be re-prompted"
+        echo "  3) Keep it exactly as-is"
+        echo "  4) Abort — exit without changing anything"
+        echo ""
+        read -r -p "  Choice [1]: " existing_choice
+        case "${existing_choice:-1}" in
+            2)
+                echo -e "  ${YELLOW}Will overwrite existing file.${RESET}"
+                ;;
+            3)
+                MODIFY_EXISTING=true
+                RUN_SYSTEM_TASKS=false
+                echo -e "  ${GREEN}Keeping existing config exactly as-is.${RESET}"
+                ;;
+            4)
+                echo "Aborted. Your existing file was not changed."
+                exit 0
+                ;;
+            *)
+                MODIFY_EXISTING=true
+                echo -e "  ${GREEN}Will update existing values section by section.${RESET}"
+                ;;
+        esac
+        echo ""
+    fi
 fi
 
-if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ]; then
+if [ "$MODIFY_EXISTING" = true ] && [ "$INSTALL_TYPE" = "3" ] && [ "$INSTALL_ACTION" != "update_files_only" ]; then
     echo "  System/infrastructure tasks are things like:"
     echo "  • composer update"
     echo "  • GeoIP config/write"
-    echo "  • database initialisation"
+    echo "  • database handling"
     echo "  • file permissions"
     echo "  • Apache vhost rewrite"
     echo "  • Let's Encrypt / certbot"
@@ -877,7 +962,13 @@ if [ "$INSTALL_TYPE" = "1" ] || [ "$INSTALL_TYPE" = "2" ]; then
     exit 0
 fi
 
-# -- Config-only update exit ---------------------------------------------------
+# -- Fast exit for files-only/config-only updates ------------------------------
+if [ "$INSTALL_ACTION" = "update_files_only" ]; then
+    echo -e "${GREEN}Application files updated. Existing configuration and database were preserved.${RESET}"
+    echo ""
+    exit 0
+fi
+
 if [ "$MODIFY_EXISTING" = true ] && [ "$RUN_SYSTEM_TASKS" != "true" ]; then
     echo -e "${GREEN}Config updated without re-running system/infrastructure tasks.${RESET}"
     echo ""
@@ -921,40 +1012,69 @@ else
     echo ""
 fi
 
+# -- Database handling ---------------------------------------------------------
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 DB_FILE="${INSTALL_DIR}/data/database.db"
 DB_DIR="${INSTALL_DIR}/data"
+DB_ACTION="init_empty"
+
+if [ ! -d "$DB_DIR" ]; then
+    echo -e "${YELLOW}data/ directory is missing and will be recreated if needed.${RESET}"
+fi
 
 if [ -f "$DB_FILE" ]; then
-    echo -e "${YELLOW}Database already exists at ${DB_FILE}.${RESET}"
-    read -r -p "  Re-initialise it? This will wipe all data. [y/N] " reinit
-    if [[ ! "$reinit" =~ ^[Yy]$ ]]; then
-        echo "  Skipping database initialisation."
-        SKIP_DB=true
-    fi
-fi
-
-if [ "${SKIP_DB:-false}" = false ]; then
-    echo "Initialising database..."
-    $SUDO mkdir -p "$DB_DIR"
-    [ -f "$DB_FILE" ] && $SUDO rm -f "$DB_FILE"
-    $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
-    echo -e "${GREEN}  Database initialised.${RESET}"
+    echo -e "${YELLOW}Existing database detected at ${DB_FILE}.${RESET}"
     echo ""
-
-    read -r -p "  Load sample data so the dashboard has something to show? [y/N] " doseed
-    if [[ "$doseed" =~ ^[Yy]$ ]]; then
-        $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
-        echo -e "${GREEN}  Sample data loaded.${RESET}"
-    fi
-
-    if [ "$DEMO_MODE_ENABLED" = true ]; then
-        $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
-        $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
-        $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
-        echo -e "${GREEN}  Demo settings seeded into database.${RESET}"
-    fi
+    echo "Database handling"
+    echo "  1) Keep existing database"
+    echo "  2) Reset database"
+    echo "  3) Reset database and load sample data"
+    echo ""
+    read -r -p "  Choice [1]: " db_choice
+    case "${db_choice:-1}" in
+        2) DB_ACTION="reset_empty" ;;
+        3) DB_ACTION="reset_seed" ;;
+        *) DB_ACTION="keep_existing" ;;
+    esac
+else
+    echo "No existing database found."
+    echo ""
+    echo "Database handling"
+    echo "  1) Create empty database"
+    echo "  2) Create database and load sample data"
+    echo ""
+    read -r -p "  Choice [1]: " db_choice
+    case "${db_choice:-1}" in
+        2) DB_ACTION="init_seed" ;;
+        *) DB_ACTION="init_empty" ;;
+    esac
 fi
+echo ""
+
+case "$DB_ACTION" in
+    keep_existing)
+        echo "Keeping existing database."
+        ;;
+    reset_empty|reset_seed|init_empty|init_seed)
+        echo "Initialising database..."
+        $SUDO mkdir -p "$DB_DIR"
+        [ -f "$DB_FILE" ] && $SUDO rm -f "$DB_FILE"
+        $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/schema.sql"
+        echo -e "${GREEN}  Database initialised.${RESET}"
+
+        if [ "$DB_ACTION" = "reset_seed" ] || [ "$DB_ACTION" = "init_seed" ]; then
+            $SUDO sqlite3 "$DB_FILE" < "$SCRIPT_DIR/db/seed.sql"
+            echo -e "${GREEN}  Sample data loaded.${RESET}"
+        fi
+
+        if [ "$DEMO_MODE_ENABLED" = true ]; then
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
+            echo -e "${GREEN}  Demo settings seeded into database.${RESET}"
+        fi
+        ;;
+esac
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
