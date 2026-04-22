@@ -869,6 +869,15 @@ function getAllCampaigns(PDO $pdo): array
     return $stmt->fetchAll();
 }
 
+function getCampaignById(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM campaigns WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $id]);
+    $row = $stmt->fetch();
+    return $row !== false ? $row : null;
+}
+
+
 function getCampaignStats(PDO $pdo): array
 {
     $stmt = $pdo->query("
