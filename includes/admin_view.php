@@ -1449,22 +1449,22 @@ function renderAdminPage(
 		    <?php foreach ($links as $link): ?>
 		   <?php
             $effectiveBaseUrl = $baseUrl;
-                        if ($effectiveBaseUrl === '') {
-                            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                            $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-                            if ($host !== '') {
-                                $effectiveBaseUrl = $scheme . '://' . $host;
-                            }
-                        }
+            if ($effectiveBaseUrl === '') {
+                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+                if ($host !== '') {
+                    $effectiveBaseUrl = $scheme . '://' . $host;
+                }
+            }
 
-                        $tokenUrl = $effectiveBaseUrl !== ''
-                            ? rtrim($effectiveBaseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
-                            : '';
+            $tokenUrl = $effectiveBaseUrl !== ''
+                ? rtrim($effectiveBaseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
+                : '';
 
-                        $pixelUrl = $effectiveBaseUrl !== ''
-                            ? rtrim($effectiveBaseUrl, '/') . '/pixel/' . ltrim((string) $link['token'], '/') . '.gif'
-                            : '';
-		        ?>
+            $pixelUrl = $effectiveBaseUrl !== ''
+                ? rtrim($effectiveBaseUrl, '/') . '/pixel/' . ltrim((string) $link['token'], '/') . '.gif'
+                : '';
+            ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
 		    <td class="mono">
