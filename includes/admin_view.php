@@ -127,22 +127,49 @@ function normalizeTokenPath(string $token): string
     return '/' . ltrim($token, '/');
 }
 
+function resolvePublicBaseUrl(string $baseUrl = ''): string
+{
+    $baseUrl = trim($baseUrl);
+    if ($baseUrl !== '') {
+        return rtrim($baseUrl, '/');
+    }
+
+    if (defined('BASE_URL') && trim((string) BASE_URL) !== '') {
+        return rtrim((string) BASE_URL, '/');
+    }
+
+    $envBaseUrl = trim((string) getenv('BASE_URL'));
+    if ($envBaseUrl !== '') {
+        return rtrim($envBaseUrl, '/');
+    }
+
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host !== '') {
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        return $scheme . '://' . $host;
+    }
+
+    return '';
+}
+
 function buildTokenPublicUrl(string $baseUrl, string $token): string
 {
     $path = normalizeTokenPath($token);
-    if ($baseUrl === '' || $path === '') {
+    $effectiveBaseUrl = resolvePublicBaseUrl($baseUrl);
+    if ($effectiveBaseUrl === '' || $path === '') {
         return '';
     }
-    return rtrim($baseUrl, '/') . $path;
+    return $effectiveBaseUrl . $path;
 }
 
 function buildPixelPublicUrl(string $baseUrl, string $token): string
 {
     $path = trim($token, '/');
-    if ($baseUrl === '' || $path === '') {
+    $effectiveBaseUrl = resolvePublicBaseUrl($baseUrl);
+    if ($effectiveBaseUrl === '' || $path === '') {
         return '';
     }
-    return rtrim($baseUrl, '/') . '/pixel/' . $path . '.gif';
+    return $effectiveBaseUrl . '/pixel/' . $path . '.gif';
 }
 
 function renderSnippetBox(string $title, string $content, string $copyLabel = 'Copy'): string
@@ -1448,23 +1475,14 @@ function renderAdminPage(
                     </tr>
 		    <?php foreach ($links as $link): ?>
 		   <?php
-            $effectiveBaseUrl = $baseUrl;
-            if ($effectiveBaseUrl === '') {
-                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-                if ($host !== '') {
-                    $effectiveBaseUrl = $scheme . '://' . $host;
-                }
-            }
-
-            $tokenUrl = $effectiveBaseUrl !== ''
-                ? rtrim($effectiveBaseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
+            $tokenUrl = $baseUrl !== ''
+                ? rtrim($baseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
                 : '';
 
-            $pixelUrl = $effectiveBaseUrl !== ''
-                ? rtrim($effectiveBaseUrl, '/') . '/pixel/' . ltrim((string) $link['token'], '/') . '.gif'
-                : '';
-            ?>
+		        $pixelUrl = $baseUrl !== ''
+		            ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
+		            : '';
+		        ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
 		    <td class="mono">
