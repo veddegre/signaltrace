@@ -1268,12 +1268,6 @@ function renderAdminPage(
                     <option value="document">Document</option>
                 </select>
 
-                <label for="recipient_name">Recipient Name</label>
-                <input id="recipient_name" type="text" name="recipient_name" placeholder="Optional recipient">
-
-                <label for="recipient_email">Recipient Email</label>
-                <input id="recipient_email" type="email" name="recipient_email" placeholder="optional@example.com">
-
                 <label for="notes">Operator Notes</label>
                 <textarea id="notes" name="notes" rows="3" placeholder="Optional internal notes"></textarea>
 
@@ -1450,7 +1444,7 @@ function renderAdminPage(
                         <?php if ($isDemo): ?>
                             <span class="muted">No doc in demo</span>
                         <?php else: ?>
-                            <a class="button-link" href="/admin/generate-document?link_id=<?= (int) $link['id'] ?>">Generate Doc</a>
+                            <a class="primary-button button-link" href="/admin/generate-document?link_id=<?= (int) $link['id'] ?>">Generate Doc</a>
                         <?php endif; ?>
                     <?php endif; ?>
 
