@@ -15,10 +15,14 @@ function handlePixelRequest(PDO $pdo, string $path): void
     $link  = getLinkByToken($pdo, $token);
 
     if ($link) {
-        $pixelData = collectRequestData($path, $pdo);
-        $pixelData['event_type'] = ((string) ($link['type'] ?? 'link') === 'document') ? 'document_open' : 'pixel_load';
+        $pixelData               = collectRequestData($path, $pdo);
+        $pixelData['event_type'] = 'pixel';
 
-        logClick($pdo, $link, $pixelData);
+        logClick($pdo, [
+            'id'          => $link['id'] ?? null,
+            'token'       => 'pixel:' . $token,
+            'destination' => '',
+        ], $pixelData);
     }
 
     header('Content-Type: image/gif');
@@ -383,73 +387,6 @@ function handleExportOverTime(PDO $pdo): void
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
     echo json_encode($rows, JSON_PRETTY_PRINT);
-    exit;
-}
-
-
-function handleGenerateDocumentCanary(PDO $pdo, array $settings): void
-{
-    requireAdminAuth();
-
-    if (defined('DEMO_MODE') && DEMO_MODE) {
-        http_response_code(403);
-        echo 'Document generation is disabled in demo mode.';
-        exit;
-    }
-
-    $linkId = (int) ($_GET['link_id'] ?? 0);
-    if ($linkId <= 0) {
-        http_response_code(400);
-        echo 'Invalid or missing link id.';
-        exit;
-    }
-
-    $link = getLinkById($pdo, $linkId);
-    if (!$link) {
-        http_response_code(404);
-        echo 'Token not found.';
-        exit;
-    }
-
-    if ((string) ($link['type'] ?? 'link') !== 'document') {
-        http_response_code(400);
-        echo 'This token is not configured as a document token.';
-        exit;
-    }
-
-    $beaconUrl = buildDocumentBeaconUrl($settings, $link);
-    if ($beaconUrl === '') {
-        http_response_code(500);
-        echo 'Unable to build beacon URL. Set base_url in Settings first.';
-        exit;
-    }
-
-    $tmp = tempnam(sys_get_temp_dir(), 'signaltrace-doc-');
-    if ($tmp === false) {
-        http_response_code(500);
-        echo 'Unable to allocate temporary file.';
-        exit;
-    }
-    $docxPath = $tmp . '.docx';
-    @unlink($tmp);
-
-    createDocumentCanaryDocx($link, $beaconUrl, $docxPath);
-
-    $downloadName = preg_replace('/[^A-Za-z0-9._-]+/', '-', trim((string) ($link['document_label'] ?? $link['token']), '/'));
-    if ($downloadName === '' || $downloadName === '-') {
-        $downloadName = 'document-canary';
-    }
-    if (!str_ends_with(strtolower($downloadName), '.docx')) {
-        $downloadName .= '.docx';
-    }
-
-    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-    header('Content-Length: ' . (string) filesize($docxPath));
-    header('Cache-Control: no-store');
-
-    readfile($docxPath);
-    @unlink($docxPath);
     exit;
 }
 
