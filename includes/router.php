@@ -15,14 +15,23 @@ function handlePixelRequest(PDO $pdo, string $path): void
     $link  = getLinkByToken($pdo, $token);
 
     if ($link) {
-        $pixelData               = collectRequestData($path, $pdo);
-        $pixelData['event_type'] = 'pixel';
+        $pixelData = collectRequestData($path, $pdo);
+        $pixelData = applyLinkRuntimeContext($link, $pixelData);
+        $pixelData['event_type'] = ($link['type'] ?? 'pixel') === 'document' ? 'document_preview' : 'pixel_load';
 
         logClick($pdo, [
-            'id'          => $link['id'] ?? null,
-            'token'       => 'pixel:' . $token,
-            'destination' => '',
+            'id'                => $link['id'] ?? null,
+            'token'             => 'pixel:' . $token,
+            'destination'       => '',
+            'type'              => $link['type'] ?? 'pixel',
+            'recipient_name'    => $link['recipient_name'] ?? null,
+            'recipient_email'   => $link['recipient_email'] ?? null,
+            'document_kind'     => $link['document_kind'] ?? null,
+            'document_label'    => $link['document_label'] ?? null,
+            'burn_after_first_hit' => $link['burn_after_first_hit'] ?? 0,
         ], $pixelData);
+
+        maybeDeactivateBurnedLink($pdo, $link);
     }
 
     header('Content-Type: image/gif');
@@ -530,11 +539,13 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     }
 
     if ($link) {
+        $requestData = applyLinkRuntimeContext($link, $requestData);
         logClick($pdo, $link, $requestData);
         maybeFireTokenAlert($pdo, $requestData);
         maybeFireTokenEmailAlert($pdo, $requestData);
         maybeFireAlert($pdo, $requestData);
         maybeFireEmailAlert($pdo, $requestData);
+        maybeDeactivateBurnedLink($pdo, $link);
         maybeRunAutoCleanup($pdo);
 
         $destination = (string) ($link['destination'] ?? '');
