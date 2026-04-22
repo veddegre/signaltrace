@@ -14,7 +14,6 @@ function adminRedirectUrl(string $tab = ''): string
     $token   = trim((string) ($_POST['_filter_token']   ?? ''));
     $ip      = trim((string) ($_POST['_filter_ip']      ?? ''));
     $visitor = trim((string) ($_POST['_filter_visitor']  ?? ''));
-    $campaign = max(0, (int) ($_POST['_filter_campaign'] ?? '0'));
     $known   = trim((string) ($_POST['_filter_known']   ?? ''));
     $from    = trim((string) ($_POST['_filter_date_from'] ?? ''));
     $to      = trim((string) ($_POST['_filter_date_to']   ?? ''));
@@ -23,7 +22,6 @@ function adminRedirectUrl(string $tab = ''): string
     if ($token !== '')   $params['token']     = $token;
     if ($ip !== '')      $params['ip']        = $ip;
     if ($visitor !== '') $params['visitor']   = $visitor;
-    if ($campaign > 0)   $params['campaign']  = (string) $campaign;
     if ($known === '1')  $params['known']     = '1';
     if ($from !== '')    $params['date_from'] = $from;
     if ($to !== '')      $params['date_to']   = $to;
@@ -1168,9 +1166,9 @@ function handleWebhookPreset(): void
 
 function handleCreateCampaign(PDO $pdo): void
 {
-    $name           = trim((string) ($_POST['campaign_name'] ?? ''));
-    $description    = trim((string) ($_POST['campaign_description'] ?? ''));
-    $webhookEnabled = isset($_POST['campaign_webhook_enabled']) && $_POST['campaign_webhook_enabled'] === '1';
+    $name        = trim((string) ($_POST['campaign_name'] ?? ''));
+    $description     = trim((string) ($_POST['campaign_description'] ?? ''));
+    $webhookEnabled = isset($_POST['webhook_enabled']) && $_POST['webhook_enabled'] === '1';
 
     if ($name === '') {
         http_response_code(400);
@@ -1192,10 +1190,10 @@ function handleCreateCampaign(PDO $pdo): void
 function handleUpdateCampaign(PDO $pdo): void
 {
     $id          = (int) ($_POST['campaign_id'] ?? 0);
-    $name           = trim((string) ($_POST['campaign_name'] ?? ''));
-    $description    = trim((string) ($_POST['campaign_description'] ?? ''));
-    $webhookEnabled = isset($_POST['campaign_webhook_enabled']) && $_POST['campaign_webhook_enabled'] === '1';
-    $active      = isset($_POST['campaign_active']) && $_POST['campaign_active'] === '1';
+    $name        = trim((string) ($_POST['campaign_name'] ?? ''));
+    $description     = trim((string) ($_POST['campaign_description'] ?? ''));
+    $active          = isset($_POST['campaign_active']) && $_POST['campaign_active'] === '1';
+    $webhookEnabled  = isset($_POST['webhook_enabled']) && $_POST['webhook_enabled'] === '1';
 
     if ($id <= 0) {
         http_response_code(400);
