@@ -375,6 +375,9 @@ function renderAdminPage(
 
         <div class="tab-content" id="content-dashboard">
             <form method="get" action="/admin" class="inline-form">
+                <input type="hidden" name="tab" value="dashboard">
+                <?php if ($hideBehavioral): ?><input type="hidden" name="hide_behavioral" value="1"><?php endif; ?>
+                <?php if ($hideSubdomains): ?><input type="hidden" name="hide_subdomains" value="1"><?php endif; ?>
 		<h2>Filter Activity</h2>
 		<div class="filter-container">
                     <div class="filter-inputs">
@@ -418,7 +421,7 @@ function renderAdminPage(
                 </div>
                 <div class="filter-actions">
                     <button type="submit">Apply Filter</button>
-                    <a class="button-link" href="/admin">Clear Filter</a>
+                    <a class="button-link" href="<?= h($buildDashboardUrl(['token' => null, 'ip' => null, 'visitor' => null, 'campaign' => null, 'host' => null, 'known' => null, 'show_top_tokens' => null, 'show_all' => null, 'date_from' => null, 'date_to' => null, 'page' => null])) ?>">Clear Filter</a>
                     <a class="button-link" href="<?= h($refreshUrl) ?>">Refresh</a>
                     <?php
                     $exportParams = [];
