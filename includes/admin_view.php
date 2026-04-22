@@ -1193,13 +1193,6 @@ function renderAdminPage(
 	        <label for="edit_destination">Destination URL</label>
 	        <input id="edit_destination" type="url" name="destination" required value="<?= h((string) $editLink['destination']) ?>">
 
-            <label for="edit_type">Token Type</label>
-            <select id="edit_type" name="type">
-                <option value="link" <?= ((string) ($editLink['type'] ?? 'link') === 'link') ? 'selected' : '' ?>>Link</option>
-                <option value="pixel" <?= ((string) ($editLink['type'] ?? 'link') === 'pixel') ? 'selected' : '' ?>>Pixel</option>
-                <option value="document" <?= ((string) ($editLink['type'] ?? 'link') === 'document') ? 'selected' : '' ?>>Document</option>
-            </select>
-
 	        <label for="edit_description">Description</label>
 	        <input id="edit_description" type="text" name="description" value="<?= h((string) ($editLink['description'] ?? '')) ?>">
 
@@ -1214,52 +1207,6 @@ function renderAdminPage(
                 <?php endforeach; ?>
             </select>
             <?php endif; ?>
-
-            <div class="two-column-settings" style="margin-bottom: 1rem;">
-                <div>
-                    <label for="edit_recipient_name">Recipient Name</label>
-                    <input id="edit_recipient_name" type="text" name="recipient_name" value="<?= h((string) ($editLink['recipient_name'] ?? '')) ?>">
-                </div>
-                <div>
-                    <label for="edit_recipient_email">Recipient Email</label>
-                    <input id="edit_recipient_email" type="text" name="recipient_email" value="<?= h((string) ($editLink['recipient_email'] ?? '')) ?>">
-                </div>
-                <div>
-                    <label for="edit_document_kind">Document Kind</label>
-                    <select id="edit_document_kind" name="document_kind">
-                        <option value="" <?= ((string) ($editLink['document_kind'] ?? '') === '') ? 'selected' : '' ?>>— Not a document token —</option>
-                        <option value="generic" <?= ((string) ($editLink['document_kind'] ?? '') === 'generic') ? 'selected' : '' ?>>Generic</option>
-                        <option value="docx" <?= ((string) ($editLink['document_kind'] ?? '') === 'docx') ? 'selected' : '' ?>>Word (.docx)</option>
-                        <option value="xlsx" <?= ((string) ($editLink['document_kind'] ?? '') === 'xlsx') ? 'selected' : '' ?>>Excel (.xlsx)</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="edit_document_label">Document Label</label>
-                    <input id="edit_document_label" type="text" name="document_label" value="<?= h((string) ($editLink['document_label'] ?? '')) ?>">
-                </div>
-                <div>
-                    <label for="edit_expires_at">Expires At</label>
-                    <?php
-                    $editExpiresAt = '';
-                    if (!empty($editLink['expires_at'])) {
-                        $ts = strtotime((string) $editLink['expires_at']);
-                        if ($ts !== false) {
-                            $editExpiresAt = date('Y-m-d\TH:i', $ts);
-                        }
-                    }
-                    ?>
-                    <input id="edit_expires_at" type="datetime-local" name="expires_at" value="<?= h($editExpiresAt) ?>">
-                </div>
-                <div style="display:flex; align-items:flex-end;">
-                    <label style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 1rem;">
-                        <input type="checkbox" name="burn_after_first_hit" value="1" <?= ((int) ($editLink['burn_after_first_hit'] ?? 0) === 1) ? 'checked' : '' ?>>
-                        <span>Burn after first hit</span>
-                    </label>
-                </div>
-            </div>
-
-            <label for="edit_notes">Operator Notes</label>
-            <textarea id="edit_notes" name="notes" rows="3"><?= h((string) ($editLink['notes'] ?? '')) ?></textarea>
 
 	        <div style="margin-bottom: 12px;">
 	            <label style="display: inline-flex; align-items: center; gap: 6px;">
@@ -1301,8 +1248,6 @@ function renderAdminPage(
 	            </form>
 	        </div>
 	    </form>
-	        </div>
-	    </form>
 	<?php endif; ?>
             <form method="post" action="/admin/create-link">
                 <h2>Create Token</h2>
@@ -1313,15 +1258,44 @@ function renderAdminPage(
                 <label for="destination">Destination URL</label>
                 <input id="destination" type="url" name="destination" required placeholder="https://www.example.com/">
 
-                <label for="type">Token Type</label>
+                <label for="description">Description</label>
+                <input id="description" type="text" name="description" placeholder="Optional description">
+
+                <label for="type">Type</label>
                 <select id="type" name="type">
                     <option value="link">Link</option>
                     <option value="pixel">Pixel</option>
                     <option value="document">Document</option>
                 </select>
 
-                <label for="description">Description</label>
-                <input id="description" type="text" name="description" placeholder="Optional description">
+                <label for="recipient_name">Recipient Name</label>
+                <input id="recipient_name" type="text" name="recipient_name" placeholder="Optional recipient">
+
+                <label for="recipient_email">Recipient Email</label>
+                <input id="recipient_email" type="email" name="recipient_email" placeholder="optional@example.com">
+
+                <label for="notes">Operator Notes</label>
+                <textarea id="notes" name="notes" rows="3" placeholder="Optional internal notes"></textarea>
+
+                <label for="expires_at">Expires At</label>
+                <input id="expires_at" type="datetime-local" name="expires_at">
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="burn_after_first_hit" value="1">
+                        <span>Disable after first hit</span>
+                    </label>
+                </div>
+
+                <label for="document_kind">Document Kind</label>
+                <select id="document_kind" name="document_kind">
+                    <option value="">— Not a document token —</option>
+                    <option value="docx">DOCX</option>
+                    <option value="generic">Generic</option>
+                </select>
+
+                <label for="document_label">Document Label</label>
+                <input id="document_label" type="text" name="document_label" placeholder="Q4 Review Draft">
 
                 <?php if (!empty($campaigns)): ?>
                 <label for="campaign_id">Campaign</label>
@@ -1332,43 +1306,6 @@ function renderAdminPage(
                     <?php endforeach; ?>
                 </select>
                 <?php endif; ?>
-
-                <div class="two-column-settings" style="margin-bottom: 1rem;">
-                    <div>
-                        <label for="recipient_name">Recipient Name</label>
-                        <input id="recipient_name" type="text" name="recipient_name" placeholder="Optional recipient name">
-                    </div>
-                    <div>
-                        <label for="recipient_email">Recipient Email</label>
-                        <input id="recipient_email" type="text" name="recipient_email" placeholder="Optional recipient email">
-                    </div>
-                    <div>
-                        <label for="document_kind">Document Kind</label>
-                        <select id="document_kind" name="document_kind">
-                            <option value="">— Not a document token —</option>
-                            <option value="generic">Generic</option>
-                            <option value="docx">Word (.docx)</option>
-                            <option value="xlsx">Excel (.xlsx)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="document_label">Document Label</label>
-                        <input id="document_label" type="text" name="document_label" placeholder="Optional label shown in admin">
-                    </div>
-                    <div>
-                        <label for="expires_at">Expires At</label>
-                        <input id="expires_at" type="datetime-local" name="expires_at">
-                    </div>
-                    <div style="display:flex; align-items:flex-end;">
-                        <label style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 1rem;">
-                            <input type="checkbox" name="burn_after_first_hit" value="1">
-                            <span>Burn after first hit</span>
-                        </label>
-                    </div>
-                </div>
-
-                <label for="notes">Operator Notes</label>
-                <textarea id="notes" name="notes" rows="3" placeholder="Optional notes about delivery, bait context, or attribution"></textarea>
 
                 <div style="margin-bottom: 12px;">
                     <label style="display: inline-flex; align-items: center; gap: 6px;">
@@ -1411,13 +1348,10 @@ function renderAdminPage(
                     <tr>
                         <th>ID</th>
                         <th>Token / Path</th>
-                        <th>Description</th>
                         <th>Type</th>
+                        <th>Description</th>
                         <th>Campaign</th>
-                        <th>Recipient</th>
                         <th>Destination</th>
-                        <th>Expires</th>
-                        <th>Burn</th>
                         <th>Active</th>
 			<th>Clicks</th>
                         <th>Excl. Feed</th>
@@ -1426,7 +1360,6 @@ function renderAdminPage(
                         <th>Email Alert</th>
                         <th>Path URL</th>
                         <th>Pixel URL</th>
-                        <th>Document Beacon</th>
                         <th class="actions-col">Actions</th>
                     </tr>
 		    <?php foreach ($links as $link): ?>
@@ -1438,7 +1371,6 @@ function renderAdminPage(
 		        $pixelUrl = $baseUrl !== ''
 		            ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
 		            : '';
-                $documentBeaconUrl = $pixelUrl;
 		        ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
@@ -1448,12 +1380,6 @@ function renderAdminPage(
 		        </a>
 		    </td>
 		    <td><?= h((string) ($link['description'] ?? '')) ?></td>
-            <td>
-                <span class="badge badge-uncertain"><?= h((string) ($link['type'] ?? 'link')) ?></span>
-                <?php if (!empty($link['document_kind'])): ?>
-                    <div class="small"><?= h((string) $link['document_kind']) ?><?= !empty($link['document_label']) ? ' — ' . h((string) $link['document_label']) : '' ?></div>
-                <?php endif; ?>
-            </td>
 		    <td class="muted">
 		        <?php if (!empty($link['campaign_name'])): ?>
 		            <span class="badge badge-uncertain"><?= h((string) $link['campaign_name']) ?></span>
@@ -1461,17 +1387,7 @@ function renderAdminPage(
 		            —
 		        <?php endif; ?>
 		    </td>
-            <td class="wrap">
-                <?php if (!empty($link['recipient_email']) || !empty($link['recipient_name'])): ?>
-                    <div><?= h((string) ($link['recipient_name'] ?? '')) ?></div>
-                    <div class="small"><?= h((string) ($link['recipient_email'] ?? '')) ?></div>
-                <?php else: ?>
-                    —
-                <?php endif; ?>
-            </td>
 		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
-            <td class="small"><?= !empty($link['expires_at']) ? h((string) $link['expires_at']) : '—' ?></td>
-            <td><?= ((int) ($link['burn_after_first_hit'] ?? 0) === 1) ? 'Yes' : 'No' ?></td>
 		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
 		    <td><?= (int) $link['click_count'] ?></td>
 		    <td>
@@ -1521,24 +1437,22 @@ function renderAdminPage(
 		        <?php endif; ?>
 		    </td>
 
-            <td class="mono wrap">
-                <?php if ((string) ($link['type'] ?? 'link') === 'document' && $documentBeaconUrl !== ''): ?>
-                    <div class="url-cell">
-                        <span><?= h($documentBeaconUrl) ?></span>
-                        <button type="button" class="copy-button" data-copy="<?= h($documentBeaconUrl) ?>">Copy</button>
-                    </div>
-                <?php else: ?>
-                    —
-                <?php endif; ?>
-            </td>
-
 		    <td class="actions-col">
 
 			   <form method="get" action="/admin" class="inline-action-form">
+
 			       <input type="hidden" name="tab" value="links">
 			       <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
 	 		       <button type="submit">Edit</button>
 			   </form>
+
+                    <?php if (((string) ($link['type'] ?? 'link')) === 'document'): ?>
+                        <?php if ($isDemo): ?>
+                            <span class="muted">No doc in demo</span>
+                        <?php else: ?>
+                            <a class="button-link" href="/admin/generate-document?link_id=<?= (int) $link['id'] ?>">Generate Doc</a>
+                        <?php endif; ?>
+                    <?php endif; ?>
 
 		        <?php if ((int) $link['active'] === 1): ?>
 		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
