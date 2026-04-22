@@ -1530,7 +1530,7 @@ function renderAdminPage(
 	 		       <button type="submit">Edit</button>
 			   </form>
 
-                           <button type="button" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Templates</button>
+                           <button type="button" class="template-toggle-button" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Templates</button>
 
 		        <?php if ((int) $link['active'] === 1): ?>
 		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">

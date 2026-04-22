@@ -1127,3 +1127,26 @@ tr:hover td { background: var(--surface-alt); }
         max-width: 260px;
     }
 }
+
+
+/* Token deployment templates */
+.template-toggle-button {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.template-toggle-button:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #fff;
+}
+
+.token-action-row {
+    align-items: flex-start;
+}
+
+.token-action-row .template-toggle-button {
+    margin: 0 3px 3px 0;
+}
