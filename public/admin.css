@@ -1042,44 +1042,40 @@ tr:hover td { background: var(--surface-alt); }
 }
 
 
-/* Campaign actions and table fit */
-.compact-table th.actions-col,
-.compact-table td.actions-col {
-    width: 340px;
-    min-width: 340px;
-    max-width: 340px;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: unset;
+/* Token summary action layout for document generation */
+.token-actions-cell {
+    padding-top: 10px;
 }
 
-.campaign-actions-cell {
-    padding-top: 12px;
-}
-
-.campaign-action-row {
+.token-action-row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-    justify-content: flex-start;
-    min-width: 320px;
+    min-width: 360px;
 }
 
-.campaign-action-row .inline-action-form {
+.token-action-row .inline-action-form {
     margin: 0;
 }
 
-.campaign-action-row .button-link {
+.token-action-row .button-link {
     text-decoration: none;
 }
 
-.campaign-action-row .button-link:hover {
+.token-action-row .button-link:hover {
     text-decoration: none;
+}
+
+.compact-table th.actions-col,
+.compact-table td.actions-col {
+    width: 360px;
+    min-width: 360px;
+    max-width: 360px;
 }
 
 @media (max-width: 700px) {
-    .campaign-action-row {
+    .token-action-row {
         min-width: 0;
     }
 
