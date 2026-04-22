@@ -1092,21 +1092,22 @@ function renderAdminPage(
                     <th>Unique IPs</th>
                     <th>First Hit</th>
                     <th>Last Hit</th>
+                    <th>Webhook</th>
                     <th>Active</th>
                     <th class="actions-col">Actions</th>
                 </tr>
                 <?php foreach ($campaignStats as $campaign): ?>
                 <tr>
-                    <td><strong><a class="table-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id']])) ?>"><?= h((string) $campaign['name']) ?></a></strong></td>
+                    <td><strong><a class="table-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>"><?= h((string) $campaign['name']) ?></a></strong></td>
                     <td class="muted"><?= h((string) ($campaign['description'] ?? '')) ?></td>
                     <td><?= (int) $campaign['token_count'] ?></td>
                     <td><?= (int) $campaign['total_hits'] ?></td>
                     <td><?= (int) $campaign['unique_ips'] ?></td>
                     <td class="muted"><?= $campaign['first_hit'] !== null ? h((string) $campaign['first_hit']) : '—' ?></td>
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
-                    <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td><?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'Fallback' : '—' ?></td>
-                    <td class="actions-col">
+                    <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
+                    <td class="actions-col campaign-actions-cell">
                         <div class="button-row campaign-action-row">
                             <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
                             <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
@@ -1138,9 +1139,9 @@ function renderAdminPage(
                                 <input type="checkbox" name="campaign_active" value="1" <?= ((int) $campaign['active'] === 1) ? 'checked' : '' ?>>
                                 <label style="font-size:0.8125rem;margin:0;">Active</label>
                             </div>
-                            <div style="display:flex;align-items:center;gap:6px;padding-bottom:2px;min-width:220px;">
-                                <input type="checkbox" name="campaign_webhook_enabled" value="1" <?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'checked' : '' ?>>
-                                <label style="font-size:0.8125rem;margin:0;text-transform:none;letter-spacing:0;">Fallback to token webhook</label>
+                            <div style="display:flex;align-items:center;gap:6px;padding-bottom:2px;">
+                                <input type="checkbox" name="webhook_enabled" value="1" <?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                <label style="font-size:0.8125rem;margin:0;">Fallback to token webhook</label>
                             </div>
                             <button type="submit">Save</button>
                             <button type="button" class="primary-button" data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
@@ -1166,9 +1167,9 @@ function renderAdminPage(
                     <label for="campaign_description" style="font-size:0.8125rem;">Description</label>
                     <input id="campaign_description" type="text" name="campaign_description" placeholder="Optional description" style="width:280px;">
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;padding-bottom:1rem;min-width:240px;">
-                    <input id="campaign_webhook_enabled" type="checkbox" name="campaign_webhook_enabled" value="1">
-                    <label for="campaign_webhook_enabled" style="font-size:0.8125rem;margin:0;text-transform:none;letter-spacing:0;">Fallback to token webhook</label>
+                <div style="display:flex;align-items:center;gap:6px;padding-bottom:1rem;">
+                    <input id="campaign_webhook_enabled" type="checkbox" name="webhook_enabled" value="1">
+                    <label for="campaign_webhook_enabled" style="font-size:0.8125rem;margin:0;">Fallback to token webhook</label>
                 </div>
                 <div class="campaign-form-action" style="display:flex;align-items:flex-end;padding-bottom:1rem;">
                     <button type="submit" style="align-self:flex-end;">Create Campaign</button>
