@@ -257,11 +257,6 @@ if ($path === '/admin/enrichment/rescan') {
     exit;
 }
 
-if ($path === '/admin/generate-document') {
-    handleGenerateDocumentCanary($pdo, $settings);
-    exit;
-}
-
 /* ============================================================
    PIXEL TRACKING
    ============================================================ */
