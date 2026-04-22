@@ -148,6 +148,7 @@ function initializeDatabase(PDO $pdo): void
         'force_include_in_feed'    => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_email'         => 'INTEGER NOT NULL DEFAULT 0',
+        'campaign_id'              => 'INTEGER REFERENCES campaigns(id) ON DELETE SET NULL',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -847,6 +848,7 @@ function getAllLinks(PDO $pdo): array
     $stmt = $pdo->query("
         SELECT
             l.*,
+            CASE WHEN COALESCE(l.type, 'link') = 'document' THEN 'link' ELSE COALESCE(l.type, 'link') END AS type,
             c.name AS campaign_name,
             COUNT(cl.id) AS click_count
         FROM links l
