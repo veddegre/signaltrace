@@ -154,6 +154,14 @@ function initializeDatabase(PDO $pdo): void
         ensureColumn($pdo, 'links', $column, $definition);
     }
 
+    $campaignColumnDefinitions = [
+        'webhook_enabled' => 'INTEGER NOT NULL DEFAULT 0',
+    ];
+
+    foreach ($campaignColumnDefinitions as $column => $definition) {
+        ensureColumn($pdo, 'campaigns', $column, $definition);
+    }
+
     $clickColumnDefinitions = [
         'event_type'             => "TEXT NOT NULL DEFAULT 'click'",
         'clicked_at_unix_ms'     => 'INTEGER',
@@ -247,25 +255,18 @@ function initializeDatabase(PDO $pdo): void
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS campaigns (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            name             TEXT    NOT NULL UNIQUE,
-            description      TEXT,
-            active           INTEGER NOT NULL DEFAULT 1,
-            webhook_enabled  INTEGER NOT NULL DEFAULT 0,
-            created_at       TEXT    NOT NULL
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT    NOT NULL UNIQUE,
+            description     TEXT,
+            active          INTEGER NOT NULL DEFAULT 1,
+            webhook_enabled INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT    NOT NULL
         )
     ");
 
     // Add campaign_id to links for existing installs
     try {
         $pdo->exec("ALTER TABLE links ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL");
-    } catch (\Exception $e) {
-        // Column already exists — ignore
-    }
-
-    // Add campaign webhook fallback flag for existing installs
-    try {
-        $pdo->exec("ALTER TABLE campaigns ADD COLUMN webhook_enabled INTEGER NOT NULL DEFAULT 0");
     } catch (\Exception $e) {
         // Column already exists — ignore
     }
@@ -282,7 +283,7 @@ function initializeDatabase(PDO $pdo): void
 function ensureColumn(PDO $pdo, string $table, string $column, string $definition): void
 {
     // Whitelist of tables this function is permitted to alter.
-    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules', 'ip_overrides', 'country_rules'];
+    $allowedTables = ['clicks', 'links', 'settings', 'skip_patterns', 'asn_rules', 'ip_overrides', 'country_rules', 'campaigns'];
 
     // Whitelist of column name characters: alphanumeric and underscore only.
     if (!in_array($table, $allowedTables, true)) {
@@ -868,14 +869,6 @@ function getAllCampaigns(PDO $pdo): array
     return $stmt->fetchAll();
 }
 
-function getCampaignById(PDO $pdo, int $id): ?array
-{
-    $stmt = $pdo->prepare("SELECT * FROM campaigns WHERE id = :id LIMIT 1");
-    $stmt->execute([':id' => $id]);
-    $row = $stmt->fetch();
-    return $row !== false ? $row : null;
-}
-
 function getCampaignStats(PDO $pdo): array
 {
     $stmt = $pdo->query("
@@ -884,6 +877,7 @@ function getCampaignStats(PDO $pdo): array
             c.name,
             c.description,
             c.active,
+            c.webhook_enabled,
             c.created_at,
             COUNT(DISTINCT l.id)   AS token_count,
             COUNT(cl.id)           AS total_hits,
@@ -899,36 +893,33 @@ function getCampaignStats(PDO $pdo): array
     return $stmt->fetchAll();
 }
 
-function createCampaign(PDO $pdo, string $name, string $description = '', bool $webhookEnabled = false): bool
+function createCampaign(PDO $pdo, string $name, string $description = ''): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO campaigns (name, description, active, webhook_enabled, created_at)
-        VALUES (:name, :description, 1, :webhook_enabled, :created_at)
+        INSERT INTO campaigns (name, description, active, created_at)
+        VALUES (:name, :description, 1, :created_at)
     ");
     return $stmt->execute([
-        ':name'            => $name,
-        ':description'     => $description,
-        ':webhook_enabled' => $webhookEnabled ? 1 : 0,
-        ':created_at'      => date('c'),
+        ':name'        => $name,
+        ':description' => $description,
+        ':created_at'  => date('c'),
     ]);
 }
 
-function updateCampaign(PDO $pdo, int $id, string $name, string $description = '', bool $active = true, bool $webhookEnabled = false): bool
+function updateCampaign(PDO $pdo, int $id, string $name, string $description = '', bool $active = true): bool
 {
     $stmt = $pdo->prepare("
         UPDATE campaigns
-        SET name            = :name,
-            description     = :description,
-            active          = :active,
-            webhook_enabled = :webhook_enabled
+        SET name        = :name,
+            description = :description,
+            active      = :active
         WHERE id = :id
     ");
     return $stmt->execute([
-        ':id'              => $id,
-        ':name'            => $name,
-        ':description'     => $description,
-        ':active'          => $active ? 1 : 0,
-        ':webhook_enabled' => $webhookEnabled ? 1 : 0,
+        ':id'          => $id,
+        ':name'        => $name,
+        ':description' => $description,
+        ':active'      => $active ? 1 : 0,
     ]);
 }
 
@@ -951,13 +942,11 @@ function getRecentClicksAdvancedFiltered(
     bool $knownOnly = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
-    ?string $hostFilter = null,
-    ?int $campaignId = null,
 ): array {
     [$rows] = getRecentClicksAdvancedFilteredPaged(
         $pdo, $limit, 0,
         $tokenFilter, $ipFilter, $visitorFilter,
-        $knownOnly, $dateFrom, $dateTo, $hostFilter, $campaignId,
+        $knownOnly, $dateFrom, $dateTo,
     );
     return $rows;
 }
@@ -977,7 +966,6 @@ function getRecentClicksAdvancedFilteredPaged(
     ?string $dateFrom = null,
     ?string $dateTo = null,
     ?string $hostFilter = null,
-    ?int $campaignId = null,
 ): array {
     $sql = "
         SELECT
@@ -987,12 +975,9 @@ function getRecentClicksAdvancedFilteredPaged(
             l.force_include_in_feed,
             l.include_in_email,
             l.exclude_from_feed,
-            l.include_in_token_webhook,
-            l.campaign_id,
-            camp.name AS campaign_name
+            l.include_in_token_webhook
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
-        LEFT JOIN campaigns camp ON l.campaign_id = camp.id
         WHERE 1 = 1
     ";
 
@@ -1020,26 +1005,25 @@ function getRecentClicksAdvancedFilteredPaged(
         $params[':visitorFilter'] = '%' . $visitorFilter . '%';
     }
 
-    if ($campaignId !== null && $campaignId > 0) {
-        $sql .= " AND l.campaign_id = :campaignId ";
-        $params[':campaignId'] = $campaignId;
-    }
-
     if ($hostFilter !== null && $hostFilter !== '' && $hostFilter !== '*') {
         $baseDomain = strtolower(preg_replace('#^https?://#', '', rtrim((string) getSetting($pdo, 'base_url', ''), '/')));
         $baseDomain = preg_replace('/:\d+$/', '', $baseDomain);
 
         if ($hostFilter === '(root)') {
+            // Root domain — match exact base domain
             $sql .= " AND LOWER(c.host) = :hostFilter ";
             $params[':hostFilter'] = $baseDomain;
         } elseif ($baseDomain !== '' && !str_contains($hostFilter, '.')) {
+            // Short subdomain label — match subdomain.basedomain
             $sql .= " AND LOWER(c.host) LIKE :hostFilter ";
             $params[':hostFilter'] = $hostFilter . '.' . $baseDomain;
         } else {
+            // External host or full hostname — partial match
             $sql .= " AND LOWER(c.host) LIKE :hostFilter ";
             $params[':hostFilter'] = '%' . strtolower($hostFilter) . '%';
         }
     }
+    // $hostFilter === '*' means show all — no constraint added
 
     if ($knownOnly) {
         $sql .= " AND c.link_id IS NOT NULL ";
@@ -1055,13 +1039,17 @@ function getRecentClicksAdvancedFilteredPaged(
         $params[':dateTo'] = $dateTo;
     }
 
-    $countSql  = "SELECT COUNT(*) FROM clicks c LEFT JOIN links l ON c.link_id = l.id LEFT JOIN campaigns camp ON l.campaign_id = camp.id WHERE 1 = 1";
+    // COUNT query for pagination total
+    $countSql  = "SELECT COUNT(*) FROM clicks c LEFT JOIN links l ON c.link_id = l.id WHERE 1 = 1";
     $whereOnly = substr($sql, strpos($sql, 'WHERE 1 = 1') + strlen('WHERE 1 = 1'));
     $countSql .= $whereOnly;
 
     $countStmt = $pdo->prepare($countSql);
     foreach ($params as $key => $value) {
-        $countStmt->bindValue($key, $value, $key === ':minScore' || $key === ':campaignId' ? PDO::PARAM_INT : PDO::PARAM_STR);
+        $countStmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    if (isset($params[':minScore'])) {
+        $countStmt->bindValue(':minScore', $params[':minScore'], PDO::PARAM_INT);
     }
     $countStmt->execute();
     $totalCount = (int) $countStmt->fetchColumn();
@@ -1069,9 +1057,11 @@ function getRecentClicksAdvancedFilteredPaged(
     $sql .= " ORDER BY c.id DESC LIMIT :limit OFFSET :offset ";
 
     $stmt = $pdo->prepare($sql);
+
     foreach ($params as $key => $value) {
-        $stmt->bindValue($key, $value, $key === ':minScore' || $key === ':campaignId' ? PDO::PARAM_INT : PDO::PARAM_STR);
+        $stmt->bindValue($key, $value, PDO::PARAM_STR);
     }
+
     $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $stmt->execute();
