@@ -132,6 +132,18 @@ function initializeDatabase(PDO $pdo): void
         )
     ");
 
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT    NOT NULL UNIQUE,
+            description     TEXT,
+            active          INTEGER NOT NULL DEFAULT 1,
+            webhook_enabled INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT    NOT NULL
+        )
+    ");
+
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
@@ -253,17 +265,6 @@ function initializeDatabase(PDO $pdo): void
             // Column already exists — ignore
         }
     }
-
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS campaigns (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            name            TEXT    NOT NULL UNIQUE,
-            description     TEXT,
-            active          INTEGER NOT NULL DEFAULT 1,
-            webhook_enabled INTEGER NOT NULL DEFAULT 0,
-            created_at      TEXT    NOT NULL
-        )
-    ");
 
     // Add campaign_id to links for existing installs
     try {
