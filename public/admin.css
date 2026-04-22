@@ -1042,11 +1042,28 @@ tr:hover td { background: var(--surface-alt); }
 }
 
 
-/* Campaign action layout */
-.campaign-action-row {
+/* Campaign actions and table fit */
+.compact-table th.actions-col,
+.compact-table td.actions-col {
+    width: 340px;
     min-width: 340px;
-    justify-content: flex-start;
+    max-width: 340px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+}
+
+.campaign-actions-cell {
+    padding-top: 12px;
+}
+
+.campaign-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     align-items: center;
+    justify-content: flex-start;
+    min-width: 320px;
 }
 
 .campaign-action-row .inline-action-form {
@@ -1059,13 +1076,6 @@ tr:hover td { background: var(--surface-alt); }
 
 .campaign-action-row .button-link:hover {
     text-decoration: none;
-}
-
-.compact-table th.actions-col,
-.compact-table td.actions-col {
-    width: 360px;
-    min-width: 360px;
-    max-width: 360px;
 }
 
 @media (max-width: 700px) {
