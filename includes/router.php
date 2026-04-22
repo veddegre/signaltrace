@@ -16,22 +16,9 @@ function handlePixelRequest(PDO $pdo, string $path): void
 
     if ($link) {
         $pixelData = collectRequestData($path, $pdo);
-        $pixelData = applyLinkRuntimeContext($link, $pixelData);
-        $pixelData['event_type'] = ($link['type'] ?? 'pixel') === 'document' ? 'document_preview' : 'pixel_load';
+        $pixelData['event_type'] = ((string) ($link['type'] ?? 'link') === 'document') ? 'document_open' : 'pixel_load';
 
-        logClick($pdo, [
-            'id'                => $link['id'] ?? null,
-            'token'             => 'pixel:' . $token,
-            'destination'       => '',
-            'type'              => $link['type'] ?? 'pixel',
-            'recipient_name'    => $link['recipient_name'] ?? null,
-            'recipient_email'   => $link['recipient_email'] ?? null,
-            'document_kind'     => $link['document_kind'] ?? null,
-            'document_label'    => $link['document_label'] ?? null,
-            'burn_after_first_hit' => $link['burn_after_first_hit'] ?? 0,
-        ], $pixelData);
-
-        maybeDeactivateBurnedLink($pdo, $link);
+        logClick($pdo, $link, $pixelData);
     }
 
     header('Content-Type: image/gif');
@@ -399,6 +386,73 @@ function handleExportOverTime(PDO $pdo): void
     exit;
 }
 
+
+function handleGenerateDocumentCanary(PDO $pdo, array $settings): void
+{
+    requireAdminAuth();
+
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        echo 'Document generation is disabled in demo mode.';
+        exit;
+    }
+
+    $linkId = (int) ($_GET['link_id'] ?? 0);
+    if ($linkId <= 0) {
+        http_response_code(400);
+        echo 'Invalid or missing link id.';
+        exit;
+    }
+
+    $link = getLinkById($pdo, $linkId);
+    if (!$link) {
+        http_response_code(404);
+        echo 'Token not found.';
+        exit;
+    }
+
+    if ((string) ($link['type'] ?? 'link') !== 'document') {
+        http_response_code(400);
+        echo 'This token is not configured as a document token.';
+        exit;
+    }
+
+    $beaconUrl = buildDocumentBeaconUrl($settings, $link);
+    if ($beaconUrl === '') {
+        http_response_code(500);
+        echo 'Unable to build beacon URL. Set base_url in Settings first.';
+        exit;
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'signaltrace-doc-');
+    if ($tmp === false) {
+        http_response_code(500);
+        echo 'Unable to allocate temporary file.';
+        exit;
+    }
+    $docxPath = $tmp . '.docx';
+    @unlink($tmp);
+
+    createDocumentCanaryDocx($link, $beaconUrl, $docxPath);
+
+    $downloadName = preg_replace('/[^A-Za-z0-9._-]+/', '-', trim((string) ($link['document_label'] ?? $link['token']), '/'));
+    if ($downloadName === '' || $downloadName === '-') {
+        $downloadName = 'document-canary';
+    }
+    if (!str_ends_with(strtolower($downloadName), '.docx')) {
+        $downloadName .= '.docx';
+    }
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+    header('Content-Length: ' . (string) filesize($docxPath));
+    header('Cache-Control: no-store');
+
+    readfile($docxPath);
+    @unlink($docxPath);
+    exit;
+}
+
 /* ======================================================
    ADMIN PAGE
    ====================================================== */
@@ -539,13 +593,11 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
     }
 
     if ($link) {
-        $requestData = applyLinkRuntimeContext($link, $requestData);
         logClick($pdo, $link, $requestData);
         maybeFireTokenAlert($pdo, $requestData);
         maybeFireTokenEmailAlert($pdo, $requestData);
         maybeFireAlert($pdo, $requestData);
         maybeFireEmailAlert($pdo, $requestData);
-        maybeDeactivateBurnedLink($pdo, $link);
         maybeRunAutoCleanup($pdo);
 
         $destination = (string) ($link['destination'] ?? '');
