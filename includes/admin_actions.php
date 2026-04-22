@@ -251,6 +251,22 @@ function handleUpdateLink(PDO $pdo): void
     $includeInEmail        = isset($_POST['include_in_email'])          && $_POST['include_in_email']          === '1';
     $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
     $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
+    $type                  = strtolower(trim((string) ($_POST['type'] ?? 'link')));
+    $recipientName         = trim((string) ($_POST['recipient_name'] ?? ''));
+    $recipientEmail        = trim((string) ($_POST['recipient_email'] ?? ''));
+    $notes                 = trim((string) ($_POST['notes'] ?? ''));
+    $burnAfterFirstHit     = isset($_POST['burn_after_first_hit']) && $_POST['burn_after_first_hit'] === '1';
+    $expiresAt             = trim((string) ($_POST['expires_at'] ?? ''));
+    $documentKind          = strtolower(trim((string) ($_POST['document_kind'] ?? '')));
+    $documentLabel         = trim((string) ($_POST['document_label'] ?? ''));
+    $type                  = strtolower(trim((string) ($_POST['type'] ?? 'link')));
+    $recipientName         = trim((string) ($_POST['recipient_name'] ?? ''));
+    $recipientEmail        = trim((string) ($_POST['recipient_email'] ?? ''));
+    $notes                 = trim((string) ($_POST['notes'] ?? ''));
+    $burnAfterFirstHit     = isset($_POST['burn_after_first_hit']) && $_POST['burn_after_first_hit'] === '1';
+    $expiresAt             = trim((string) ($_POST['expires_at'] ?? ''));
+    $documentKind          = strtolower(trim((string) ($_POST['document_kind'] ?? '')));
+    $documentLabel         = trim((string) ($_POST['document_label'] ?? ''));
 
     if ($id <= 0) {
         http_response_code(400);
@@ -278,8 +294,55 @@ function handleUpdateLink(PDO $pdo): void
         exit;
     }
 
+    if (!in_array($type, ['link', 'pixel', 'document'], true)) {
+        http_response_code(400);
+        echo 'Invalid token type.';
+        exit;
+    }
+
+    if ($recipientEmail !== '' && !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        http_response_code(400);
+        echo 'Recipient email is invalid.';
+        exit;
+    }
+
+    if ($expiresAt !== '' && strtotime($expiresAt) === false) {
+        http_response_code(400);
+        echo 'Expiration date/time is invalid.';
+        exit;
+    }
+
+    if ($type !== 'document') {
+        $documentKind = '';
+        $documentLabel = '';
+    } elseif (!in_array($documentKind, ['', 'generic', 'docx', 'xlsx'], true)) {
+        http_response_code(400);
+        echo 'Invalid document kind.';
+        exit;
+    }
+
+
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId);
+        updateLink(
+            $pdo,
+            $id,
+            $token,
+            $destination,
+            $description,
+            $excludeFromFeed,
+            $includeInTokenWebhook,
+            $includeInEmail,
+            $forceIncludeInFeed,
+            $campaignId,
+            $type,
+            $recipientName !== '' ? $recipientName : null,
+            $recipientEmail !== '' ? $recipientEmail : null,
+            $notes !== '' ? $notes : null,
+            $burnAfterFirstHit,
+            $expiresAt !== '' ? date('c', strtotime($expiresAt)) : null,
+            $documentKind !== '' ? $documentKind : null,
+            $documentLabel !== '' ? $documentLabel : null
+        );
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -588,8 +651,54 @@ function handleCreateLink(PDO $pdo): void
         exit;
     }
 
+    if (!in_array($type, ['link', 'pixel', 'document'], true)) {
+        http_response_code(400);
+        echo 'Invalid token type.';
+        exit;
+    }
+
+    if ($recipientEmail !== '' && !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        http_response_code(400);
+        echo 'Recipient email is invalid.';
+        exit;
+    }
+
+    if ($expiresAt !== '' && strtotime($expiresAt) === false) {
+        http_response_code(400);
+        echo 'Expiration date/time is invalid.';
+        exit;
+    }
+
+    if ($type !== 'document') {
+        $documentKind = '';
+        $documentLabel = '';
+    } elseif (!in_array($documentKind, ['', 'generic', 'docx', 'xlsx'], true)) {
+        http_response_code(400);
+        echo 'Invalid document kind.';
+        exit;
+    }
+
+
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId);
+        createLink(
+            $pdo,
+            $token,
+            $destination,
+            $description,
+            $excludeFromFeed,
+            $includeInTokenWebhook,
+            $includeInEmail,
+            $forceIncludeInFeed,
+            $campaignId,
+            $type,
+            $recipientName !== '' ? $recipientName : null,
+            $recipientEmail !== '' ? $recipientEmail : null,
+            $notes !== '' ? $notes : null,
+            $burnAfterFirstHit,
+            $expiresAt !== '' ? date('c', strtotime($expiresAt)) : null,
+            $documentKind !== '' ? $documentKind : null,
+            $documentLabel !== '' ? $documentLabel : null
+        );
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
