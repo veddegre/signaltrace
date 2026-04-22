@@ -2,6 +2,32 @@
 
 ---
 
+## [v2.8.2] — Seed Data and Schema Compatibility Fixes
+
+### Seed File Fixes
+
+Fixed multiple issues in `seed.sql` that could cause failures during demo reset or fresh installs.
+
+Resolved:
+
+- campaigns seed referencing non-existent columns (`webhook_enabled`)
+- foreign key constraint failures due to insert ordering
+- malformed INSERT statements with mismatched value counts
+
+The seed file has been rebuilt to match the current stable schema and now loads cleanly in all environments.
+
+### Stability Improvements
+
+Improved compatibility between seed data and runtime schema to ensure:
+
+- demo mode resets complete successfully
+- fresh installs load without errors
+- campaign sample data works as expected out of the box
+
+No functional changes — this release ensures reliability of initial setup and demo environments.
+
+---
+
 ## [v2.8.1] — Deployment Schema Fixes
 
 ### Database Initialization Fixes
