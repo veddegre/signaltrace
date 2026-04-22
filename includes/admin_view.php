@@ -216,33 +216,6 @@ function buildTokenDeploymentSnippets(string $baseUrl, array $link): array
     ];
 }
 
-function buildCampaignDeploymentSnippets(string $baseUrl, array $campaign, array $campaignLinks): array
-{
-    $name = trim((string) ($campaign['name'] ?? 'Campaign'));
-    $items = [];
-    $htmlItems = [];
-    foreach ($campaignLinks as $link) {
-        $label = trim((string) ($link['description'] ?? ''));
-        if ($label === '') {
-            $label = normalizeTokenPath((string) ($link['token'] ?? ''));
-        }
-        $url = buildTokenPublicUrl($baseUrl, (string) ($link['token'] ?? ''));
-        if ($url === '') {
-            continue;
-        }
-        $items[] = '- ' . $label . ': ' . $url;
-        $htmlItems[] = '<li><a href="' . $url . '">' . $label . '</a></li>';
-    }
-
-    $plain = "Campaign: " . $name . "\n" . implode("\n", $items);
-    $html = '<h3>' . $name . '</h3><ul>' . implode('', $htmlItems) . '</ul>';
-
-    return [
-        'Plaintext Package' => $plain,
-        'HTML Package' => $html,
-    ];
-}
-
 function renderAdminPage(
     string $appName,
     string $baseUrl,
@@ -1248,8 +1221,7 @@ function renderAdminPage(
                     <td class="actions-col campaign-actions-cell">
                         <div class="button-row campaign-action-row">
                             <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
-                            <button type="button" data-toggle-row="campaign-templates-<?= (int) $campaign['id'] ?>">Templates</button>
-                            <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
+                                                        <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
                                 Edit
                             </button>
                             <form method="post" action="/admin/delete-campaign" class="inline-action-form"
@@ -1261,23 +1233,7 @@ function renderAdminPage(
                         </div>
                     </td>
                 </tr>
-                <?php $campaignTemplateLinks = $linksByCampaign[(int) $campaign['id']] ?? []; ?>
-                <?php if (!empty($campaignTemplateLinks)): ?>
-                <?php $campaignTemplates = buildCampaignDeploymentSnippets($baseUrl, $campaign, $campaignTemplateLinks); ?>
-                <tr id="campaign-templates-<?= (int) $campaign['id'] ?>" class="template-row" style="display:none;">
-                    <td colspan="10" class="template-cell">
-                        <div class="deployment-panel">
-                            <strong class="template-title">Deployment Package for <?= h((string) $campaign['name']) ?></strong>
-                            <p class="muted" style="margin-bottom:0.85rem;">Quick-copy campaign bundles for sharing or staging a multi-token exercise.</p>
-                            <div class="snippet-grid">
-                                <?php foreach ($campaignTemplates as $snippetTitle => $snippetBody): ?>
-                                    <?= renderSnippetBox($snippetTitle, $snippetBody) ?>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                <?php endif; ?>
+
                 <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;">
                     <td colspan="10">
                         <form method="post" action="/admin/update-campaign" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:8px 0;">
