@@ -17,12 +17,12 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Campaigns
 -- ============================================================
 CREATE TABLE IF NOT EXISTS campaigns (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    name             TEXT    NOT NULL UNIQUE,
-    description      TEXT,
-    active           INTEGER NOT NULL DEFAULT 1,
-    webhook_enabled  INTEGER NOT NULL DEFAULT 0,
-    created_at       TEXT    NOT NULL
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL UNIQUE,
+    description     TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    webhook_enabled INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT    NOT NULL
 );
 
 -- ============================================================
@@ -33,6 +33,14 @@ CREATE TABLE IF NOT EXISTS links (
     token                     TEXT    NOT NULL UNIQUE,
     destination               TEXT    NOT NULL,
     description               TEXT,
+    type                      TEXT    NOT NULL DEFAULT 'link',
+    recipient_name            TEXT,
+    recipient_email           TEXT,
+    notes                     TEXT,
+    burn_after_first_hit      INTEGER NOT NULL DEFAULT 0,
+    expires_at                TEXT,
+    document_kind             TEXT,
+    document_label            TEXT,
     active                    INTEGER NOT NULL DEFAULT 1,
     exclude_from_feed         INTEGER NOT NULL DEFAULT 0,
     force_include_in_feed     INTEGER NOT NULL DEFAULT 0,
