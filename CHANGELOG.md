@@ -2,6 +2,78 @@
 
 ---
 
+## [v2.8.0] — Campaigns and Activity Correlation
+
+### Campaigns
+
+SignalTrace now supports campaigns — a first-class way to group tokens into a single operational context.
+
+A new campaigns table tracks name, description, and creation time. Tokens can optionally be assigned to a campaign at creation or during editing via a campaign_id foreign key. Existing tokens remain unassigned unless explicitly added.
+
+A new Campaigns tab in the admin UI provides a per-campaign view including:
+
+- total tokens
+- total hits
+- unique visitors
+- first hit / last hit timestamps
+- aggregated activity feed across all tokens in the campaign
+
+This allows multiple tokens to be treated as a single tracking scenario rather than isolated events.
+
+### Campaign Activity Filtering
+
+The activity feed and dashboard now support campaign-level filtering.
+
+When a campaign is selected:
+
+- the activity feed is restricted to tokens within that campaign
+- dashboard panels (including IP activity and recent events) reflect only campaign-related traffic
+- behavioral IP panels and subdomain activity panels respect the same filter context
+
+This enables focused investigation without cross-token noise.
+
+### Campaign Webhook Fallback
+
+Campaign-level webhook support has been added as a fallback mechanism.
+
+Webhook behavior now follows a hierarchical model:
+
+- if a token has webhook enabled → use token webhook
+- else if the campaign has webhook enabled → use campaign webhook
+- else → no webhook is sent
+
+Campaign webhooks reuse the existing token webhook pipeline, templates, and delivery logic. No new webhook system was introduced.
+
+### Admin UI Enhancements
+
+Token create and edit forms now support campaign assignment.
+
+The Campaigns tab includes:
+
+- campaign summary metrics
+- per-campaign activity view
+- consistent filtering behavior with the main dashboard
+
+Button styling and layout across token and campaign views have been normalized for consistency.
+
+### Routing and Interaction Improvements
+
+Dashboard interactions have been updated to maintain context:
+
+- clicking IPs, tokens, and other dashboard elements now applies filters instead of redirecting away from the dashboard
+- campaign filtering persists across navigation and drilldowns
+- dashboard state (including hidden panels) is preserved during interaction
+
+These changes improve usability and make campaign-based investigation more consistent.
+
+### Internal Improvements
+
+- improved routing logic for dashboard filtering and campaign context
+- normalized token and campaign UI rendering
+- refined state handling for dashboard panels and filters
+
+---
+
 ## [v2.7.1] — Splunk and Grafana SQLite Dashboard Fixes
 
 Two dashboard bug fixes. No changes to application code, database schema, or the Infinity-based Grafana dashboard.
