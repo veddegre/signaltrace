@@ -5,13 +5,29 @@
 PRAGMA foreign_keys = ON;
 
 -- ============================================================
+-- Sample Campaigns
+-- ============================================================
+INSERT OR IGNORE INTO campaigns (id, name, description, active, webhook_enabled, created_at) VALUES
+    (1, 'HR Policy Refresh', 'Sample campaign showing grouped tracking across multiple tokens. Safe to delete.', 1, 0, datetime('now')),
+    (2, 'Open Enrollment Reminder', 'Second sample campaign for demo/dashboard correlation.', 1, 0, datetime('now'));
+
+-- ============================================================
 -- Sample Tokens
 -- ============================================================
-INSERT OR IGNORE INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at) VALUES
-    ('/payroll',     'https://example.com/login',    'Payroll portal simulation', 1, 0, 1, datetime('now')),
-    ('/invoice',     'https://example.com/invoice',  'Invoice access link',       1, 0, 1, datetime('now')),
-    ('/benefits',    'https://example.com/benefits', 'Benefits portal',           1, 0, 0, datetime('now')),
-    ('/hello.world', 'https://example.com',          'Test token',                1, 0, 0, datetime('now'));
+INSERT OR IGNORE INTO links (
+    token, destination, description, active,
+    exclude_from_feed, force_include_in_feed, include_in_token_webhook, include_in_email,
+    campaign_id, created_at
+) VALUES
+    ('/payroll',              'https://example.com/login',     'Payroll portal simulation',              1, 0, 0, 1, 0, NULL, datetime('now')),
+    ('/invoice',              'https://example.com/invoice',   'Invoice access link',                    1, 0, 0, 1, 0, NULL, datetime('now')),
+    ('/benefits',             'https://example.com/benefits',  'Benefits portal',                        1, 0, 0, 0, 0, NULL, datetime('now')),
+    ('/hello.world',          'https://example.com',           'Test token',                             1, 0, 0, 0, 0, NULL, datetime('now')),
+    ('/hr-policy-update',     'https://example.com/hr-policy', 'HR policy update message',               1, 0, 1, 1, 0, 1,    datetime('now')),
+    ('/benefits-review',      'https://example.com/benefits',  'Benefits review message',                1, 0, 1, 0, 0, 1,    datetime('now')),
+    ('/security-awareness',   'https://example.com/training',  'Security awareness follow-up',           1, 0, 1, 0, 0, 1,    datetime('now')),
+    ('/enrollment-guide',     'https://example.com/enroll',    'Open enrollment guide',                  1, 0, 0, 0, 0, 2,    datetime('now')),
+    ('/open-enrollment-faq',  'https://example.com/faq',       'Open enrollment FAQ',                    1, 0, 0, 0, 0, 2,    datetime('now'));
 
 -- ============================================================
 -- Sample Clicks
@@ -449,6 +465,81 @@ INSERT INTO clicks (
     '', '', '',
     0, '', 28, 'suspicious', 'get_request, accept_wildcard, sec_fetch_missing, no_referer, hosting_provider',
     0, 1
+,
+-- ── Campaign-linked clicks ───────────────────────────────────
+
+(
+    '/hr-policy-update',
+    (SELECT id FROM links WHERE token = '/hr-policy-update'),
+    datetime('now', '-8 minutes'),
+    (strftime('%s', datetime('now', '-8 minutes')) * 1000),
+    '203.0.113.111', '64500', 'Example ISP', 'US', 'visitor_campaign_1',
+    'GET', 'yourdomain.example', 'https', '/hr-policy-update', '',
+    53100,
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0 Safari/537.36',
+    'https://mail.example.com/', 'text/html,application/xhtml+xml', 'en-US,en;q=0.9', 'gzip, deflate, br',
+    'cross-site', 'navigate', 'document',
+    0, '', 91, 'human', 'get_request, browser_ua, sec_fetch_navigate, referer_present',
+    1, 0
+),
+(
+    '/benefits-review',
+    (SELECT id FROM links WHERE token = '/benefits-review'),
+    datetime('now', '-14 minutes'),
+    (strftime('%s', datetime('now', '-14 minutes')) * 1000),
+    '198.51.100.144', '64510', 'Example Hosting Co', 'NL', 'visitor_campaign_2',
+    'GET', 'yourdomain.example', 'https', '/benefits-review', '',
+    48422,
+    'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1)',
+    '', '*/*', '', 'gzip',
+    '', '', '',
+    0, '', 27, 'suspicious', 'get_request, accept_wildcard, sec_fetch_missing, no_referer, hosting_provider',
+    1, 0
+),
+(
+    '/security-awareness',
+    (SELECT id FROM links WHERE token = '/security-awareness'),
+    datetime('now', '-17 minutes'),
+    (strftime('%s', datetime('now', '-17 minutes')) * 1000),
+    '192.0.2.91', '64502', 'Example Hosting Provider', 'DE', 'visitor_campaign_3',
+    'GET', 'yourdomain.example', 'https', '/security-awareness', '',
+    59011,
+    'curl/8.0.1',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    1, 0
+),
+(
+    '/enrollment-guide',
+    (SELECT id FROM links WHERE token = '/enrollment-guide'),
+    datetime('now', '-26 minutes'),
+    (strftime('%s', datetime('now', '-26 minutes')) * 1000),
+    '203.0.113.55', '64500', 'Example ISP', 'US', 'visitor_campaign_4',
+    'GET', 'yourdomain.example', 'https', '/enrollment-guide', '',
+    51555,
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/121.0 Safari/537.36',
+    '', 'text/html,application/xhtml+xml', 'en-US,en;q=0.9', 'gzip, deflate, br',
+    'none', 'navigate', 'document',
+    0, '', 87, 'human', 'get_request, browser_ua, sec_fetch_navigate',
+    1, 0
+),
+(
+    '/open-enrollment-faq',
+    (SELECT id FROM links WHERE token = '/open-enrollment-faq'),
+    datetime('now', '-33 minutes'),
+    (strftime('%s', datetime('now', '-33 minutes')) * 1000),
+    '198.51.100.88', '64501', 'Example Cable Provider', 'CA', 'visitor_campaign_5',
+    'GET', 'yourdomain.example', 'https', '/open-enrollment-faq', '',
+    49771,
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    '', 'text/html', 'en-CA,en;q=0.9', 'gzip',
+    '', '', '',
+    0, '', 41, 'suspicious', 'get_request, browser_ua_unsupported, sec_fetch_missing, no_referer',
+    1, 0
+)
+
 );
 
 -- ============================================================
