@@ -38,14 +38,6 @@ CREATE TABLE IF NOT EXISTS links (
     include_in_token_webhook  INTEGER NOT NULL DEFAULT 0,
     include_in_email          INTEGER NOT NULL DEFAULT 0,
     campaign_id               INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
-    type                      TEXT    NOT NULL DEFAULT 'link',
-    recipient_name            TEXT,
-    recipient_email           TEXT,
-    notes                     TEXT,
-    burn_after_first_hit      INTEGER NOT NULL DEFAULT 0,
-    expires_at                TEXT,
-    document_kind             TEXT,
-    document_label            TEXT,
     created_at                TEXT    NOT NULL
 );
 
