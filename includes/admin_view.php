@@ -117,6 +117,87 @@ function renderSignalReasons(string $reasons): string
     return '<div class="signal-tag-list">' . implode('', $parts) . '</div>';
 }
 
+
+function normalizeTokenPath(string $token): string
+{
+    $token = trim($token);
+    if ($token === '') {
+        return '';
+    }
+    return '/' . ltrim($token, '/');
+}
+
+function buildTokenPublicUrl(string $baseUrl, string $token): string
+{
+    $path = normalizeTokenPath($token);
+    if ($baseUrl === '' || $path === '') {
+        return '';
+    }
+    return rtrim($baseUrl, '/') . $path;
+}
+
+function buildPixelPublicUrl(string $baseUrl, string $token): string
+{
+    $path = trim($token, '/');
+    if ($baseUrl === '' || $path === '') {
+        return '';
+    }
+    return rtrim($baseUrl, '/') . '/pixel/' . $path . '.gif';
+}
+
+function renderSnippetBox(string $title, string $content, string $copyLabel = 'Copy'): string
+{
+    return '<div class="snippet-box">'
+        . '<div class="snippet-header"><strong>' . h($title) . '</strong>'
+        . '<button type="button" class="copy-button" data-copy="' . h($content) . '">' . h($copyLabel) . '</button></div>'
+        . '<pre class="snippet-code">' . h($content) . '</pre>'
+        . '</div>';
+}
+
+function buildTokenDeploymentSnippets(string $baseUrl, array $link): array
+{
+    $token = (string) ($link['token'] ?? '');
+    $description = trim((string) ($link['description'] ?? 'Tracked link'));
+    $href = buildTokenPublicUrl($baseUrl, $token);
+    $pixel = buildPixelPublicUrl($baseUrl, $token);
+    $safeText = $description !== '' ? $description : 'Tracked link';
+
+    return [
+        'Tracked URL' => $href,
+        'Markdown Link' => '[' . $safeText . '](' . $href . ')',
+        'HTML Link' => '<a href="' . $href . '">' . $safeText . '</a>',
+        'Tracking Pixel HTML' => '<img src="' . $pixel . '" alt="" width="1" height="1" style="display:none;" />',
+        'Email-safe Button HTML' => '<a href="' . $href . '" style="display:inline-block;padding:10px 16px;background:#4f78f1;color:#ffffff;text-decoration:none;border-radius:6px;">' . $safeText . '</a>',
+    ];
+}
+
+function buildCampaignDeploymentSnippets(string $baseUrl, array $campaign, array $campaignLinks): array
+{
+    $name = trim((string) ($campaign['name'] ?? 'Campaign'));
+    $items = [];
+    $htmlItems = [];
+    foreach ($campaignLinks as $link) {
+        $label = trim((string) ($link['description'] ?? ''));
+        if ($label === '') {
+            $label = normalizeTokenPath((string) ($link['token'] ?? ''));
+        }
+        $url = buildTokenPublicUrl($baseUrl, (string) ($link['token'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+        $items[] = '- ' . $label . ': ' . $url;
+        $htmlItems[] = '<li><a href="' . $url . '">' . $label . '</a></li>';
+    }
+
+    $plain = "Campaign: " . $name . "\n" . implode("\n", $items);
+    $html = '<h3>' . $name . '</h3><ul>' . implode('', $htmlItems) . '</ul>';
+
+    return [
+        'Plaintext Package' => $plain,
+        'HTML Package' => $html,
+    ];
+}
+
 function renderAdminPage(
     string $appName,
     string $baseUrl,
@@ -179,6 +260,15 @@ function renderAdminPage(
             }
         }
     }
+
+    $linksByCampaign = [];
+    foreach ($links as $campaignLink) {
+        $cid = (int) ($campaignLink['campaign_id'] ?? 0);
+        if ($cid > 0) {
+            $linksByCampaign[$cid][] = $campaignLink;
+        }
+    }
+
 
     $editAsnRuleId = (int) ($_GET['edit_asn_rule_id'] ?? 0);
     $editAsnRule = null;
@@ -1113,6 +1203,7 @@ function renderAdminPage(
                     <td class="actions-col campaign-actions-cell">
                         <div class="button-row campaign-action-row">
                             <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
+                            <button type="button" class="primary-button" data-toggle-row="campaign-templates-<?= (int) $campaign['id'] ?>">Templates</button>
                             <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
                                 Edit
                             </button>
@@ -1125,6 +1216,23 @@ function renderAdminPage(
                         </div>
                     </td>
                 </tr>
+                <?php $campaignTemplateLinks = $linksByCampaign[(int) $campaign['id']] ?? []; ?>
+                <?php if (!empty($campaignTemplateLinks)): ?>
+                <?php $campaignTemplates = buildCampaignDeploymentSnippets($baseUrl, $campaign, $campaignTemplateLinks); ?>
+                <tr id="campaign-templates-<?= (int) $campaign['id'] ?>" class="template-row" style="display:none;">
+                    <td colspan="10" class="template-cell">
+                        <div class="deployment-panel">
+                            <strong class="template-title">Deployment Package for <?= h((string) $campaign['name']) ?></strong>
+                            <p class="muted" style="margin-bottom:0.85rem;">Quick-copy campaign bundles for sharing or staging a multi-token exercise.</p>
+                            <div class="snippet-grid">
+                                <?php foreach ($campaignTemplates as $snippetTitle => $snippetBody): ?>
+                                    <?= renderSnippetBox($snippetTitle, $snippetBody) ?>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <?php endif; ?>
                 <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;">
                     <td colspan="10">
                         <form method="post" action="/admin/update-campaign" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:8px 0;">
@@ -1248,6 +1356,19 @@ function renderAdminPage(
 	            </form>
 	        </div>
 	    </form>
+
+            <?php
+                $editTemplates = buildTokenDeploymentSnippets($baseUrl, $editLink);
+            ?>
+            <div class="deployment-panel" style="margin-bottom:2rem;">
+                <h2>Deployment Templates</h2>
+                <p class="muted" style="margin-bottom:1rem;">Copy ready-to-use snippets for email, HTML, Markdown, and tracking pixel deployments.</p>
+                <div class="snippet-grid">
+                    <?php foreach ($editTemplates as $snippetTitle => $snippetBody): ?>
+                        <?= renderSnippetBox($snippetTitle, $snippetBody) ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
 	<?php endif; ?>
             <form method="post" action="/admin/create-link">
                 <h2>Create Token</h2>
@@ -1400,13 +1521,15 @@ function renderAdminPage(
 		        <?php endif; ?>
 		    </td>
 
-		    <td class="actions-col">
-
+		    <td class="actions-col token-actions-cell">
+                        <div class="button-row token-action-row">
 			   <form method="get" action="/admin" class="inline-action-form">
 			       <input type="hidden" name="tab" value="links">
 			       <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
 	 		       <button type="submit">Edit</button>
 			   </form>
+
+                           <button type="button" class="primary-button" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Templates</button>
 
 		        <?php if ((int) $link['active'] === 1): ?>
 		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
@@ -1430,8 +1553,22 @@ function renderAdminPage(
 		            <input type="hidden" name="delete_clicks" value="1">
 		            <button type="submit" class="danger-button">Delete + Clicks</button>
 		        </form>
+                        </div>
 		    </td>
 		</tr>
+                <?php $tokenTemplates = buildTokenDeploymentSnippets($baseUrl, $link); ?>
+                <tr id="token-templates-<?= (int) $link['id'] ?>" class="template-row" style="display:none;">
+                    <td colspan="14" class="template-cell">
+                        <div class="deployment-panel">
+                            <strong class="template-title">Deployment Templates for <?= h(normalizeTokenPath((string) $link['token'])) ?></strong>
+                            <div class="snippet-grid">
+                                <?php foreach ($tokenTemplates as $snippetTitle => $snippetBody): ?>
+                                    <?= renderSnippetBox($snippetTitle, $snippetBody) ?>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
                     <?php endforeach; ?>
                 </table>
             </div>
@@ -2539,6 +2676,17 @@ function renderAdminPage(
             var tabEl = e.target.closest('[data-tab]');
             if (tabEl) {
                 showTab(tabEl.dataset.tab);
+                return;
+            }
+
+            // Generic hidden row toggle — data-toggle-row="row-id"
+            var toggleRowEl = e.target.closest('[data-toggle-row]');
+            if (toggleRowEl) {
+                var rowId = toggleRowEl.dataset.toggleRow;
+                var row = document.getElementById(rowId);
+                if (row) {
+                    row.style.display = (getComputedStyle(row).display === 'none') ? 'table-row' : 'none';
+                }
                 return;
             }
 
