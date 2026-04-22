@@ -1,141 +1,17 @@
 -- SignalTrace Seed Data (Safe / Non-Real)
 -- Uses documentation IP ranges (RFC 5737 / RFC 3849)
--- All IPs, ASNs, orgs, recipients, and document names are fictitious.
+-- All IPs, ASNs, and orgs are fictitious.
 
 PRAGMA foreign_keys = ON;
 
 -- ============================================================
--- Sample Campaigns
--- ============================================================
-INSERT OR IGNORE INTO campaigns (name, description, active, webhook_enabled, created_at) VALUES
-    ('Q2 Payroll Simulation', 'Payroll-themed campaign with mixed token types', 1, 1, datetime('now')),
-    ('Vendor Invoice Review', 'Invoice and procurement review workflow', 1, 0, datetime('now')),
-    ('HR Document Tracking', 'Document-oriented tracking examples', 1, 1, datetime('now'));
-
--- ============================================================
 -- Sample Tokens
 -- ============================================================
-INSERT OR IGNORE INTO links (
-    token, destination, description, type,
-    recipient_name, recipient_email, notes,
-    burn_after_first_hit, expires_at,
-    document_kind, document_label,
-    active, exclude_from_feed, force_include_in_feed,
-    include_in_token_webhook, include_in_email,
-    campaign_id, created_at
-) VALUES
-    (
-        '/payroll',
-        'https://example.com/login',
-        'Payroll portal simulation',
-        'link',
-        'Alex Morgan',
-        'alex.morgan@example.edu',
-        'Standard phishing-style URL token',
-        0,
-        datetime('now', '+30 days'),
-        NULL,
-        NULL,
-        1, 0, 1, 1, 1,
-        (SELECT id FROM campaigns WHERE name = 'Q2 Payroll Simulation'),
-        datetime('now')
-    ),
-    (
-        '/invoice',
-        'https://example.com/invoice',
-        'Invoice access link',
-        'link',
-        'Jordan Lee',
-        'jordan.lee@example.edu',
-        'Invoice review link token',
-        0,
-        datetime('now', '+30 days'),
-        NULL,
-        NULL,
-        1, 0, 1, 1, 0,
-        (SELECT id FROM campaigns WHERE name = 'Vendor Invoice Review'),
-        datetime('now')
-    ),
-    (
-        '/benefits',
-        'https://example.com/benefits',
-        'Benefits portal',
-        'link',
-        'Casey Wright',
-        'casey.wright@example.edu',
-        'General portal token',
-        0,
-        datetime('now', '+14 days'),
-        NULL,
-        NULL,
-        1, 0, 0, 0, 0,
-        NULL,
-        datetime('now')
-    ),
-    (
-        '/payroll-pixel',
-        'https://example.com/login',
-        'Embedded payroll image beacon',
-        'pixel',
-        'Alex Morgan',
-        'alex.morgan@example.edu',
-        'Use the pixel URL in an email or HTML snippet',
-        0,
-        datetime('now', '+30 days'),
-        NULL,
-        NULL,
-        1, 0, 1, 1, 0,
-        (SELECT id FROM campaigns WHERE name = 'Q2 Payroll Simulation'),
-        datetime('now')
-    ),
-    (
-        '/hr-policy-doc',
-        'https://example.com/policy',
-        'HR policy document beacon',
-        'document',
-        'Taylor Brooks',
-        'taylor.brooks@example.edu',
-        'Document token example with first-hit burn',
-        1,
-        datetime('now', '+21 days'),
-        'docx',
-        'HR Policy Review',
-        1, 0, 1, 1, 1,
-        (SELECT id FROM campaigns WHERE name = 'HR Document Tracking'),
-        datetime('now')
-    ),
-    (
-        '/procurement-sheet',
-        'https://example.com/procurement',
-        'Procurement spreadsheet beacon',
-        'document',
-        'Morgan Patel',
-        'morgan.patel@example.edu',
-        'Spreadsheet-style document token example',
-        0,
-        datetime('now', '+21 days'),
-        'xlsx',
-        'Procurement Vendor Comparison',
-        1, 0, 1, 0, 0,
-        (SELECT id FROM campaigns WHERE name = 'Vendor Invoice Review'),
-        datetime('now')
-    ),
-    (
-        '/hello.world',
-        'https://example.com',
-        'Test token',
-        'link',
-        NULL,
-        NULL,
-        'General testing token',
-        0,
-        NULL,
-        NULL,
-        NULL,
-        1, 0, 0, 0, 0,
-        NULL,
-        datetime('now')
-    );
+INSERT OR IGNORE INTO links (token, destination, description, active, exclude_from_feed, include_in_token_webhook, created_at) VALUES
+    ('/payroll',     'https://example.com/login',    'Payroll portal simulation', 1, 0, 1, datetime('now')),
+    ('/invoice',     'https://example.com/invoice',  'Invoice access link',       1, 0, 1, datetime('now')),
+    ('/benefits',    'https://example.com/benefits', 'Benefits portal',           1, 0, 0, datetime('now')),
+    ('/hello.world', 'https://example.com',          'Test token',                1, 0, 0, datetime('now'));
 
 -- ============================================================
 -- Sample Clicks
@@ -143,7 +19,7 @@ INSERT OR IGNORE INTO links (
 -- All within the last 48 hours so they appear in the threat feed
 -- ============================================================
 INSERT INTO clicks (
-    token, link_id, event_type, clicked_at, clicked_at_unix_ms,
+    token, link_id, clicked_at, clicked_at_unix_ms,
     ip, ip_asn, ip_org, ip_country,
     visitor_hash, request_method, host, scheme, request_uri, query_string,
     remote_port, user_agent, referer, accept, accept_language, accept_encoding,
@@ -157,7 +33,6 @@ INSERT INTO clicks (
 (
     '/payroll',
     (SELECT id FROM links WHERE token = '/payroll'),
-    'click',
     datetime('now', '-5 minutes'),
     (strftime('%s', datetime('now', '-5 minutes')) * 1000),
     '203.0.113.10', '64500', 'Example ISP', 'US', 'visitor_demo_1',
@@ -172,7 +47,6 @@ INSERT INTO clicks (
 (
     '/invoice',
     (SELECT id FROM links WHERE token = '/invoice'),
-    'click',
     datetime('now', '-12 minutes'),
     (strftime('%s', datetime('now', '-12 minutes')) * 1000),
     '203.0.113.42', '64500', 'Example ISP', 'CA', 'visitor_demo_2',
@@ -185,48 +59,17 @@ INSERT INTO clicks (
     1, 0
 ),
 (
-    'pixel:/payroll-pixel',
-    (SELECT id FROM links WHERE token = '/payroll-pixel'),
-    'pixel_load',
-    datetime('now', '-16 minutes'),
-    (strftime('%s', datetime('now', '-16 minutes')) * 1000),
-    '203.0.113.25', '64500', 'Example ISP', 'US', 'visitor_demo_px_1',
-    'GET', 'yourdomain.example', 'https', '/pixel/payroll-pixel.gif', '',
-    54400,
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-    'https://mail.example.com/', 'image/avif,image/webp,image/apng,*/*', 'en-US,en;q=0.9', 'gzip, deflate, br',
-    'cross-site', 'no-cors', 'image',
-    0, '', 84, 'human', 'pixel_load, embedded_image_request',
-    1, 0
-),
-(
-    '/hr-policy-doc',
-    (SELECT id FROM links WHERE token = '/hr-policy-doc'),
-    'document_open',
+    '/benefits',
+    (SELECT id FROM links WHERE token = '/benefits'),
     datetime('now', '-31 minutes'),
     (strftime('%s', datetime('now', '-31 minutes')) * 1000),
-    '203.0.113.78', '64500', 'Example ISP', 'GB', 'visitor_demo_doc_1',
-    'GET', 'yourdomain.example', 'https', '/hr-policy-doc', '',
+    '203.0.113.78', '64500', 'Example ISP', 'GB', 'visitor_demo_3',
+    'GET', 'yourdomain.example', 'https', '/benefits', '',
     61022,
-    'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Word)',
-    '', '*/*', 'en-GB,en;q=0.9', 'gzip, deflate, br',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+    '', 'text/html,application/xhtml+xml', 'en-GB,en;q=0.9', 'gzip, deflate, br',
     'none', 'navigate', 'document',
-    0, '', 80, 'human', 'document_open, office_user_agent',
-    1, 0
-),
-(
-    '/procurement-sheet',
-    (SELECT id FROM links WHERE token = '/procurement-sheet'),
-    'document_preview',
-    datetime('now', '-37 minutes'),
-    (strftime('%s', datetime('now', '-37 minutes')) * 1000),
-    '203.0.113.91', '64500', 'Example ISP', 'US', 'visitor_demo_doc_2',
-    'GET', 'yourdomain.example', 'https', '/procurement-sheet', '',
-    61111,
-    'Microsoft Office Excel/16.0',
-    '', '*/*', 'en-US,en;q=0.9', 'gzip, deflate, br',
-    'none', 'navigate', 'empty',
-    0, '', 74, 'human', 'document_preview, office_user_agent',
+    0, '', 80, 'human', 'get_request, browser_ua, sec_fetch_navigate',
     1, 0
 ),
 
@@ -235,7 +78,6 @@ INSERT INTO clicks (
 (
     '/invoice',
     (SELECT id FROM links WHERE token = '/invoice'),
-    'click',
     datetime('now', '-18 minutes'),
     (strftime('%s', datetime('now', '-18 minutes')) * 1000),
     '198.51.100.25', '64501', 'Example Cable Provider', 'US', 'visitor_demo_4',
@@ -250,7 +92,6 @@ INSERT INTO clicks (
 (
     '/payroll',
     (SELECT id FROM links WHERE token = '/payroll'),
-    'click',
     datetime('now', '-45 minutes'),
     (strftime('%s', datetime('now', '-45 minutes')) * 1000),
     '198.51.100.77', '64510', 'Example Hosting Co', 'NL', 'visitor_demo_5',
@@ -268,30 +109,403 @@ INSERT INTO clicks (
 (
     '/hello.world',
     (SELECT id FROM links WHERE token = '/hello.world'),
-    'click',
     datetime('now', '-22 minutes'),
     (strftime('%s', datetime('now', '-22 minutes')) * 1000),
-    '192.0.2.50', '64502', 'Example Hosting Botnet', 'DE', 'visitor_bot_1',
-    'GET', 'scanner.example', 'http', '/hello.world', '',
-    45501,
-    'curl/8.4.0',
-    '', '*/*', '', 'gzip',
+    '192.0.2.50', '64502', 'Example Hosting Provider', 'CN', 'visitor_bot_1',
+    'POST', 'yourdomain.example', 'http', '/hello.world', 'allow_url_include=1',
+    60178,
+    'python-requests/2.28.0',
+    '', '*/*', '', '',
     '', '', '',
-    1, 'cli_user_agent', 6, 'bot', 'cli_user_agent, no_accept_language, no_sec_fetch',
+    1, 'known_automation_ua, exploit_like_query', 0, 'bot',
+    'post_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, exploit_like_query, no_referer',
+    1, 0
+),
+(
+    '.env',
+    NULL,
+    datetime('now', '-27 minutes'),
+    (strftime('%s', datetime('now', '-27 minutes')) * 1000),
+    '203.0.113.99', '64503', 'Example Scanner Network', 'DE', 'visitor_bot_2',
+    'GET', '203.0.113.99', 'http', '/.env', '',
+    44321,
+    'Go-http-client/1.1',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua, host_raw_ip', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, host_raw_ip, no_referer',
+    1, 0
+),
+(
+    'wp-login.php',
+    NULL,
+    datetime('now', '-33 minutes'),
+    (strftime('%s', datetime('now', '-33 minutes')) * 1000),
+    '192.0.2.101', '64504', 'Example VPS Provider', 'RU', 'visitor_bot_3',
+    'POST', 'yourdomain.example', 'http', '/wp-login.php', '',
+    55210,
+    'Mozilla/5.0 (compatible; SemrushBot/7)',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'post_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:/wp-login.php',
+    1, 0
+),
+(
+    'phpmyadmin',
+    NULL,
+    datetime('now', '-41 minutes'),
+    (strftime('%s', datetime('now', '-41 minutes')) * 1000),
+    '192.0.2.150', '64505', 'Example Cloud Provider', 'CN', 'visitor_bot_4',
+    'GET', 'yourdomain.example', 'http', '/phpmyadmin', '',
+    62001,
+    'curl/7.68.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:phpmyadmin',
     1, 0
 ),
 (
     '/payroll',
     (SELECT id FROM links WHERE token = '/payroll'),
-    'click',
-    datetime('now', '-58 minutes'),
-    (strftime('%s', datetime('now', '-58 minutes')) * 1000),
-    '192.0.2.99', '64503', 'Example Cloud Scanner', 'US', 'visitor_bot_2',
-    'HEAD', 'yourdomain.example', 'https', '/payroll', '',
-    39812,
-    'Wget/1.21.4',
+    datetime('now', '-52 minutes'),
+    (strftime('%s', datetime('now', '-52 minutes')) * 1000),
+    '192.0.2.200', '64506', 'Example Datacenter', 'KP', 'visitor_bot_5',
+    'GET', 'yourdomain.example', 'https', '/payroll', '',
+    31190,
+    'python-requests/2.31.0',
     '', '*/*', '', 'gzip',
     '', '', '',
-    1, 'head_request', 4, 'bot', 'head_request, cli_user_agent, no_sec_fetch',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, hosting_provider, country_penalty:KP',
+    1, 0
+),
+
+-- ── Behavioral signal clicks (burst / rapid repeat) ──────────
+
+(
+    '/invoice',
+    (SELECT id FROM links WHERE token = '/invoice'),
+    datetime('now', '-3 minutes'),
+    (strftime('%s', datetime('now', '-3 minutes')) * 1000),
+    '192.0.2.75', '64507', 'Example Transit Network', 'BR', 'visitor_bot_6',
+    'GET', 'yourdomain.example', 'http', '/invoice', '',
+    41002,
+    'zgrab/0.x',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, rapid_repeat',
+    0, 3
+),
+(
+    '/benefits',
+    (SELECT id FROM links WHERE token = '/benefits'),
+    datetime('now', '-3 minutes'),
+    (strftime('%s', datetime('now', '-3 minutes')) * 1000),
+    '192.0.2.75', '64507', 'Example Transit Network', 'BR', 'visitor_bot_6',
+    'GET', 'yourdomain.example', 'http', '/benefits', '',
+    41003,
+    'zgrab/0.x',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, multi_token_scan',
+    0, 4
+),
+(
+    '/payroll',
+    (SELECT id FROM links WHERE token = '/payroll'),
+    datetime('now', '-3 minutes'),
+    (strftime('%s', datetime('now', '-3 minutes')) * 1000),
+    '192.0.2.75', '64507', 'Example Transit Network', 'BR', 'visitor_bot_6',
+    'GET', 'yourdomain.example', 'http', '/payroll', '',
+    41004,
+    'zgrab/0.x',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, multi_token_scan, burst_activity',
+    0, 5
+),
+
+-- ── Bot clicks (IPv6) ─────────────────────────────────────────
+-- Uses RFC 3849 documentation range: 2001:db8::/32
+
+(
+    '/.env',
+    NULL,
+    datetime('now', '-14 minutes'),
+    (strftime('%s', datetime('now', '-14 minutes')) * 1000),
+    '2001:db8::1', '64511', 'Example IPv6 Scanner', 'CN', 'visitor_v6_1',
+    'GET', 'yourdomain.example', 'http', '/.env', '',
+    43210,
+    'python-requests/2.31.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, hosting_provider_ip',
+    1, 0
+),
+(
+    'wp-login.php',
+    NULL,
+    datetime('now', '-29 minutes'),
+    (strftime('%s', datetime('now', '-29 minutes')) * 1000),
+    '2001:db8::2', '64512', 'Example IPv6 Datacenter', 'RU', 'visitor_v6_2',
+    'POST', 'yourdomain.example', 'http', '/wp-login.php', '',
+    55301,
+    'curl/8.1.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'post_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:/wp-login.php',
+    1, 0
+),
+(
+    'phpmyadmin',
+    NULL,
+    datetime('now', '-47 minutes'),
+    (strftime('%s', datetime('now', '-47 minutes')) * 1000),
+    '2001:db8:cafe::1', '64513', 'Example IPv6 Transit', 'DE', 'visitor_v6_3',
+    'GET', 'yourdomain.example', 'http', '/phpmyadmin', '',
+    61109,
+    'Go-http-client/2.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:phpmyadmin',
+    1, 0
+),
+
+-- ── Suspicious IPv6 click ─────────────────────────────────────
+
+(
+    '/invoice',
+    (SELECT id FROM links WHERE token = '/invoice'),
+    datetime('now', '-38 minutes'),
+    (strftime('%s', datetime('now', '-38 minutes')) * 1000),
+    '2001:db8:1234::42', '64514', 'Example IPv6 ISP', 'JP', 'visitor_v6_4',
+    'GET', 'yourdomain.example', 'https', '/invoice', '',
+    52871,
+    'Mozilla/5.0 (X11; Linux x86_64)',
+    '', 'text/html', 'ja,en;q=0.9', 'gzip',
+    '', '', '',
+    0, '', 32, 'suspicious', 'get_request, browser_ua_unsupported, sec_fetch_missing, no_referer, accept_encoding_missing',
+    1, 0
+),
+
+-- ── Human IPv6 click ──────────────────────────────────────────
+
+(
+    '/benefits',
+    (SELECT id FROM links WHERE token = '/benefits'),
+    datetime('now', '-9 minutes'),
+    (strftime('%s', datetime('now', '-9 minutes')) * 1000),
+    '2001:db8:abcd::100', '64515', 'Example IPv6 Broadband', 'FR', 'visitor_v6_5',
+    'GET', 'yourdomain.example', 'https', '/benefits', '',
+    49203,
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/604.1',
+    'https://mail.example.com/', 'text/html,application/xhtml+xml', 'fr-FR,fr;q=0.9', 'gzip, deflate, br',
+    'cross-site', 'navigate', 'document',
+    0, '', 84, 'human', 'get_request, browser_ua, sec_fetch_navigate, referer_present, accept_language_present',
+    1, 0
+),
+
+-- ── Wildcard subdomain clicks ─────────────────────────────────
+-- Demonstrates subdomain summary panel when wildcard DNS mode is enabled.
+-- Subdomains probe common infrastructure names attackers typically target.
+
+(
+    'wp-login.php',
+    NULL,
+    datetime('now', '-8 minutes'),
+    (strftime('%s', datetime('now', '-8 minutes')) * 1000),
+    '192.0.2.55', '64520', 'Example Scanner ASN', 'CN', 'visitor_sub_1',
+    'POST', 'vpn.yourdomain.example', 'http', '/wp-login.php', '',
+    51200,
+    'python-requests/2.31.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'post_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer, path:/wp-login.php',
+    1, 0
+),
+(
+    '/.env',
+    NULL,
+    datetime('now', '-11 minutes'),
+    (strftime('%s', datetime('now', '-11 minutes')) * 1000),
+    '192.0.2.55', '64520', 'Example Scanner ASN', 'CN', 'visitor_sub_1',
+    'GET', 'vpn.yourdomain.example', 'http', '/.env', '',
+    51201,
+    'python-requests/2.31.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    0, 1
+),
+(
+    '/admin',
+    NULL,
+    datetime('now', '-16 minutes'),
+    (strftime('%s', datetime('now', '-16 minutes')) * 1000),
+    '192.0.2.55', '64520', 'Example Scanner ASN', 'CN', 'visitor_sub_1',
+    'GET', 'vpn.yourdomain.example', 'http', '/admin', '',
+    51202,
+    'python-requests/2.31.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    0, 2
+),
+(
+    '/.env',
+    NULL,
+    datetime('now', '-20 minutes'),
+    (strftime('%s', datetime('now', '-20 minutes')) * 1000),
+    '198.51.100.88', '64521', 'Example Probe Network', 'RU', 'visitor_sub_2',
+    'GET', 'login.yourdomain.example', 'http', '/.env', '',
+    39100,
+    'Go-http-client/1.1',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    1, 0
+),
+(
+    '/config.php',
+    NULL,
+    datetime('now', '-24 minutes'),
+    (strftime('%s', datetime('now', '-24 minutes')) * 1000),
+    '198.51.100.88', '64521', 'Example Probe Network', 'RU', 'visitor_sub_2',
+    'GET', 'login.yourdomain.example', 'http', '/config.php', '',
+    39101,
+    'Go-http-client/1.1',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    0, 1
+),
+(
+    '/xmlrpc.php',
+    NULL,
+    datetime('now', '-35 minutes'),
+    (strftime('%s', datetime('now', '-35 minutes')) * 1000),
+    '192.0.2.130', '64522', 'Example VPS Cluster', 'DE', 'visitor_sub_3',
+    'POST', 'mail.yourdomain.example', 'http', '/xmlrpc.php', '',
+    44800,
+    'curl/7.88.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'post_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    1, 0
+),
+(
+    '/owa/auth/logon.aspx',
+    NULL,
+    datetime('now', '-40 minutes'),
+    (strftime('%s', datetime('now', '-40 minutes')) * 1000),
+    '192.0.2.130', '64522', 'Example VPS Cluster', 'DE', 'visitor_sub_3',
+    'GET', 'mail.yourdomain.example', 'http', '/owa/auth/logon.aspx', '',
+    44801,
+    'curl/7.88.0',
+    '', '*/*', '', '',
+    '', '', '',
+    1, 'known_automation_ua', 0, 'bot',
+    'get_request, known_automation_ua, accept_wildcard, accept_language_missing, sec_fetch_missing, no_referer',
+    0, 1
+),
+(
+    '/api/v1/users',
+    NULL,
+    datetime('now', '-55 minutes'),
+    (strftime('%s', datetime('now', '-55 minutes')) * 1000),
+    '198.51.100.200', '64523', 'Example Cloud Range', 'US', 'visitor_sub_4',
+    'GET', 'api.yourdomain.example', 'https', '/api/v1/users', '',
+    62500,
+    'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1)',
+    '', '*/*', '', 'gzip',
+    '', '', '',
+    0, '', 30, 'suspicious', 'get_request, accept_wildcard, sec_fetch_missing, no_referer, hosting_provider',
+    1, 0
+),
+(
+    '/swagger.json',
+    NULL,
+    datetime('now', '-58 minutes'),
+    (strftime('%s', datetime('now', '-58 minutes')) * 1000),
+    '198.51.100.200', '64523', 'Example Cloud Range', 'US', 'visitor_sub_4',
+    'GET', 'api.yourdomain.example', 'https', '/swagger.json', '',
+    62501,
+    'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1)',
+    '', '*/*', '', 'gzip',
+    '', '', '',
+    0, '', 28, 'suspicious', 'get_request, accept_wildcard, sec_fetch_missing, no_referer, hosting_provider',
+    0, 1
+);
+
+-- ============================================================
+-- Sample ASN Rules
+-- ============================================================
+INSERT OR IGNORE INTO asn_rules (asn, label, penalty, active, exclude_from_feed, created_at) VALUES
+    ('64502', 'Example Hosting Provider', 20, 1, 0, datetime('now')),
+    ('64503', 'Example Scanner Network',  30, 1, 0, datetime('now'));
+
+-- ============================================================
+-- Sample IP Overrides
+-- ============================================================
+INSERT OR IGNORE INTO ip_overrides (ip, mode, notes, active, created_at) VALUES
+    ('192.0.2.200', 'block', 'Confirmed malicious — persistent scanner', 1, datetime('now')),
+    ('203.0.113.10', 'allow', 'Internal monitoring probe',               1, datetime('now'));
+
+-- ============================================================
+-- Sample Country Rules
+-- ============================================================
+INSERT OR IGNORE INTO country_rules (country_code, label, penalty, active, created_at) VALUES
+    ('KP', 'No legitimate traffic expected', 25, 1, datetime('now')),
+    ('RU', 'High-noise region',              15, 1, datetime('now'));
+
+
+-- ============================================================
+-- Document token examples
+-- ============================================================
+INSERT OR IGNORE INTO links (
+    token, destination, description, active, exclude_from_feed, include_in_token_webhook,
+    campaign_id, type, recipient_name, recipient_email, notes, burn_after_first_hit,
+    document_kind, document_label, created_at
+) VALUES
+    ('/finance/q4-review', 'https://example.com/files/q4-review', 'Document canary example', 1, 0, 1,
+     NULL, 'document', 'Alex Manager', 'alex.manager@example.com', 'Demo document canary token', 0,
+     'docx', 'Q4 Review Draft', datetime('now'));
+
+INSERT INTO clicks (
+    token, link_id, event_type, clicked_at, clicked_at_unix_ms,
+    ip, ip_asn, ip_org, ip_country,
+    visitor_hash, request_method, host, scheme, request_uri, query_string,
+    remote_port, user_agent, referer, accept, accept_language, accept_encoding,
+    sec_fetch_site, sec_fetch_mode, sec_fetch_dest,
+    is_bot, bot_reason, confidence_score, confidence_label, confidence_reason,
+    first_for_token, prior_events_for_token
+) VALUES
+(
+    '/finance/q4-review',
+    (SELECT id FROM links WHERE token = '/finance/q4-review'),
+    'document_open',
+    datetime('now', '-9 minutes'),
+    (strftime('%s', datetime('now', '-9 minutes')) * 1000),
+    '203.0.113.66', '64500', 'Example ISP', 'US', 'visitor_demo_doc_1',
+    'GET', 'yourdomain.example', 'https', '/pixel/finance/q4-review.gif', 'src=document&kind=docx',
+    51234,
+    'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Word 16.0.17328; Pro)',
+    '', '*/*', 'en-US', 'gzip, deflate',
+    'none', 'no-cors', 'image',
+    0, '', 94, 'human', 'document_open_remote_fetch',
     1, 0
 );
