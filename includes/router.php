@@ -404,15 +404,17 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $pixelEnabled        = ($settings['pixel_enabled']        ?? '1') === '1';
     $noiseFilterEnabled  = ($settings['noise_filter_enabled'] ?? '1') === '1';
 
-    $tokenFilter   = trim((string) ($_GET['token']   ?? ''));
-    $ipFilter      = trim((string) ($_GET['ip']      ?? ''));
-    $visitorFilter = trim((string) ($_GET['visitor'] ?? ''));
+    $tokenFilter    = trim((string) ($_GET['token']   ?? ''));
+    $ipFilter       = trim((string) ($_GET['ip']      ?? ''));
+    $visitorFilter  = trim((string) ($_GET['visitor'] ?? ''));
     $campaignFilter = max(0, (int) ($_GET['campaign'] ?? 0));
-    $hostFilter    = trim((string) ($_GET['host']    ?? ''));
-    $knownOnly     = isset($_GET['known'])    && $_GET['known']    === '1';
-    $dateFrom      = trim((string) ($_GET['date_from'] ?? ''));
-    $dateTo        = trim((string) ($_GET['date_to']   ?? ''));
-    $asnRules      = getAsnRules($pdo);
+    $hostFilter     = trim((string) ($_GET['host']    ?? ''));
+    $knownOnly      = isset($_GET['known'])    && $_GET['known']    === '1';
+    $dateFrom       = trim((string) ($_GET['date_from'] ?? ''));
+    $dateTo         = trim((string) ($_GET['date_to']   ?? ''));
+    $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
+    $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
+    $asnRules       = getAsnRules($pdo);
 
     // Pagination
     $pageSize    = max(10, (int) ($settings['page_size'] ?? 50));
@@ -438,9 +440,9 @@ function handleAdminPage(PDO $pdo, array $settings): void
     // large-offset queries on subsequent requests.
     $currentPage = min($currentPage, $totalPages);
 
-    $links          = getAllLinks($pdo);
-    $campaignStats  = getCampaignStats($pdo);
-    $campaigns      = getAllCampaigns($pdo);
+    $links            = getAllLinks($pdo);
+    $campaignStats    = getCampaignStats($pdo);
+    $campaigns        = getAllCampaigns($pdo);
     $selectedCampaign = $campaignFilter > 0 ? getCampaignById($pdo, $campaignFilter) : null;
     $tokenCounts = getClickCountsByToken(
         $pdo,
@@ -463,11 +465,13 @@ function handleAdminPage(PDO $pdo, array $settings): void
     if ($tokenFilter   !== '') $refreshParams['token']           = $tokenFilter;
     if ($ipFilter      !== '') $refreshParams['ip']              = $ipFilter;
     if ($visitorFilter !== '') $refreshParams['visitor']         = $visitorFilter;
-    if ($hostFilter    !== '') $refreshParams['host']            = $hostFilter;
     if ($campaignFilter > 0)   $refreshParams['campaign']        = (string) $campaignFilter;
+    if ($hostFilter    !== '') $refreshParams['host']            = $hostFilter;
     if ($knownOnly)            $refreshParams['known']           = '1';
     if ($showTopTokens)        $refreshParams['show_top_tokens'] = '1';
     if ($showAll)              $refreshParams['show_all']        = '1';
+    if ($hideBehavioral)       $refreshParams['hide_behavioral'] = '1';
+    if ($hideSubdomains)       $refreshParams['hide_subdomains'] = '1';
     if ($dateFrom      !== '') $refreshParams['date_from']       = $dateFrom;
     if ($dateTo        !== '') $refreshParams['date_to']         = $dateTo;
 
