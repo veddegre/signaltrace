@@ -893,33 +893,36 @@ function getCampaignStats(PDO $pdo): array
     return $stmt->fetchAll();
 }
 
-function createCampaign(PDO $pdo, string $name, string $description = ''): bool
+function createCampaign(PDO $pdo, string $name, string $description = '', bool $webhookEnabled = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO campaigns (name, description, active, created_at)
-        VALUES (:name, :description, 1, :created_at)
+        INSERT INTO campaigns (name, description, active, webhook_enabled, created_at)
+        VALUES (:name, :description, 1, :webhook_enabled, :created_at)
     ");
     return $stmt->execute([
-        ':name'        => $name,
-        ':description' => $description,
-        ':created_at'  => date('c'),
+        ':name'            => $name,
+        ':description'     => $description,
+        ':webhook_enabled' => $webhookEnabled ? 1 : 0,
+        ':created_at'      => date('c'),
     ]);
 }
 
-function updateCampaign(PDO $pdo, int $id, string $name, string $description = '', bool $active = true): bool
+function updateCampaign(PDO $pdo, int $id, string $name, string $description = '', bool $active = true, bool $webhookEnabled = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE campaigns
-        SET name        = :name,
-            description = :description,
-            active      = :active
+        SET name            = :name,
+            description     = :description,
+            active          = :active,
+            webhook_enabled = :webhook_enabled
         WHERE id = :id
     ");
     return $stmt->execute([
-        ':id'          => $id,
-        ':name'        => $name,
-        ':description' => $description,
-        ':active'      => $active ? 1 : 0,
+        ':id'              => $id,
+        ':name'            => $name,
+        ':description'     => $description,
+        ':active'          => $active ? 1 : 0,
+        ':webhook_enabled' => $webhookEnabled ? 1 : 0,
     ]);
 }
 
