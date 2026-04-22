@@ -1374,11 +1374,12 @@ function renderAdminPage(
 		        ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
-		    <td class="mono">
+		    <td class="mono token-col">
 		        <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $link['token'], 'tab' => 'links'])) ?>">
 		            <?= h((string) $link['token']) ?>
 		        </a>
 		    </td>
+		    <td><?= h(ucfirst((string) ($link['type'] ?? 'link'))) ?></td>
 		    <td><?= h((string) ($link['description'] ?? '')) ?></td>
 		    <td class="muted">
 		        <?php if (!empty($link['campaign_name'])): ?>
@@ -1437,14 +1438,13 @@ function renderAdminPage(
 		        <?php endif; ?>
 		    </td>
 
-		    <td class="actions-col">
-
-			   <form method="get" action="/admin" class="inline-action-form">
-
-			       <input type="hidden" name="tab" value="links">
-			       <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
-	 		       <button type="submit">Edit</button>
-			   </form>
+            <td class="actions-col token-actions-cell">
+                <div class="button-row token-action-row">
+                    <form method="get" action="/admin" class="inline-action-form">
+                        <input type="hidden" name="tab" value="links">
+                        <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
+                        <button type="submit">Edit</button>
+                    </form>
 
                     <?php if (((string) ($link['type'] ?? 'link')) === 'document'): ?>
                         <?php if ($isDemo): ?>
@@ -1454,29 +1454,30 @@ function renderAdminPage(
                         <?php endif; ?>
                     <?php endif; ?>
 
-		        <?php if ((int) $link['active'] === 1): ?>
-		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
-               			 <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		                <button type="submit">Deactivate</button>
-		            </form>
-		        <?php else: ?>
-		            <form method="post" action="/admin/activate-link" class="inline-action-form">
-		                <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		                <button type="submit">Activate</button>
-   		         </form>
-     			 <?php endif; ?>
+                    <?php if ((int) $link['active'] === 1): ?>
+                        <form method="post" action="/admin/deactivate-link" class="inline-action-form">
+                            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                            <button type="submit">Deactivate</button>
+                        </form>
+                    <?php else: ?>
+                        <form method="post" action="/admin/activate-link" class="inline-action-form">
+                            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                            <button type="submit">Activate</button>
+                        </form>
+                    <?php endif; ?>
 
-		        <form method="post" action="/admin/delete-link" class="inline-action-form" data-confirm="Delete this token/path?">
-		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		            <button type="submit">Delete</button>
-		        </form>
+                    <form method="post" action="/admin/delete-link" class="inline-action-form" data-confirm="Delete this token/path?">
+                        <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                        <button type="submit">Delete</button>
+                    </form>
 
-		        <form method="post" action="/admin/delete-link" class="inline-action-form" data-confirm="Delete this token/path and all related clicks?">
-		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		            <input type="hidden" name="delete_clicks" value="1">
-		            <button type="submit" class="danger-button">Delete + Clicks</button>
-		        </form>
-		    </td>
+                    <form method="post" action="/admin/delete-link" class="inline-action-form" data-confirm="Delete this token/path and all related clicks?">
+                        <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                        <input type="hidden" name="delete_clicks" value="1">
+                        <button type="submit" class="danger-button">Delete + Clicks</button>
+                    </form>
+                </div>
+            </td>
 		</tr>
                     <?php endforeach; ?>
                 </table>
