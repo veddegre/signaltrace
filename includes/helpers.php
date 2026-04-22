@@ -1672,6 +1672,7 @@ function buildDocumentBeaconUrl(array $settings, array $link): string
     return $base . '/pixel/' . rawurlencode($token) . '.gif?src=document&kind=' . rawurlencode($kind);
 }
 
+
 function createDocumentCanaryDocx(array $link, string $beaconUrl, string $outputPath): void
 {
     if (!class_exists('ZipArchive')) {
@@ -1687,8 +1688,11 @@ function createDocumentCanaryDocx(array $link, string $beaconUrl, string $output
     }
 
     $token = (string) ($link['token'] ?? '');
-    $recipient = trim((string) ($link['recipient_name'] ?? ''));
-    $docNote = $recipient !== '' ? 'Prepared for: ' . $recipient : 'Prepared for internal review';
+    $docNote = 'Internal review copy';
+    $safeTitle = htmlspecialchars($title, ENT_XML1);
+    $safeToken = htmlspecialchars($token, ENT_XML1);
+    $safeNote = htmlspecialchars($docNote, ENT_XML1);
+    $safeBeacon = htmlspecialchars($beaconUrl, ENT_XML1);
 
     $contentTypes = <<<'XML'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1697,6 +1701,7 @@ function createDocumentCanaryDocx(array $link, string $beaconUrl, string $output
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
   <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>
@@ -1715,7 +1720,7 @@ XML;
       . '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
       . 'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
       . 'xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-      . '<dc:title>' . htmlspecialchars($title, ENT_XML1) . '</dc:title>'
+      . '<dc:title>' . $safeTitle . '</dc:title>'
       . '<dc:creator>SignalTrace</dc:creator>'
       . '<cp:lastModifiedBy>SignalTrace</cp:lastModifiedBy>'
       . '<dcterms:created xsi:type="dcterms:W3CDTF">' . gmdate('Y-m-d\TH:i:s\Z') . '</dcterms:created>'
@@ -1740,18 +1745,17 @@ XML;
 </w:styles>
 XML;
 
-    $safeTitle = htmlspecialchars($title, ENT_XML1);
-    $safeToken = htmlspecialchars($token, ENT_XML1);
-    $safeNote = htmlspecialchars($docNote, ENT_XML1);
+    $settings = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:updateFields w:val="true"/>
+</w:settings>
+XML;
 
     $document = <<<XML
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document
- xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
- xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
- xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
- xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:body>
     <w:p>
       <w:pPr><w:spacing w:after="240"/></w:pPr>
@@ -1766,33 +1770,12 @@ XML;
       <w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Reference: {$safeToken}</w:t></w:r>
     </w:p>
     <w:p>
-      <w:r>
-        <w:drawing>
-          <wp:inline distT="0" distB="0" distL="0" distR="0">
-            <wp:extent cx="9525" cy="9525"/>
-            <wp:effectExtent l="0" t="0" r="0" b="0"/>
-            <wp:docPr id="1" name="Document Canary Beacon"/>
-            <a:graphic>
-              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-                <pic:pic>
-                  <pic:nvPicPr>
-                    <pic:cNvPr id="0" name="beacon.gif"/>
-                    <pic:cNvPicPr/>
-                  </pic:nvPicPr>
-                  <pic:blipFill>
-                    <a:blip r:link="rIdImage1"/>
-                    <a:stretch><a:fillRect/></a:stretch>
-                  </pic:blipFill>
-                  <pic:spPr>
-                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="9525"/></a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                  </pic:spPr>
-                </pic:pic>
-              </a:graphicData>
-            </a:graphic>
-          </wp:inline>
-        </w:drawing>
-      </w:r>
+      <w:r><w:t>Open in the desktop Word client to allow field updates.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:fldSimple w:instr=' INCLUDEPICTURE "{$safeBeacon}" \d '>
+        <w:r><w:t>[Remote image field]</w:t></w:r>
+      </w:fldSimple>
     </w:p>
     <w:sectPr>
       <w:pgSz w:w="12240" w:h="15840"/>
@@ -1802,11 +1785,13 @@ XML;
 </w:document>
 XML;
 
-    $docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      . '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-      . '<Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="' . htmlspecialchars($beaconUrl, ENT_XML1) . '" TargetMode="External"/>'
-      . '</Relationships>';
+    $docRels = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+</Relationships>
+XML;
 
     @unlink($outputPath);
     $zip = new ZipArchive();
@@ -1820,6 +1805,8 @@ XML;
     $zip->addFromString('docProps/app.xml', $app);
     $zip->addFromString('word/document.xml', $document);
     $zip->addFromString('word/styles.xml', $styles);
+    $zip->addFromString('word/settings.xml', $settings);
     $zip->addFromString('word/_rels/document.xml.rels', $docRels);
     $zip->close();
 }
+
