@@ -578,18 +578,24 @@ function getLinkByToken(PDO $pdo, string $token): ?array
         FROM links
         WHERE token = :token
           AND active = 1
-          AND (
-              expires_at IS NULL
-              OR expires_at = ''
-              OR expires_at > :now_iso
-          )
+          AND (expires_at IS NULL OR expires_at = '' OR expires_at > datetime('now'))
         LIMIT 1
     ");
-    $stmt->execute([
-        ':token' => $token,
-        ':now_iso' => date('c'),
-    ]);
+    $stmt->execute([':token' => $token]);
 
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function getLinkById(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM links
+        WHERE id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([':id' => $id]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
@@ -605,9 +611,9 @@ function createLink(
     bool $forceIncludeInFeed = false,
     ?int $campaignId = null,
     string $type = 'link',
-    ?string $recipientName = null,
-    ?string $recipientEmail = null,
-    ?string $notes = null,
+    string $recipientName = '',
+    string $recipientEmail = '',
+    string $notes = '',
     bool $burnAfterFirstHit = false,
     ?string $expiresAt = null,
     ?string $documentKind = null,
@@ -616,18 +622,14 @@ function createLink(
 {
     $stmt = $pdo->prepare("
         INSERT INTO links (
-            token, destination, description, type,
-            recipient_name, recipient_email, notes,
-            burn_after_first_hit, expires_at, document_kind, document_label,
-            active, exclude_from_feed, force_include_in_feed,
-            include_in_token_webhook, include_in_email, campaign_id, created_at
+            token, destination, description, active, exclude_from_feed, force_include_in_feed,
+            include_in_token_webhook, include_in_email, campaign_id, type, recipient_name,
+            recipient_email, notes, burn_after_first_hit, expires_at, document_kind, document_label, created_at
         )
         VALUES (
-            :token, :destination, :description, :type,
-            :recipient_name, :recipient_email, :notes,
-            :burn_after_first_hit, :expires_at, :document_kind, :document_label,
-            1, :exclude_from_feed, :force_include_in_feed,
-            :include_in_token_webhook, :include_in_email, :campaign_id, :created_at
+            :token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed,
+            :include_in_token_webhook, :include_in_email, :campaign_id, :type, :recipient_name,
+            :recipient_email, :notes, :burn_after_first_hit, :expires_at, :document_kind, :document_label, :created_at
         )
     ");
 
@@ -635,19 +637,19 @@ function createLink(
         ':token'                    => $token,
         ':destination'              => $destination,
         ':description'              => $description,
-        ':type'                     => $type,
-        ':recipient_name'           => $recipientName,
-        ':recipient_email'          => $recipientEmail,
-        ':notes'                    => $notes,
-        ':burn_after_first_hit'     => $burnAfterFirstHit ? 1 : 0,
-        ':expires_at'               => $expiresAt,
-        ':document_kind'            => $documentKind,
-        ':document_label'           => $documentLabel,
         ':exclude_from_feed'        => $excludeFromFeed ? 1 : 0,
         ':force_include_in_feed'    => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
         ':include_in_email'         => $includeInEmail ? 1 : 0,
         ':campaign_id'              => $campaignId,
+        ':type'                     => $type,
+        ':recipient_name'           => $recipientName !== '' ? $recipientName : null,
+        ':recipient_email'          => $recipientEmail !== '' ? $recipientEmail : null,
+        ':notes'                    => $notes !== '' ? $notes : null,
+        ':burn_after_first_hit'     => $burnAfterFirstHit ? 1 : 0,
+        ':expires_at'               => $expiresAt,
+        ':document_kind'            => $documentKind,
+        ':document_label'           => $documentLabel,
         ':created_at'               => date('c'),
     ]);
 }
@@ -664,9 +666,9 @@ function updateLink(
     bool $forceIncludeInFeed = false,
     ?int $campaignId = null,
     string $type = 'link',
-    ?string $recipientName = null,
-    ?string $recipientEmail = null,
-    ?string $notes = null,
+    string $recipientName = '',
+    string $recipientEmail = '',
+    string $notes = '',
     bool $burnAfterFirstHit = false,
     ?string $expiresAt = null,
     ?string $documentKind = null,
@@ -678,6 +680,11 @@ function updateLink(
         SET token                    = :token,
             destination              = :destination,
             description              = :description,
+            exclude_from_feed        = :exclude_from_feed,
+            force_include_in_feed    = :force_include_in_feed,
+            include_in_token_webhook = :include_in_token_webhook,
+            include_in_email         = :include_in_email,
+            campaign_id              = :campaign_id,
             type                     = :type,
             recipient_name           = :recipient_name,
             recipient_email          = :recipient_email,
@@ -685,12 +692,7 @@ function updateLink(
             burn_after_first_hit     = :burn_after_first_hit,
             expires_at               = :expires_at,
             document_kind            = :document_kind,
-            document_label           = :document_label,
-            exclude_from_feed        = :exclude_from_feed,
-            force_include_in_feed    = :force_include_in_feed,
-            include_in_token_webhook = :include_in_token_webhook,
-            include_in_email         = :include_in_email,
-            campaign_id              = :campaign_id
+            document_label           = :document_label
         WHERE id = :id
     ");
 
@@ -699,19 +701,19 @@ function updateLink(
         ':token'                    => $token,
         ':destination'              => $destination,
         ':description'              => $description,
-        ':type'                     => $type,
-        ':recipient_name'           => $recipientName,
-        ':recipient_email'          => $recipientEmail,
-        ':notes'                    => $notes,
-        ':burn_after_first_hit'     => $burnAfterFirstHit ? 1 : 0,
-        ':expires_at'               => $expiresAt,
-        ':document_kind'            => $documentKind,
-        ':document_label'           => $documentLabel,
         ':exclude_from_feed'        => $excludeFromFeed ? 1 : 0,
         ':force_include_in_feed'    => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
         ':include_in_email'         => $includeInEmail ? 1 : 0,
         ':campaign_id'              => $campaignId,
+        ':type'                     => $type,
+        ':recipient_name'           => $recipientName !== '' ? $recipientName : null,
+        ':recipient_email'          => $recipientEmail !== '' ? $recipientEmail : null,
+        ':notes'                    => $notes !== '' ? $notes : null,
+        ':burn_after_first_hit'     => $burnAfterFirstHit ? 1 : 0,
+        ':expires_at'               => $expiresAt,
+        ':document_kind'            => $documentKind,
+        ':document_label'           => $documentLabel,
     ]);
 }
 
@@ -832,6 +834,10 @@ function logClick(PDO $pdo, array $link, array $requestData): void
         ':is_bot' => !empty($requestData['is_bot']) ? 1 : 0,
         ':bot_reason' => $requestData['bot_reason'] ?? null,
     ]);
+
+    if ((int) ($link['burn_after_first_hit'] ?? 0) === 1 && $firstForToken === 1 && !empty($link['id'])) {
+        deactivateLink($pdo, (int) $link['id']);
+    }
 }
 
 function getRecentClicks(PDO $pdo, int $limit = 100): array
@@ -1080,6 +1086,7 @@ function getRecentClicksAdvancedFilteredPaged(
             l.include_in_email,
             l.exclude_from_feed,
             l.include_in_token_webhook,
+            l.campaign_id,
             l.type,
             l.recipient_name,
             l.recipient_email,
@@ -1087,7 +1094,6 @@ function getRecentClicksAdvancedFilteredPaged(
             l.expires_at,
             l.document_kind,
             l.document_label,
-            l.campaign_id,
             camp.name AS campaign_name
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
