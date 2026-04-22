@@ -954,11 +954,13 @@ function getRecentClicksAdvancedFiltered(
     bool $knownOnly = false,
     ?string $dateFrom = null,
     ?string $dateTo = null,
+    ?string $hostFilter = null,
+    ?int $campaignId = null,
 ): array {
     [$rows] = getRecentClicksAdvancedFilteredPaged(
         $pdo, $limit, 0,
         $tokenFilter, $ipFilter, $visitorFilter,
-        $knownOnly, $dateFrom, $dateTo,
+        $knownOnly, $dateFrom, $dateTo, $hostFilter, $campaignId
     );
     return $rows;
 }
@@ -978,6 +980,7 @@ function getRecentClicksAdvancedFilteredPaged(
     ?string $dateFrom = null,
     ?string $dateTo = null,
     ?string $hostFilter = null,
+    ?int $campaignId = null,
 ): array {
     $sql = "
         SELECT
@@ -987,9 +990,12 @@ function getRecentClicksAdvancedFilteredPaged(
             l.force_include_in_feed,
             l.include_in_email,
             l.exclude_from_feed,
-            l.include_in_token_webhook
+            l.include_in_token_webhook,
+            l.campaign_id,
+            camp.name AS campaign_name
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
+        LEFT JOIN campaigns camp ON l.campaign_id = camp.id
         WHERE 1 = 1
     ";
 
@@ -1015,6 +1021,11 @@ function getRecentClicksAdvancedFilteredPaged(
     if ($visitorFilter !== null && $visitorFilter !== '') {
         $sql .= " AND c.visitor_hash LIKE :visitorFilter ";
         $params[':visitorFilter'] = '%' . $visitorFilter . '%';
+    }
+
+    if ($campaignId !== null && $campaignId > 0) {
+        $sql .= " AND l.campaign_id = :campaignId ";
+        $params[':campaignId'] = $campaignId;
     }
 
     if ($hostFilter !== null && $hostFilter !== '' && $hostFilter !== '*') {
