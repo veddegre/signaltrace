@@ -2,6 +2,25 @@
 
 ---
 
+## [v2.8.1] — Deployment Schema Fixes
+
+### Database Initialization Fixes
+
+Fixed an issue where upgrading to v2.8.0 on existing installations could fail due to missing schema elements.
+
+The runtime database initialization did not guarantee creation order for new tables and columns, causing errors such as:
+
+- no such table: campaigns
+- no such column: l.type
+
+This release ensures:
+
+- the campaigns table is created before any campaign-related migrations run
+- all required links columns are added automatically before being referenced in queries
+- deployment upgrades work correctly via simple file replacement without requiring manual SQL intervention
+
+---
+
 ## [v2.8.0] — Campaigns and Activity Correlation
 
 ### Campaigns
