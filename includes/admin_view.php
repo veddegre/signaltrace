@@ -129,22 +129,40 @@ function normalizeTokenPath(string $token): string
 
 function resolvePublicBaseUrl(string $baseUrl = ''): string
 {
-    $baseUrl = trim($baseUrl);
-    if ($baseUrl !== '') {
-        return rtrim($baseUrl, '/');
-    }
+    $configuredBaseUrl = '';
 
     if (defined('BASE_URL') && trim((string) BASE_URL) !== '') {
-        return rtrim((string) BASE_URL, '/');
+        $configuredBaseUrl = rtrim((string) BASE_URL, '/');
+    } else {
+        $envBaseUrl = trim((string) getenv('BASE_URL'));
+        if ($envBaseUrl !== '') {
+            $configuredBaseUrl = rtrim($envBaseUrl, '/');
+        }
     }
 
-    $envBaseUrl = trim((string) getenv('BASE_URL'));
-    if ($envBaseUrl !== '') {
-        return rtrim($envBaseUrl, '/');
+    $candidate = trim($baseUrl);
+    if ($candidate !== '') {
+        $candidate = rtrim($candidate, '/');
+    }
+
+    $candidateHost = $candidate !== '' ? (string) parse_url($candidate, PHP_URL_HOST) : '';
+
+    if ($configuredBaseUrl !== '') {
+        if ($candidateHost !== '' && preg_match('/^admin\./i', $candidateHost)) {
+            return $configuredBaseUrl;
+        }
+        return $configuredBaseUrl;
+    }
+
+    if ($candidate !== '') {
+        return $candidate;
     }
 
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
     if ($host !== '') {
+        if (preg_match('/^admin\.(.+)$/i', $host, $m)) {
+            $host = $m[1];
+        }
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         return $scheme . '://' . $host;
     }
@@ -1230,7 +1248,7 @@ function renderAdminPage(
                     <td class="actions-col campaign-actions-cell">
                         <div class="button-row campaign-action-row">
                             <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
-                            <button type="button" class="primary-button" data-toggle-row="campaign-templates-<?= (int) $campaign['id'] ?>">Templates</button>
+                            <button type="button" data-toggle-row="campaign-templates-<?= (int) $campaign['id'] ?>">Templates</button>
                             <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
                                 Edit
                             </button>
@@ -1556,7 +1574,7 @@ function renderAdminPage(
 	 		       <button type="submit">Edit</button>
 			   </form>
 
-                           <button type="button" class="primary-button" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Templates</button>
+                           <button type="button" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Templates</button>
 
 		        <?php if ((int) $link['active'] === 1): ?>
 		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
