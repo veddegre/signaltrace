@@ -252,8 +252,6 @@ function handleUpdateLink(PDO $pdo): void
     $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
     $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
     $type                  = strtolower(trim((string) ($_POST['type'] ?? 'link')));
-    $recipientName         = trim((string) ($_POST['recipient_name'] ?? ''));
-    $recipientEmail        = trim((string) ($_POST['recipient_email'] ?? ''));
     $notes                 = trim((string) ($_POST['notes'] ?? ''));
     $burnAfterFirstHit     = isset($_POST['burn_after_first_hit']) && $_POST['burn_after_first_hit'] === '1';
     $expiresAtRaw          = trim((string) ($_POST['expires_at'] ?? ''));
@@ -285,12 +283,6 @@ function handleUpdateLink(PDO $pdo): void
         exit;
     }
 
-    if ($recipientEmail !== '' && !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
-        http_response_code(400);
-        echo 'Invalid recipient email.';
-        exit;
-    }
-
     if (!preg_match('#^[A-Za-z0-9./_-]+$#', $token)) {
         http_response_code(400);
         echo 'Path/token may contain only letters, numbers, dot, slash, underscore, and dash.';
@@ -303,7 +295,7 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId, $type, $recipientName, $recipientEmail, $notes, $burnAfterFirstHit, $expiresAt, $documentKind !== '' ? $documentKind : null, $documentLabel !== '' ? $documentLabel : null);
+        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId, $type, '', '', $notes, $burnAfterFirstHit, $expiresAt, $documentKind !== '' ? $documentKind : null, $documentLabel !== '' ? $documentLabel : null);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -593,8 +585,6 @@ function handleCreateLink(PDO $pdo): void
     $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
     $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
     $type                  = strtolower(trim((string) ($_POST['type'] ?? 'link')));
-    $recipientName         = trim((string) ($_POST['recipient_name'] ?? ''));
-    $recipientEmail        = trim((string) ($_POST['recipient_email'] ?? ''));
     $notes                 = trim((string) ($_POST['notes'] ?? ''));
     $burnAfterFirstHit     = isset($_POST['burn_after_first_hit']) && $_POST['burn_after_first_hit'] === '1';
     $expiresAtRaw          = trim((string) ($_POST['expires_at'] ?? ''));
@@ -620,12 +610,6 @@ function handleCreateLink(PDO $pdo): void
         exit;
     }
 
-    if ($recipientEmail !== '' && !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
-        http_response_code(400);
-        echo 'Invalid recipient email.';
-        exit;
-    }
-
     if (!preg_match('#^[A-Za-z0-9./_-]+$#', $token)) {
         http_response_code(400);
         echo 'Path/token may contain only letters, numbers, dot, slash, underscore, and dash.';
@@ -638,7 +622,7 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId, $type, $recipientName, $recipientEmail, $notes, $burnAfterFirstHit, $expiresAt, $documentKind !== '' ? $documentKind : null, $documentLabel !== '' ? $documentLabel : null);
+        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId, $type, '', '', $notes, $burnAfterFirstHit, $expiresAt, $documentKind !== '' ? $documentKind : null, $documentLabel !== '' ? $documentLabel : null);
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
