@@ -583,35 +583,6 @@ function collectRequestData(string $path, PDO $pdo): array
     return array_merge($data, calculateConfidence($pdo, $data));
 }
 
-function applyLinkRuntimeContext(array $link, array $requestData): array
-{
-    $type = strtolower((string) ($link['type'] ?? 'link'));
-    $secFetchDest = strtolower((string) ($requestData['sec_fetch_dest'] ?? ''));
-    $accept = strtolower((string) ($requestData['accept'] ?? ''));
-
-    if ($type === 'pixel') {
-        $requestData['event_type'] = 'pixel_load';
-    } elseif ($type === 'document') {
-        $requestData['event_type'] = ($secFetchDest === 'empty' || str_contains($accept, 'image/'))
-            ? 'document_preview'
-            : 'document_open';
-    } elseif (($requestData['event_type'] ?? '') === 'pixel') {
-        $requestData['event_type'] = 'pixel_load';
-    } else {
-        $requestData['event_type'] = 'click';
-    }
-
-    $requestData['token_type'] = $type;
-    $requestData['recipient_name'] = $link['recipient_name'] ?? null;
-    $requestData['recipient_email'] = $link['recipient_email'] ?? null;
-    $requestData['document_kind'] = $link['document_kind'] ?? null;
-    $requestData['document_label'] = $link['document_label'] ?? null;
-
-    return $requestData;
-}
-
-
-
 /* ======================================================
    ROUTING HELPERS
    ====================================================== */
@@ -1674,4 +1645,181 @@ function fetchAndCacheAbuseIpDb(PDO $pdo, string $ip, bool $force = false): ?arr
     saveEnrichment($pdo, $ip, $merged);
 
     return $abuseData;
+}
+
+
+function buildPublicBaseUrl(array $settings = []): string
+{
+    $base = trim((string) ($settings['base_url'] ?? ''));
+    if ($base !== '') {
+        return rtrim($base, '/');
+    }
+
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    $scheme = $https ? 'https' : 'http';
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    return $host !== '' ? $scheme . '://' . $host : '';
+}
+
+function buildDocumentBeaconUrl(array $settings, array $link): string
+{
+    $base = buildPublicBaseUrl($settings);
+    $token = trim((string) ($link['token'] ?? ''), '/');
+    $kind = trim((string) ($link['document_kind'] ?? 'docx'));
+    if ($base === '' || $token === '') {
+        return '';
+    }
+    return $base . '/pixel/' . rawurlencode($token) . '.gif?src=document&kind=' . rawurlencode($kind);
+}
+
+function createDocumentCanaryDocx(array $link, string $beaconUrl, string $outputPath): void
+{
+    if (!class_exists('ZipArchive')) {
+        throw new RuntimeException('ZipArchive is required to generate documents.');
+    }
+
+    $title = trim((string) ($link['document_label'] ?? ''));
+    if ($title === '') {
+        $title = trim((string) ($link['description'] ?? ''));
+    }
+    if ($title === '') {
+        $title = 'Confidential Document';
+    }
+
+    $token = (string) ($link['token'] ?? '');
+    $recipient = trim((string) ($link['recipient_name'] ?? ''));
+    $docNote = $recipient !== '' ? 'Prepared for: ' . $recipient : 'Prepared for internal review';
+
+    $contentTypes = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>
+XML;
+
+    $rootRels = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>
+XML;
+
+    $core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      . '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+      . 'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
+      . 'xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+      . '<dc:title>' . htmlspecialchars($title, ENT_XML1) . '</dc:title>'
+      . '<dc:creator>SignalTrace</dc:creator>'
+      . '<cp:lastModifiedBy>SignalTrace</cp:lastModifiedBy>'
+      . '<dcterms:created xsi:type="dcterms:W3CDTF">' . gmdate('Y-m-d\TH:i:s\Z') . '</dcterms:created>'
+      . '<dcterms:modified xsi:type="dcterms:W3CDTF">' . gmdate('Y-m-d\TH:i:s\Z') . '</dcterms:modified>'
+      . '</cp:coreProperties>';
+
+    $app = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+ xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>SignalTrace</Application>
+</Properties>
+XML;
+
+    $styles = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:rPr><w:sz w:val="22"/></w:rPr>
+  </w:style>
+</w:styles>
+XML;
+
+    $safeTitle = htmlspecialchars($title, ENT_XML1);
+    $safeToken = htmlspecialchars($token, ENT_XML1);
+    $safeNote = htmlspecialchars($docNote, ENT_XML1);
+
+    $document = <<<XML
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document
+ xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+ xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+ xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+ xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>
+    <w:p>
+      <w:pPr><w:spacing w:after="240"/></w:pPr>
+      <w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>{$safeTitle}</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:spacing w:after="180"/></w:pPr>
+      <w:r><w:rPr><w:sz w:val="22"/></w:rPr><w:t>{$safeNote}</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:spacing w:after="180"/></w:pPr>
+      <w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Reference: {$safeToken}</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline distT="0" distB="0" distL="0" distR="0">
+            <wp:extent cx="9525" cy="9525"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:docPr id="1" name="Document Canary Beacon"/>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:nvPicPr>
+                    <pic:cNvPr id="0" name="beacon.gif"/>
+                    <pic:cNvPicPr/>
+                  </pic:nvPicPr>
+                  <pic:blipFill>
+                    <a:blip r:link="rIdImage1"/>
+                    <a:stretch><a:fillRect/></a:stretch>
+                  </pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="9525"/></a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>
+    </w:p>
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+XML;
+
+    $docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      . '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      . '<Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="' . htmlspecialchars($beaconUrl, ENT_XML1) . '" TargetMode="External"/>'
+      . '</Relationships>';
+
+    @unlink($outputPath);
+    $zip = new ZipArchive();
+    if ($zip->open($outputPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Unable to create DOCX archive.');
+    }
+
+    $zip->addFromString('[Content_Types].xml', $contentTypes);
+    $zip->addFromString('_rels/.rels', $rootRels);
+    $zip->addFromString('docProps/core.xml', $core);
+    $zip->addFromString('docProps/app.xml', $app);
+    $zip->addFromString('word/document.xml', $document);
+    $zip->addFromString('word/styles.xml', $styles);
+    $zip->addFromString('word/_rels/document.xml.rels', $docRels);
+    $zip->close();
 }
