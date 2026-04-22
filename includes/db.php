@@ -148,14 +148,6 @@ function initializeDatabase(PDO $pdo): void
         'force_include_in_feed'    => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_token_webhook' => 'INTEGER NOT NULL DEFAULT 0',
         'include_in_email'         => 'INTEGER NOT NULL DEFAULT 0',
-        'type'                     => "TEXT NOT NULL DEFAULT 'link'",
-        'recipient_name'           => 'TEXT',
-        'recipient_email'          => 'TEXT',
-        'notes'                    => 'TEXT',
-        'burn_after_first_hit'     => 'INTEGER NOT NULL DEFAULT 0',
-        'expires_at'               => 'TEXT',
-        'document_kind'            => 'TEXT',
-        'document_label'           => 'TEXT',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -578,7 +570,6 @@ function getLinkByToken(PDO $pdo, string $token): ?array
         FROM links
         WHERE token = :token
           AND active = 1
-          AND (expires_at IS NULL OR expires_at = '' OR expires_at > datetime('now'))
         LIMIT 1
     ");
     $stmt->execute([':token' => $token]);
@@ -587,93 +578,27 @@ function getLinkByToken(PDO $pdo, string $token): ?array
     return $row ?: null;
 }
 
-function getLinkById(PDO $pdo, int $id): ?array
+function createLink(PDO $pdo, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false, ?int $campaignId = null): bool
 {
     $stmt = $pdo->prepare("
-        SELECT *
-        FROM links
-        WHERE id = :id
-        LIMIT 1
-    ");
-    $stmt->execute([':id' => $id]);
-    $row = $stmt->fetch();
-    return $row ?: null;
-}
-
-function createLink(
-    PDO $pdo,
-    string $token,
-    string $destination,
-    string $description = '',
-    bool $excludeFromFeed = false,
-    bool $includeInTokenWebhook = false,
-    bool $includeInEmail = false,
-    bool $forceIncludeInFeed = false,
-    ?int $campaignId = null,
-    string $type = 'link',
-    string $recipientName = '',
-    string $recipientEmail = '',
-    string $notes = '',
-    bool $burnAfterFirstHit = false,
-    ?string $expiresAt = null,
-    ?string $documentKind = null,
-    ?string $documentLabel = null
-): bool
-{
-    $stmt = $pdo->prepare("
-        INSERT INTO links (
-            token, destination, description, active, exclude_from_feed, force_include_in_feed,
-            include_in_token_webhook, include_in_email, campaign_id, type, recipient_name,
-            recipient_email, notes, burn_after_first_hit, expires_at, document_kind, document_label, created_at
-        )
-        VALUES (
-            :token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed,
-            :include_in_token_webhook, :include_in_email, :campaign_id, :type, :recipient_name,
-            :recipient_email, :notes, :burn_after_first_hit, :expires_at, :document_kind, :document_label, :created_at
-        )
+        INSERT INTO links (token, destination, description, active, exclude_from_feed, force_include_in_feed, include_in_token_webhook, include_in_email, campaign_id, created_at)
+        VALUES (:token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed, :include_in_token_webhook, :include_in_email, :campaign_id, :created_at)
     ");
 
     return $stmt->execute([
-        ':token'                    => $token,
-        ':destination'              => $destination,
-        ':description'              => $description,
-        ':exclude_from_feed'        => $excludeFromFeed ? 1 : 0,
-        ':force_include_in_feed'    => $forceIncludeInFeed ? 1 : 0,
+        ':token'                   => $token,
+        ':destination'             => $destination,
+        ':description'             => $description,
+        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
+        ':force_include_in_feed'   => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
-        ':include_in_email'         => $includeInEmail ? 1 : 0,
-        ':campaign_id'              => $campaignId,
-        ':type'                     => $type,
-        ':recipient_name'           => $recipientName !== '' ? $recipientName : null,
-        ':recipient_email'          => $recipientEmail !== '' ? $recipientEmail : null,
-        ':notes'                    => $notes !== '' ? $notes : null,
-        ':burn_after_first_hit'     => $burnAfterFirstHit ? 1 : 0,
-        ':expires_at'               => $expiresAt,
-        ':document_kind'            => $documentKind,
-        ':document_label'           => $documentLabel,
-        ':created_at'               => date('c'),
+        ':include_in_email'        => $includeInEmail ? 1 : 0,
+        ':campaign_id'             => $campaignId,
+        ':created_at'              => date('c'),
     ]);
 }
 
-function updateLink(
-    PDO $pdo,
-    int $id,
-    string $token,
-    string $destination,
-    string $description = '',
-    bool $excludeFromFeed = false,
-    bool $includeInTokenWebhook = false,
-    bool $includeInEmail = false,
-    bool $forceIncludeInFeed = false,
-    ?int $campaignId = null,
-    string $type = 'link',
-    string $recipientName = '',
-    string $recipientEmail = '',
-    string $notes = '',
-    bool $burnAfterFirstHit = false,
-    ?string $expiresAt = null,
-    ?string $documentKind = null,
-    ?string $documentLabel = null
-): bool
+function updateLink(PDO $pdo, int $id, string $token, string $destination, string $description = '', bool $excludeFromFeed = false, bool $includeInTokenWebhook = false, bool $includeInEmail = false, bool $forceIncludeInFeed = false, ?int $campaignId = null): bool
 {
     $stmt = $pdo->prepare("
         UPDATE links
@@ -684,36 +609,20 @@ function updateLink(
             force_include_in_feed    = :force_include_in_feed,
             include_in_token_webhook = :include_in_token_webhook,
             include_in_email         = :include_in_email,
-            campaign_id              = :campaign_id,
-            type                     = :type,
-            recipient_name           = :recipient_name,
-            recipient_email          = :recipient_email,
-            notes                    = :notes,
-            burn_after_first_hit     = :burn_after_first_hit,
-            expires_at               = :expires_at,
-            document_kind            = :document_kind,
-            document_label           = :document_label
+            campaign_id              = :campaign_id
         WHERE id = :id
     ");
 
     return $stmt->execute([
-        ':id'                       => $id,
-        ':token'                    => $token,
-        ':destination'              => $destination,
-        ':description'              => $description,
-        ':exclude_from_feed'        => $excludeFromFeed ? 1 : 0,
-        ':force_include_in_feed'    => $forceIncludeInFeed ? 1 : 0,
+        ':id'                      => $id,
+        ':token'                   => $token,
+        ':destination'             => $destination,
+        ':description'             => $description,
+        ':exclude_from_feed'       => $excludeFromFeed ? 1 : 0,
+        ':force_include_in_feed'   => $forceIncludeInFeed ? 1 : 0,
         ':include_in_token_webhook' => $includeInTokenWebhook ? 1 : 0,
-        ':include_in_email'         => $includeInEmail ? 1 : 0,
-        ':campaign_id'              => $campaignId,
-        ':type'                     => $type,
-        ':recipient_name'           => $recipientName !== '' ? $recipientName : null,
-        ':recipient_email'          => $recipientEmail !== '' ? $recipientEmail : null,
-        ':notes'                    => $notes !== '' ? $notes : null,
-        ':burn_after_first_hit'     => $burnAfterFirstHit ? 1 : 0,
-        ':expires_at'               => $expiresAt,
-        ':document_kind'            => $documentKind,
-        ':document_label'           => $documentLabel,
+        ':include_in_email'        => $includeInEmail ? 1 : 0,
+        ':campaign_id'             => $campaignId,
     ]);
 }
 
@@ -834,10 +743,6 @@ function logClick(PDO $pdo, array $link, array $requestData): void
         ':is_bot' => !empty($requestData['is_bot']) ? 1 : 0,
         ':bot_reason' => $requestData['bot_reason'] ?? null,
     ]);
-
-    if ((int) ($link['burn_after_first_hit'] ?? 0) === 1 && $firstForToken === 1 && !empty($link['id'])) {
-        deactivateLink($pdo, (int) $link['id']);
-    }
 }
 
 function getRecentClicks(PDO $pdo, int $limit = 100): array
@@ -1087,13 +992,6 @@ function getRecentClicksAdvancedFilteredPaged(
             l.exclude_from_feed,
             l.include_in_token_webhook,
             l.campaign_id,
-            l.type,
-            l.recipient_name,
-            l.recipient_email,
-            l.burn_after_first_hit,
-            l.expires_at,
-            l.document_kind,
-            l.document_label,
             camp.name AS campaign_name
         FROM clicks c
         LEFT JOIN links l ON c.link_id = l.id
