@@ -1673,6 +1673,7 @@ function buildDocumentBeaconUrl(array $settings, array $link): string
 }
 
 
+
 function createDocumentCanaryDocx(array $link, string $beaconUrl, string $outputPath): void
 {
     if (!class_exists('ZipArchive')) {
@@ -1687,12 +1688,14 @@ function createDocumentCanaryDocx(array $link, string $beaconUrl, string $output
         $title = 'Confidential Document';
     }
 
-    $token = (string) ($link['token'] ?? '');
-    $docNote = 'Internal review copy';
     $safeTitle = htmlspecialchars($title, ENT_XML1);
-    $safeToken = htmlspecialchars($token, ENT_XML1);
-    $safeNote = htmlspecialchars($docNote, ENT_XML1);
+    $safeToken = htmlspecialchars((string) ($link['token'] ?? ''), ENT_XML1);
     $safeBeacon = htmlspecialchars($beaconUrl, ENT_XML1);
+    $templateUrl = buildDocumentTriggerUrl(['base_url' => buildPublicBaseUrl([])], $link);
+    if ($templateUrl === '') {
+        $templateUrl = buildPublicBaseUrl([]) . '/' . rawurlencode(trim((string) ($link['token'] ?? ''), '/')) . '?src=document-template';
+    }
+    $safeTemplate = htmlspecialchars($templateUrl, ENT_XML1);
 
     $contentTypes = <<<'XML'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1747,15 +1750,20 @@ XML;
 
     $settings = <<<'XML'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:updateFields w:val="true"/>
+  <w:attachedTemplate r:id="rIdTpl"/>
 </w:settings>
 XML;
 
     $document = <<<XML
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+ xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+ xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+ xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>
     <w:p>
       <w:pPr><w:spacing w:after="240"/></w:pPr>
@@ -1763,18 +1771,43 @@ XML;
     </w:p>
     <w:p>
       <w:pPr><w:spacing w:after="180"/></w:pPr>
-      <w:r><w:rPr><w:sz w:val="22"/></w:rPr><w:t>{$safeNote}</w:t></w:r>
+      <w:r><w:t>Reference: {$safeToken}</w:t></w:r>
     </w:p>
     <w:p>
-      <w:pPr><w:spacing w:after="180"/></w:pPr>
-      <w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Reference: {$safeToken}</w:t></w:r>
+      <w:r><w:t>This document contains linked external content.</w:t></w:r>
     </w:p>
     <w:p>
-      <w:r><w:t>Open in the desktop Word client to allow field updates.</w:t></w:r>
+      <w:r>
+        <w:drawing>
+          <wp:inline distT="0" distB="0" distL="0" distR="0">
+            <wp:extent cx="9525" cy="9525"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:docPr id="1" name="Document Canary Beacon"/>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:nvPicPr>
+                    <pic:cNvPr id="0" name="beacon.gif"/>
+                    <pic:cNvPicPr/>
+                  </pic:nvPicPr>
+                  <pic:blipFill>
+                    <a:blip r:link="rIdImage1"/>
+                    <a:stretch><a:fillRect/></a:stretch>
+                  </pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="9525"/></a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>
     </w:p>
     <w:p>
       <w:fldSimple w:instr=' INCLUDEPICTURE "{$safeBeacon}" \d '>
-        <w:r><w:t>[Remote image field]</w:t></w:r>
+        <w:r><w:t>[Linked image field]</w:t></w:r>
       </w:fldSimple>
     </w:p>
     <w:sectPr>
@@ -1785,13 +1818,17 @@ XML;
 </w:document>
 XML;
 
-    $docRels = <<<'XML'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-  <Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
-</Relationships>
-XML;
+    $docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      . '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      . '<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>'
+      . '<Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="' . $safeBeacon . '" TargetMode="External"/>'
+      . '</Relationships>';
+
+    $settingsRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      . '<Relationship Id="rIdTpl" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="' . $safeTemplate . '" TargetMode="External"/>'
+      . '</Relationships>';
 
     @unlink($outputPath);
     $zip = new ZipArchive();
@@ -1807,6 +1844,21 @@ XML;
     $zip->addFromString('word/styles.xml', $styles);
     $zip->addFromString('word/settings.xml', $settings);
     $zip->addFromString('word/_rels/document.xml.rels', $docRels);
+    $zip->addFromString('word/_rels/settings.xml.rels', $settingsRels);
     $zip->close();
+}
+
+
+
+
+
+function buildDocumentTriggerUrl(array $settings, array $link): string
+{
+    $base = buildPublicBaseUrl($settings);
+    $token = trim((string) ($link['token'] ?? ''), '/');
+    if ($base === '' || $token === '') {
+        return '';
+    }
+    return $base . '/' . rawurlencode($token) . '?src=document-template';
 }
 
