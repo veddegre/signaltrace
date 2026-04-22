@@ -1448,13 +1448,22 @@ function renderAdminPage(
                     </tr>
 		    <?php foreach ($links as $link): ?>
 		   <?php
-            $tokenUrl = $baseUrl !== ''
-                ? rtrim($baseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
-                : '';
+            $effectiveBaseUrl = $baseUrl;
+                        if ($effectiveBaseUrl === '') {
+                            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                            $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+                            if ($host !== '') {
+                                $effectiveBaseUrl = $scheme . '://' . $host;
+                            }
+                        }
 
-		        $pixelUrl = $baseUrl !== ''
-		            ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
-		            : '';
+                        $tokenUrl = $effectiveBaseUrl !== ''
+                            ? rtrim($effectiveBaseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
+                            : '';
+
+                        $pixelUrl = $effectiveBaseUrl !== ''
+                            ? rtrim($effectiveBaseUrl, '/') . '/pixel/' . ltrim((string) $link['token'], '/') . '.gif'
+                            : '';
 		        ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
