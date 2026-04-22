@@ -24,6 +24,8 @@
 
 SignalTrace is a self-hosted tracking and analysis platform for honeypot deployment, link tracking, and security visibility. It logs every interaction with custom paths, scores each request for bot or human likelihood, and makes the results immediately usable for investigation, automation, or SIEM integration.
 
+SignalTrace also supports campaigns — grouping multiple tokens into a single operational context. This allows activity across links and pixels to be correlated, filtered, and alerted on as a single scenario.
+
 It runs on Docker or bare metal with no external services required.
 
 Includes built-in Splunk dashboards, a Grafana dashboard, and SIEM-ready export endpoints.
@@ -59,7 +61,9 @@ SignalTrace provides real-time, explainable scoring — every classification is 
 
 Every hit gets a 0–100 human-likelihood score with named signal reasons. The built-in threat feed at `/feed/ips.txt` is ready to consume from a firewall or block list. The JSON and CSV export endpoints support token-based authentication for scheduled Splunk ingestion.
 
-**Use cases:** phishing simulations, honeypot deployments, recon detection, link tracking, and threat feed generation.
+SignalTrace also supports campaigns, allowing multiple tokens to be grouped into a single operational context for correlation, filtering, and alerting.
+
+**Use cases:** phishing simulations, campaign-based tracking, honeypot deployments, recon detection, link tracking, and threat feed generation.
 
 ---
 
@@ -72,6 +76,7 @@ SignalTrace processes every request in real time:
 3. A score (0–100) is calculated
 4. Classification is assigned (bot → human)
 5. Results are immediately available via dashboard, feed, or API
+6. Results can be grouped and analyzed at the campaign level for correlation across multiple tokens
 
 ---
 
@@ -104,7 +109,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The admin panel will be available at `http://localhost/admin`.
+The admin panel will be available at `http://localhost/admin` by default. In production deployments, access it via your configured domain (e.g. `https://your-domain/admin`).
 
 ---
 
@@ -157,9 +162,10 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 
 * **Tracking:** custom tokens with redirect, full request logging, visitor fingerprinting, tracking pixel, GeoIP enrichment.
 * **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout.
+* **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
-* **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, force-include canary tokens, per-token webhook opt-in, per-token email opt-in, pixel URL generation.
+* **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, force-include tokens, per-token webhook opt-in, per-token email opt-in, pixel URL generation, and campaign assignment.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
 * **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
@@ -167,8 +173,8 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Skip patterns:** exact, contains, and prefix matching to suppress known noise.
 * **Threat feed:** ten endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, CIDR, MISP event, and STIX 2.1 bundle formats.
 * **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold. Platform presets for Slack, Discord, Teams, PagerDuty, and custom JSON. Inline test button. Custom payload templates with `{{placeholder}}` syntax.
-* **Token webhook:** fires when a known tracked token is hit. Per-token opt-in. Separate URL and payload template from the threat webhook.
-* **Email alerting:** plain text SMTP alerts for threats and canary token hits. Per-token opt-in. Configurable threshold and deduplication window.
+* **Token webhook:** fires when a known tracked token is hit. Per-token opt-in, with campaign-level fallback when a token is not opted in but belongs to a campaign with webhook enabled.
+* **Email alerting:** plain text SMTP alerts for threats and tracked token hits. Per-token opt-in. Configurable threshold and deduplication window.
 * **Redirect rate limiting:** per IP per token, configurable count and window.
 * **Cleanup tools:** delete by token, IP, filter, or unknown-token hits.
 * **Data retention:** configurable retention window with manual trigger and automatic cleanup.
