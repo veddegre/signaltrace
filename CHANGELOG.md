@@ -6,7 +6,7 @@
 
 ### Bug Fix
 
-Correct error in title during the default seed in dp.php
+* Correct error in title during the default seed in dp.php
 
 ---
 
