@@ -414,6 +414,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $dateTo         = trim((string) ($_GET['date_to']   ?? ''));
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
     $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
+    $showHidden     = isset($_GET['show_hidden'])     && $_GET['show_hidden']     === '1';
     $asnRules       = getAsnRules($pdo);
 
     // Pagination
@@ -433,6 +434,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
         $dateTo   !== '' ? $dateTo   : null,
         $hostFilter !== '' ? $hostFilter : null,
         $campaignFilter > 0 ? $campaignFilter : null,
+        !$showHidden,
     );
 
     $totalPages  = $pageSize > 0 ? max(1, (int) ceil($totalCount / $pageSize)) : 1;
@@ -472,6 +474,7 @@ function handleAdminPage(PDO $pdo, array $settings): void
     if ($showAll)              $refreshParams['show_all']        = '1';
     if ($hideBehavioral)       $refreshParams['hide_behavioral'] = '1';
     if ($hideSubdomains)       $refreshParams['hide_subdomains'] = '1';
+    if ($showHidden)           $refreshParams['show_hidden']     = '1';
     if ($dateFrom      !== '') $refreshParams['date_from']       = $dateFrom;
     if ($dateTo        !== '') $refreshParams['date_to']         = $dateTo;
 

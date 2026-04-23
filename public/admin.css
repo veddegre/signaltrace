@@ -790,6 +790,7 @@ tr:hover td { background: var(--surface-alt); }
 .badge-uncertain { background: var(--likely-bg);     color: var(--likely-text);     }
 .badge-suspicious   { background: var(--suspicious-bg); color: var(--suspicious-text); }
 .badge-bot          { background: var(--bot-bg);        color: var(--bot-text);        }
+.badge-muted        { background: var(--border);        color: var(--muted);           }
 
 .score-pill {
     display: inline-block;

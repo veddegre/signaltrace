@@ -147,6 +147,13 @@ function initializeDatabase(PDO $pdo): void
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
+    $ipOverrideColumnDefinitions = [
+        'hide_from_dashboard' => 'INTEGER NOT NULL DEFAULT 0',
+    ];
+    foreach ($ipOverrideColumnDefinitions as $column => $definition) {
+        ensureColumn($pdo, 'ip_overrides', $column, $definition);
+    }
+
     $asnColumnDefinitions = [
         'exclude_from_feed' => 'INTEGER NOT NULL DEFAULT 0',
     ];
@@ -1078,6 +1085,7 @@ function getRecentClicksAdvancedFilteredPaged(
     ?string $dateTo = null,
     ?string $hostFilter = null,
     ?int $campaignId = null,
+    bool $hideHiddenIps = true,
 ): array {
     $sql = "
         SELECT
@@ -1164,6 +1172,16 @@ function getRecentClicksAdvancedFilteredPaged(
     if ($dateTo !== null && $dateTo !== '') {
         $sql .= " AND substr(c.clicked_at, 1, 10) <= :dateTo ";
         $params[':dateTo'] = $dateTo;
+    }
+
+    // When $hideHiddenIps is true (default) and no specific IP filter is active,
+    // exclude IPs that have an active override with hide_from_dashboard = 1.
+    // An explicit IP filter means the admin is deliberately inspecting that IP,
+    // so we always show those rows regardless of the hide flag.
+    if ($hideHiddenIps && ($ipFilter === null || $ipFilter === '')) {
+        $sql .= " AND c.ip NOT IN (
+            SELECT ip FROM ip_overrides WHERE hide_from_dashboard = 1 AND active = 1
+        ) ";
     }
 
     // COUNT query for pagination total
@@ -1914,7 +1932,7 @@ function deleteAsnRule(PDO $pdo, int $id): bool
 function getIpOverrides(PDO $pdo): array
 {
     return $pdo->query("
-        SELECT id, ip, mode, notes, active, created_at
+        SELECT id, ip, mode, notes, active, hide_from_dashboard, created_at
         FROM ip_overrides
         ORDER BY ip ASC
     ")->fetchAll();
@@ -1923,14 +1941,17 @@ function getIpOverrides(PDO $pdo): array
 function getActiveIpOverrideMap(PDO $pdo): array
 {
     $rows = $pdo->query("
-        SELECT ip, mode
+        SELECT ip, mode, hide_from_dashboard
         FROM ip_overrides
         WHERE active = 1
     ")->fetchAll();
 
     $map = [];
     foreach ($rows as $row) {
-        $map[(string) $row['ip']] = (string) $row['mode'];
+        $map[(string) $row['ip']] = [
+            'mode'                => (string) $row['mode'],
+            'hide_from_dashboard' => (int) $row['hide_from_dashboard'],
+        ];
     }
     return $map;
 }
@@ -1938,7 +1959,7 @@ function getActiveIpOverrideMap(PDO $pdo): array
 function getIpOverrideByIp(PDO $pdo, string $ip): ?array
 {
     $stmt = $pdo->prepare("
-        SELECT id, ip, mode, notes, active, created_at
+        SELECT id, ip, mode, notes, active, hide_from_dashboard, created_at
         FROM ip_overrides
         WHERE ip = :ip
         LIMIT 1
@@ -1948,34 +1969,37 @@ function getIpOverrideByIp(PDO $pdo, string $ip): ?array
     return $row ?: null;
 }
 
-function createIpOverride(PDO $pdo, string $ip, string $mode, string $notes = ''): bool
+function createIpOverride(PDO $pdo, string $ip, string $mode, string $notes = '', bool $hideFromDashboard = false): bool
 {
     $stmt = $pdo->prepare("
-        INSERT INTO ip_overrides (ip, mode, notes, active, created_at)
-        VALUES (:ip, :mode, :notes, 1, :created_at)
+        INSERT INTO ip_overrides (ip, mode, notes, active, hide_from_dashboard, created_at)
+        VALUES (:ip, :mode, :notes, 1, :hide_from_dashboard, :created_at)
     ");
     return $stmt->execute([
-        ':ip'         => $ip,
-        ':mode'       => $mode,
-        ':notes'      => $notes,
-        ':created_at' => date('c'),
+        ':ip'                  => $ip,
+        ':mode'                => $mode,
+        ':notes'               => $notes,
+        ':hide_from_dashboard' => $hideFromDashboard ? 1 : 0,
+        ':created_at'          => date('c'),
     ]);
 }
 
-function updateIpOverride(PDO $pdo, int $id, string $ip, string $mode, string $notes): bool
+function updateIpOverride(PDO $pdo, int $id, string $ip, string $mode, string $notes, bool $hideFromDashboard = false): bool
 {
     $stmt = $pdo->prepare("
         UPDATE ip_overrides
-        SET ip    = :ip,
-            mode  = :mode,
-            notes = :notes
+        SET ip                 = :ip,
+            mode               = :mode,
+            notes              = :notes,
+            hide_from_dashboard = :hide_from_dashboard
         WHERE id = :id
     ");
     return $stmt->execute([
-        ':id'    => $id,
-        ':ip'    => $ip,
-        ':mode'  => $mode,
-        ':notes' => $notes,
+        ':id'                  => $id,
+        ':ip'                  => $ip,
+        ':mode'                => $mode,
+        ':notes'               => $notes,
+        ':hide_from_dashboard' => $hideFromDashboard ? 1 : 0,
     ]);
 }
 

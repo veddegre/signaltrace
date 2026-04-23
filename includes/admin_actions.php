@@ -904,9 +904,10 @@ function handleDeleteIpClicks(PDO $pdo): void
 
 function handleCreateIpOverride(PDO $pdo): void
 {
-    $ip    = trim((string) ($_POST['ip']    ?? ''));
-    $mode  = trim((string) ($_POST['mode']  ?? 'block'));
-    $notes = trim((string) ($_POST['notes'] ?? ''));
+    $ip                = trim((string) ($_POST['ip']    ?? ''));
+    $mode              = trim((string) ($_POST['mode']  ?? 'block'));
+    $notes             = trim((string) ($_POST['notes'] ?? ''));
+    $hideFromDashboard = isset($_POST['hide_from_dashboard']) && $_POST['hide_from_dashboard'] === '1';
 
     if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
         http_response_code(400);
@@ -920,7 +921,7 @@ function handleCreateIpOverride(PDO $pdo): void
         exit;
     }
 
-    createIpOverride($pdo, $ip, $mode, $notes);
+    createIpOverride($pdo, $ip, $mode, $notes, $hideFromDashboard);
 
     // If filter params are present this was triggered from the activity feed — go back there.
     // Otherwise go to the overrides tab.
@@ -937,10 +938,11 @@ function handleCreateIpOverride(PDO $pdo): void
 
 function handleUpdateIpOverride(PDO $pdo): void
 {
-    $id    = (int) ($_POST['id']    ?? 0);
-    $ip    = trim((string) ($_POST['ip']    ?? ''));
-    $mode  = trim((string) ($_POST['mode']  ?? 'block'));
-    $notes = trim((string) ($_POST['notes'] ?? ''));
+    $id                = (int) ($_POST['id']    ?? 0);
+    $ip                = trim((string) ($_POST['ip']    ?? ''));
+    $mode              = trim((string) ($_POST['mode']  ?? 'block'));
+    $notes             = trim((string) ($_POST['notes'] ?? ''));
+    $hideFromDashboard = isset($_POST['hide_from_dashboard']) && $_POST['hide_from_dashboard'] === '1';
 
     if ($id <= 0) {
         http_response_code(400);
@@ -960,7 +962,7 @@ function handleUpdateIpOverride(PDO $pdo): void
         exit;
     }
 
-    updateIpOverride($pdo, $id, $ip, $mode, $notes);
+    updateIpOverride($pdo, $id, $ip, $mode, $notes, $hideFromDashboard);
     header('Location: /admin?tab=overrides', true, 302);
     exit;
 }

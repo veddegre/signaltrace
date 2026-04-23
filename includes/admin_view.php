@@ -268,6 +268,7 @@ function renderAdminPage(
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
     $hostFilter     = trim((string) ($_GET['host']    ?? ''));
     $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
+    $showHidden     = isset($_GET['show_hidden'])     && $_GET['show_hidden']     === '1';
 
     $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
@@ -357,7 +358,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $showHidden, $activeTab): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -389,6 +390,9 @@ function renderAdminPage(
         }
         if ($hideSubdomains) {
             $params['hide_subdomains'] = '1';
+        }
+        if ($showHidden) {
+            $params['show_hidden'] = '1';
         }
         if ($hostFilter !== '') {
             $params['host'] = $hostFilter;
@@ -528,6 +532,10 @@ function renderAdminPage(
 			<label>
 			    <input type="checkbox" name="show_all" value="1" <?= (isset($_GET['show_all']) && $_GET['show_all'] === '1') ? 'checked' : '' ?>>
 			    Show all
+			</label>
+			<label>
+			    <input type="checkbox" name="show_hidden" value="1" <?= $showHidden ? 'checked' : '' ?>>
+			    Show hidden IPs
 			</label>
                 </div>
                 <div class="filter-actions">
@@ -759,7 +767,6 @@ function renderAdminPage(
                     <?php foreach ($behavioralFlags as $flag): ?>
                         <?php
                         $flagIp = (string) ($flag['ip'] ?? '');
-                        $existingMode = $ipOverrideMap[$flagIp] ?? null;
                         ?>
                         <tr>
                             <td class="mono ip-col">
@@ -777,7 +784,11 @@ function renderAdminPage(
                             <td><?= h((string) ($flag['first_seen'] ?? '')) ?></td>
                             <td><?= h((string) ($flag['last_seen'] ?? '')) ?></td>
                             <td class="actions-col">
-                                <?php if ($existingMode === null): ?>
+                                <?php
+                                $existingOverride = $ipOverrideMap[$flagIp] ?? null;
+                                $existingMode     = $existingOverride['mode'] ?? null;
+                                ?>
+                                <?php if ($existingOverride === null): ?>
                                     <form method="post" action="/admin/create-ip-override" class="inline-action-form">
                                         <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
                                         <input type="hidden" name="mode" value="block">
@@ -790,10 +801,20 @@ function renderAdminPage(
                                         <input type="hidden" name="notes" value="Added from behavioral flags">
                                         <button type="submit" class="warning-button">Allow</button>
                                     </form>
+                                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                        <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
+                                        <input type="hidden" name="mode" value="block">
+                                        <input type="hidden" name="hide_from_dashboard" value="1">
+                                        <input type="hidden" name="notes" value="Added from behavioral flags">
+                                        <button type="submit">Hide</button>
+                                    </form>
                                 <?php else: ?>
                                     <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
                                         <?= h($existingMode) ?>
                                     </span>
+                                    <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
+                                        <span class="badge badge-muted">hidden</span>
+                                    <?php endif; ?>
                                     <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
                                 <?php endif; ?>
                             </td>
@@ -879,9 +900,12 @@ function renderAdminPage(
                         <?php endif; ?>
                     </div>
                 </div>
-                <?php $summaryOverrideMode = $ipOverrideMap[$ipFilter] ?? null; ?>
+                <?php
+                $summaryOverride = $ipOverrideMap[$ipFilter] ?? null;
+                $summaryOverrideMode = $summaryOverride['mode'] ?? null;
+                ?>
                 <div style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
-                    <?php if ($summaryOverrideMode === null): ?>
+                    <?php if ($summaryOverride === null): ?>
                         <form method="post" action="/admin/create-ip-override" class="inline-action-form">
                             <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
                             <input type="hidden" name="mode" value="block">
@@ -894,10 +918,20 @@ function renderAdminPage(
                             <input type="hidden" name="notes" value="Added from IP summary">
                             <button type="submit" class="warning-button">Allow IP</button>
                         </form>
+                        <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                            <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+                            <input type="hidden" name="mode" value="block">
+                            <input type="hidden" name="hide_from_dashboard" value="1">
+                            <input type="hidden" name="notes" value="Added from IP summary">
+                            <button type="submit">Hide IP</button>
+                        </form>
                     <?php else: ?>
                         <span class="badge <?= $summaryOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
                             IP override: <?= h($summaryOverrideMode) ?>
                         </span>
+                        <?php if ((int) ($summaryOverride['hide_from_dashboard'] ?? 0) === 1): ?>
+                            <span class="badge badge-muted">hidden from dashboard</span>
+                        <?php endif; ?>
                         <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
                     <?php endif; ?>
                 </div>
@@ -1132,8 +1166,11 @@ function renderAdminPage(
                                             <button type="submit" class="danger-button">Delete All Clicks for Token</button>
                                         </form>
 
-                                        <?php $existingOverrideMode = $ipOverrideMap[$rowIp] ?? null; ?>
-                                        <?php if ($existingOverrideMode === null): ?>
+                                        <?php
+                                        $existingOverride     = $ipOverrideMap[$rowIp] ?? null;
+                                        $existingOverrideMode = $existingOverride['mode'] ?? null;
+                                        ?>
+                                        <?php if ($existingOverride === null): ?>
                                             <form method="post" action="/admin/create-ip-override" class="inline-action-form">
                                                 <?= $filterHiddens ?>
                                                 <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
@@ -1148,10 +1185,21 @@ function renderAdminPage(
                                                 <input type="hidden" name="notes" value="Added from activity feed">
                                                 <button type="submit" class="warning-button">Allow IP</button>
                                             </form>
+                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
+                                                <?= $filterHiddens ?>
+                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
+                                                <input type="hidden" name="mode" value="block">
+                                                <input type="hidden" name="hide_from_dashboard" value="1">
+                                                <input type="hidden" name="notes" value="Added from activity feed">
+                                                <button type="submit">Hide IP</button>
+                                            </form>
                                         <?php else: ?>
                                             <span class="badge <?= $existingOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
                                                 IP override: <?= h($existingOverrideMode) ?>
                                             </span>
+                                            <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
+                                                <span class="badge badge-muted">hidden</span>
+                                            <?php endif; ?>
                                             <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
                                         <?php endif; ?>
                                     </div>
@@ -1786,6 +1834,11 @@ function renderAdminPage(
                     <option value="allow" <?= $editOverride['mode'] === 'allow' ? 'selected' : '' ?>>Allow — always classify as human (score 100)</option>
                 </select>
 
+                <label>
+                    <input type="checkbox" name="hide_from_dashboard" value="1" <?= ((int) ($editOverride['hide_from_dashboard'] ?? 0) === 1) ? 'checked' : '' ?>>
+                    Hide from dashboard — suppress this IP from the activity feed (still logged &amp; scored normally)
+                </label>
+
                 <label for="edit_override_notes">Notes</label>
                 <input id="edit_override_notes" type="text" name="notes" value="<?= h((string) ($editOverride['notes'] ?? '')) ?>" placeholder="Optional note">
 
@@ -1801,7 +1854,7 @@ function renderAdminPage(
 
             <form method="post" action="/admin/create-ip-override">
                 <h2>Add IP Override</h2>
-                <p class="muted">Overrides bypass scoring entirely. Blocked IPs are always classified as bot (score 0). Allowed IPs are always classified as human (score 100). Applies to future requests only.</p>
+                <p class="muted">Block/Allow bypass scoring entirely. Optionally hide the IP from the dashboard activity feed — it will still be logged and scored. Applies to future requests only.</p>
 
                 <label for="override_ip">IP Address</label>
                 <input id="override_ip" type="text" name="ip" required placeholder="1.2.3.4 or 2001:db8::1">
@@ -1811,6 +1864,11 @@ function renderAdminPage(
                     <option value="block">Block — always classify as bot (score 0)</option>
                     <option value="allow">Allow — always classify as human (score 100)</option>
                 </select>
+
+                <label>
+                    <input type="checkbox" name="hide_from_dashboard" value="1">
+                    Hide from dashboard — suppress from activity feed (still logged &amp; scored)
+                </label>
 
                 <label for="override_notes">Notes</label>
                 <input id="override_notes" type="text" name="notes" placeholder="Optional note (e.g. monitoring service, your office IP)">
@@ -1827,6 +1885,7 @@ function renderAdminPage(
                     <tr>
                         <th>IP</th>
                         <th>Mode</th>
+                        <th>Hidden</th>
                         <th>Notes</th>
                         <th>Active</th>
                         <th>Created</th>
@@ -1839,6 +1898,13 @@ function renderAdminPage(
                                 <span class="badge <?= $override['mode'] === 'block' ? 'badge-bot' : 'badge-human' ?>">
                                     <?= h((string) $override['mode']) ?>
                                 </span>
+                            </td>
+                            <td>
+                                <?php if ((int) ($override['hide_from_dashboard'] ?? 0) === 1): ?>
+                                    <span class="badge badge-muted">hidden</span>
+                                <?php else: ?>
+                                    <span class="muted">—</span>
+                                <?php endif; ?>
                             </td>
                             <td><?= h((string) ($override['notes'] ?? '')) ?></td>
                             <td><?= ((int) $override['active'] === 1) ? 'Yes' : 'No' ?></td>
