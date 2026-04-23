@@ -165,7 +165,7 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
-* **Token management:** create/edit/activate/deactivate/delete, per-token feed exclusion, force-include tokens, per-token webhook opt-in, per-token email opt-in, pixel URL generation, and campaign assignment.
+* Token management: create/edit/activate/deactivate/delete, deployment templates (URL, HTML, markdown, pixel, email-safe button), per-token feed exclusion, force-include tokens, webhook and email controls.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
 * **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.

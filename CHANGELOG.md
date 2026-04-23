@@ -2,6 +2,41 @@
 
 ---
 
+## [v2.9.0] — UI Cleanup and Workflow Improvements
+
+### Token Workflow Improvements
+
+Token links on the Tokens page now link directly to the Dashboard with filtering applied. Clicking a token opens a focused view filtered to that token and automatically hides behavioral and subdomain panels, creating a faster investigation workflow.
+
+### Campaign Edit UI
+
+The inline campaign edit form has been redesigned for clarity and alignment:
+
+- Inputs are now arranged in a structured grid
+- Active and fallback options are grouped and aligned
+- Save and Cancel buttons are consistently positioned
+- The edit panel now renders as a proper UI block instead of appearing like a duplicate table header
+
+### Token Table Cleanup
+
+Removed the Path URL and Pixel URL columns from the Tokens table. These were redundant with the deployment templates panel and caused unnecessary truncation and visual noise.
+
+The Templates panel now serves as the single source for all deployment formats (URL, HTML, markdown, pixel, email-safe button).
+
+### Action Button Consistency
+
+All primary actions (View Activity, Edit, Templates, Activate/Deactivate) now use consistent styling and alignment across the UI.
+
+Resolved inconsistencies where some buttons rendered as outlined instead of primary.
+
+### UX Improvements
+
+- Improved spacing and alignment across campaign and token views
+- Reduced visual clutter in tables
+- Better separation between table rows and inline edit panels
+
+---
+
 ## [v2.8.2] — Seed Data and Schema Compatibility Fixes
 
 ### Seed File Fixes
