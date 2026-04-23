@@ -44,6 +44,9 @@ function signalLabel(string $signal): ?string
         'multi_token_scan'         => 'Multi-token scan (hit multiple paths)',
         'self_referer_root'        => 'Request from own domain (self-referrer)',
         'self_referer'             => 'Request from own domain (self-referrer)',
+        'admin_path_without_access'              => 'Admin access without CF',
+        'admin_path_invalid_cf_access_token'     => 'Invalid CF Access token',
+        'admin_path_cf_access_audience_mismatch' => 'CF Access audience mismatch',
     ];
 
     return $map[$signal] ?? null;

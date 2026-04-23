@@ -18,6 +18,100 @@ if (!defined('AUTH_LOCKOUT_SECS')) define('AUTH_LOCKOUT_SECS', 900);
    When CF_ACCESS_ENABLED is false (default), this is a no-op.
    When DEMO_MODE is true, verification is skipped entirely.
    ====================================================== */
+
+function denyAccess(): never
+{
+    http_response_code(403);
+    exit('Access denied.');
+}
+
+function redirectToDefault(): never
+{
+    $url = defined('DEFAULT_REDIRECT_URL') && DEFAULT_REDIRECT_URL !== ''
+        ? DEFAULT_REDIRECT_URL
+        : '/';
+
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Location: ' . $url, true, 302);
+    exit;
+}
+
+/**
+ * Logs a direct /admin probe as a regular SignalTrace click attempt so it
+ * appears in the activity feed, behavioral panels, exports, and alerting.
+ *
+ * Only logs when Cloudflare Access is enabled and this is not demo mode.
+ */
+function logProtectedAdminProbe(string $reason): void
+{
+    if (!defined('CF_ACCESS_ENABLED') || !CF_ACCESS_ENABLED) {
+        return;
+    }
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        return;
+    }
+
+    try {
+        $pdo = db();
+
+        // Build the same request shape as the normal tracking pipeline.
+        $requestData = function_exists('collectRequestData')
+            ? collectRequestData('/admin', $pdo)
+            : [
+                'event_type'      => 'click',
+                'ip'              => function_exists('getClientIp') ? getClientIp() : ($_SERVER['REMOTE_ADDR'] ?? null),
+                'user_agent'      => $_SERVER['HTTP_USER_AGENT'] ?? null,
+                'referer'         => $_SERVER['HTTP_REFERER'] ?? null,
+                'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null,
+                'accept'          => $_SERVER['HTTP_ACCEPT'] ?? null,
+                'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? null,
+                'request_method'  => $_SERVER['REQUEST_METHOD'] ?? 'GET',
+                'host'            => $_SERVER['HTTP_HOST'] ?? null,
+                'scheme'          => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http',
+                'request_uri'     => $_SERVER['REQUEST_URI'] ?? '/admin',
+                'query_string'    => $_SERVER['QUERY_STRING'] ?? null,
+                'remote_port'     => $_SERVER['REMOTE_PORT'] ?? null,
+                'sec_fetch_site'  => $_SERVER['HTTP_SEC_FETCH_SITE'] ?? null,
+                'sec_fetch_mode'  => $_SERVER['HTTP_SEC_FETCH_MODE'] ?? null,
+                'sec_fetch_dest'  => $_SERVER['HTTP_SEC_FETCH_DEST'] ?? null,
+                'sec_ch_ua'       => $_SERVER['HTTP_SEC_CH_UA'] ?? null,
+                'sec_ch_ua_platform' => $_SERVER['HTTP_SEC_CH_UA_PLATFORM'] ?? null,
+                'is_bot'          => 1,
+                'bot_reason'      => 'protected_admin_probe',
+            ];
+
+        // Force this into a very strong bot-like classification while keeping
+        // any existing request-derived reasons for investigation value.
+        $existingReasons = trim((string) ($requestData['confidence_reason'] ?? ''));
+        $reasons = array_filter(array_map('trim', array_merge(
+            $existingReasons !== '' ? explode(',', $existingReasons) : [],
+            ['admin_path_without_access', $reason]
+        )));
+
+        $requestData['event_type'] = 'click';
+        $requestData['confidence_score'] = 0;
+        $requestData['confidence_label'] = 'bot';
+        $requestData['confidence_reason'] = implode(', ', array_unique($reasons));
+        $requestData['is_bot'] = 1;
+        $requestData['bot_reason'] = $reason;
+
+        // Insert as an ordinary unknown-path attempt.
+        logClick($pdo, [
+            'id'          => null,
+            'token'       => 'admin',
+            'destination' => '',
+        ], $requestData);
+
+        // Route it through the normal alerting / cleanup behavior.
+        maybeFireAlert($pdo, $requestData);
+        maybeFireEmailAlert($pdo, $requestData);
+        maybeRunAutoCleanup($pdo);
+    } catch (\Throwable $e) {
+        error_log('SignalTrace: failed to log protected admin probe: ' . $e->getMessage());
+    }
+}
+
 function verifyCfAccessJwt(): void
 {
     // Skip if CF Access is not enabled or this is a demo instance.
@@ -32,15 +126,18 @@ function verifyCfAccessJwt(): void
     // use their own token-based authentication and must not require a CF
     // Access session — Splunk, Grafana, and firewalls hit those paths directly.
     $requestPath = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
-    if (!str_starts_with($requestPath, '/admin')) {
+    if (!str_starts_with((string) $requestPath, '/admin')) {
         return;
     }
 
     $jwt = $_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'] ?? '';
 
+    // No JWT at all: likely direct-origin access or opportunistic scanning.
+    // Log it as a normal SignalTrace attempt and redirect to the default
+    // redirect URL to match the rest of the product behavior.
     if ($jwt === '') {
-        http_response_code(403);
-        exit('Access denied: Cloudflare Access authentication required.');
+        logProtectedAdminProbe('admin_path_no_cf_access_header');
+        redirectToDefault();
     }
 
     $aud        = defined('CF_ACCESS_AUD')         ? CF_ACCESS_AUD         : '';
@@ -85,8 +182,8 @@ function verifyCfAccessJwt(): void
         $decoded = \Firebase\JWT\JWT::decode($jwt, $keySet);
     } catch (\Throwable $e) {
         error_log('SignalTrace: CF Access JWT validation failed: ' . $e->getMessage());
-        http_response_code(403);
-        exit('Access denied: invalid or expired Cloudflare Access token.');
+        logProtectedAdminProbe('admin_path_invalid_cf_access_token');
+        denyAccess();
     }
 
     // Verify the audience claim matches this application.
@@ -101,8 +198,8 @@ function verifyCfAccessJwt(): void
 
     if (!$audMatches) {
         error_log('SignalTrace: CF Access JWT audience mismatch.');
-        http_response_code(403);
-        exit('Access denied: token audience mismatch.');
+        logProtectedAdminProbe('admin_path_cf_access_audience_mismatch');
+        denyAccess();
     }
 }
 
