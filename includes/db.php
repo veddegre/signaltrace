@@ -321,7 +321,7 @@ function ensureColumn(PDO $pdo, string $table, string $column, string $definitio
 function seedDefaultSettings(PDO $pdo): void
 {
     $defaults = [
-        'app_name'                   => 'SignalTrace',
+        'app_name'                   => 'SignalTrace Tracking & Analysis',
         'base_url'                   => '',
         'default_redirect_url'       => 'https://example.com/',
         'unknown_path_behavior'      => 'redirect',
