@@ -2,6 +2,36 @@
 
 ---
 
+## [v2.9.2] — Settings Simplification and Demo Mode Locking
+
+### Settings Cleanup
+
+Removed the **Pixel Enabled** setting from the admin panel. Pixel tracking is now always active when using template-generated pixel URLs, eliminating redundant configuration and simplifying the user experience.
+
+### UI Improvements
+
+Simplified the Settings tab by removing unused controls and reducing visual clutter. The interface now focuses only on relevant, actionable configuration options.
+
+### Demo Mode Behavior
+
+Wildcard DNS mode is now read-only in demo mode:
+
+- Displays current state (Enabled/Disabled)
+
+- Cannot be modified while demo mode is active
+
+- Prevents unintended configuration changes during demonstrations
+
+### Tracking Behavior
+
+Pixel tracking is automatically triggered when using:
+
+- `/pixel/{token}.gif`
+
+No additional configuration is required.
+
+---
+
 ## [v2.9.1] - Minor Bug Fix
 
 ### Bug Fix
