@@ -809,9 +809,7 @@ function renderAdminPage(
                                         <button type="submit">Hide</button>
                                     </form>
                                 <?php else: ?>
-                                    <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
-                                        <?= h($existingMode) ?>
-                                    </span>
+                                    <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : ($existingMode === 'allow' ? 'badge-human' : 'badge-muted') ?>"><?= h($existingMode) ?></span>
                                     <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
                                         <span class="badge badge-muted">hidden</span>
                                     <?php endif; ?>
@@ -926,7 +924,7 @@ function renderAdminPage(
                             <button type="submit">Hide IP</button>
                         </form>
                     <?php else: ?>
-                        <span class="badge <?= $summaryOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                        <span class="badge <?= $summaryOverrideMode === 'block' ? 'badge-bot' : ($summaryOverrideMode === 'allow' ? 'badge-human' : 'badge-muted') ?>">
                             IP override: <?= h($summaryOverrideMode) ?>
                         </span>
                         <?php if ((int) ($summaryOverride['hide_from_dashboard'] ?? 0) === 1): ?>
@@ -1194,7 +1192,7 @@ function renderAdminPage(
                                                 <button type="submit">Hide IP</button>
                                             </form>
                                         <?php else: ?>
-                                            <span class="badge <?= $existingOverrideMode === 'block' ? 'badge-bot' : 'badge-human' ?>">
+                                            <span class="badge <?= $existingOverrideMode === 'block' ? 'badge-bot' : ($existingOverrideMode === 'allow' ? 'badge-human' : 'badge-muted') ?>">
                                                 IP override: <?= h($existingOverrideMode) ?>
                                             </span>
                                             <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
@@ -1830,6 +1828,7 @@ function renderAdminPage(
 
                 <label for="edit_override_mode">Mode</label>
                 <select id="edit_override_mode" name="mode">
+                    <option value="none"  <?= $editOverride['mode'] === 'none'  ? 'selected' : '' ?>>None — score normally (use for hide-only overrides)</option>
                     <option value="block" <?= $editOverride['mode'] === 'block' ? 'selected' : '' ?>>Block — always classify as bot (score 0)</option>
                     <option value="allow" <?= $editOverride['mode'] === 'allow' ? 'selected' : '' ?>>Allow — always classify as human (score 100)</option>
                 </select>
@@ -1861,6 +1860,7 @@ function renderAdminPage(
 
                 <label for="override_mode">Mode</label>
                 <select id="override_mode" name="mode">
+                    <option value="none">None — score normally (use for hide-only overrides)</option>
                     <option value="block">Block — always classify as bot (score 0)</option>
                     <option value="allow">Allow — always classify as human (score 100)</option>
                 </select>
@@ -1895,9 +1895,13 @@ function renderAdminPage(
                         <tr>
                             <td class="mono"><?= h((string) $override['ip']) ?></td>
                             <td>
-                                <span class="badge <?= $override['mode'] === 'block' ? 'badge-bot' : 'badge-human' ?>">
-                                    <?= h((string) $override['mode']) ?>
-                                </span>
+                                <?php if ($override['mode'] === 'block'): ?>
+                                    <span class="badge badge-bot">block</span>
+                                <?php elseif ($override['mode'] === 'allow'): ?>
+                                    <span class="badge badge-human">allow</span>
+                                <?php else: ?>
+                                    <span class="badge badge-muted">none</span>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php if ((int) ($override['hide_from_dashboard'] ?? 0) === 1): ?>
