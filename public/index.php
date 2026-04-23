@@ -269,24 +269,43 @@ if ($pixelEnabled && preg_match('#^/pixel/(.+)\.gif$#', $path)) {
    ============================================================ */
 /* ============================================================
    ADMIN SUBDOMAIN REDIRECT
-   If CF_ACCESS_ENABLED is set and the request host matches the
-   configured admin subdomain, rewrite / and /admin paths cleanly.
+   If CF_ACCESS_ENABLED is set:
+   - Requests on the admin subdomain (admin.trysig.win): rewrite / → /admin
+   - Requests on ANY other host for /admin paths: redirect to the
+     default redirect URL so the admin surface is not reachable via
+     the honeypot domain or random wildcard subdomains.
    ============================================================ */
-if (defined('CF_ACCESS_ENABLED') && CF_ACCESS_ENABLED) {
-    $requestHost = strtolower(trim($_SERVER['HTTP_HOST'] ?? ''));
-    if (defined('CF_ACCESS_TEAM_DOMAIN')) {
-        $baseHostPart = parse_url((string) \getSetting($pdo, 'base_url', ''), PHP_URL_HOST);
-        $adminHost = 'admin.' . ltrim((string) ($baseHostPart ?: ''), '.');
-        if ($requestHost !== '' && $adminHost !== '' && $requestHost === strtolower($adminHost)) {
+if (defined('CF_ACCESS_ENABLED') && CF_ACCESS_ENABLED && defined('CF_ACCESS_TEAM_DOMAIN')) {
+    $requestHost  = strtolower(trim($_SERVER['HTTP_HOST'] ?? ''));
+    $baseHostPart = parse_url((string) \getSetting($pdo, 'base_url', ''), PHP_URL_HOST);
+
+    // Only attempt subdomain logic when we have a valid base hostname.
+    if ($baseHostPart !== null && $baseHostPart !== '') {
+        $adminHost = 'admin.' . ltrim((string) $baseHostPart, '.');
+
+        if ($requestHost === strtolower($adminHost)) {
+            // Canonical admin subdomain — normalise root to /admin.
             if ($path === '/') {
                 $path = '/admin';
             }
+        } elseif (str_starts_with($path, '/admin')) {
+            // Non-admin host attempting to reach an /admin path.
+            // Redirect away so nothing is leaked.
+            $defaultRedirect = trim((string) ($settings['default_redirect_url'] ?? ''));
+            if ($defaultRedirect !== '' && isSafeRedirectUrl($defaultRedirect)) {
+                header('Location: ' . $defaultRedirect, true, 302);
+            } else {
+                http_response_code(404);
+                echo 'Not found';
+            }
+            exit;
         }
     }
 }
 
 if ($path === '/admin') {
     handleAdminPage($pdo, $settings);
+    exit;
 }
 
 /* ============================================================
