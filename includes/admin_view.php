@@ -1459,20 +1459,9 @@ function renderAdminPage(
                         <th>Force Feed</th>
                         <th>Token Webhook</th>
                         <th>Email Alert</th>
-                        <th>Path URL</th>
-                        <th>Pixel URL</th>
                         <th class="actions-col">Actions</th>
                     </tr>
 		    <?php foreach ($links as $link): ?>
-		   <?php
-            $tokenUrl = $baseUrl !== ''
-                ? rtrim($baseUrl, '/') . '/' . ltrim((string) $link['token'], '/')
-                : '';
-
-		        $pixelUrl = $baseUrl !== ''
-		            ? rtrim($baseUrl, '/') . '/pixel/' . $link['token'] . '.gif'
-		            : '';
-		        ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
 		    <td class="mono">
@@ -1525,24 +1514,6 @@ function renderAdminPage(
 		        <?php endif; ?>
 		    </td>
 
-		    <td class="mono wrap">
-		        <?php if ($tokenUrl !== ''): ?>
-		            <div class="url-cell">
-		                <span><?= h($tokenUrl) ?></span>
-		                <button type="button" class="copy-button" data-copy="<?= h($tokenUrl) ?>">Copy</button>
-		            </div>
-		        <?php endif; ?>
-		    </td>
-
-		    <td class="mono wrap">
-		        <?php if ($pixelUrl !== ''): ?>
-		            <div class="url-cell">
-		                <span><?= h($pixelUrl) ?></span>
-		                <button type="button" class="copy-button" data-copy="<?= h($pixelUrl) ?>">Copy</button>
-		            </div>
-		        <?php endif; ?>
-		    </td>
-
 		    <td class="actions-col token-actions-cell">
                         <div class="button-row token-action-row">
 			   <form method="get" action="/admin" class="inline-action-form">
@@ -1582,7 +1553,7 @@ function renderAdminPage(
 		</tr>
                 <?php $tokenTemplates = buildTokenDeploymentSnippets($baseUrl, $link); ?>
                 <tr id="token-templates-<?= (int) $link['id'] ?>" class="template-row" style="display:none;">
-                    <td colspan="14" class="template-cell">
+                    <td colspan="12" class="template-cell">
                         <div class="deployment-panel">
                             <strong class="template-title">Deployment Templates for <?= h(normalizeTokenPath((string) $link['token'])) ?></strong>
                             <div class="snippet-grid">
