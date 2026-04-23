@@ -1234,32 +1234,48 @@ function renderAdminPage(
                     </td>
                 </tr>
 
-                <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;">
-                    <td colspan="10">
-                        <form method="post" action="/admin/update-campaign" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:8px 0;">
-                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
-                            <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
-                            <div>
-                                <label style="font-size:0.8125rem;">Name</label>
-                                <input type="text" name="campaign_name" required value="<?= h((string) $campaign['name']) ?>" style="width:180px;">
-                            </div>
-                            <div>
-                                <label style="font-size:0.8125rem;">Description</label>
-                                <input type="text" name="campaign_description" value="<?= h((string) ($campaign['description'] ?? '')) ?>" style="width:220px;">
-                            </div>
-                            <div style="display:flex;align-items:center;gap:4px;padding-bottom:2px;">
-                                <input type="checkbox" name="campaign_active" value="1" <?= ((int) $campaign['active'] === 1) ? 'checked' : '' ?>>
-                                <label style="font-size:0.8125rem;margin:0;">Active</label>
-                            </div>
-                            <div style="display:flex;align-items:center;gap:6px;padding-bottom:2px;">
-                                <input type="checkbox" name="webhook_enabled" value="1" <?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'checked' : '' ?>>
-                                <label style="font-size:0.8125rem;margin:0;">Fallback to token webhook</label>
-                            </div>
-                            <button type="submit">Save</button>
-                            <button type="button" class="primary-button" data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
-                                Cancel
-                            </button>
-                        </form>
+                <tr id="edit-campaign-<?= (int) $campaign['id'] ?>" style="display:none;" class="edit-row">
+                    <td colspan="10" class="edit-row-cell">
+                        <div class="inline-edit-panel campaign-edit-panel">
+                            <div class="panel-title">Edit Campaign</div>
+                            <form method="post" action="/admin/update-campaign" class="campaign-edit-form">
+                                <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
+
+                                <div class="campaign-edit-grid">
+                                    <div class="form-field">
+                                        <label for="campaign_name_<?= (int) $campaign['id'] ?>">Name</label>
+                                        <input id="campaign_name_<?= (int) $campaign['id'] ?>" type="text" name="campaign_name" required value="<?= h((string) $campaign['name']) ?>">
+                                    </div>
+
+                                    <div class="form-field">
+                                        <label for="campaign_description_<?= (int) $campaign['id'] ?>">Description</label>
+                                        <input id="campaign_description_<?= (int) $campaign['id'] ?>" type="text" name="campaign_description" value="<?= h((string) ($campaign['description'] ?? '')) ?>">
+                                    </div>
+                                </div>
+
+                                <div class="campaign-edit-actions-row">
+                                    <div class="campaign-edit-options">
+                                        <label class="checkbox-inline">
+                                            <input type="checkbox" name="campaign_active" value="1" <?= ((int) $campaign['active'] === 1) ? 'checked' : '' ?>>
+                                            <span>Active</span>
+                                        </label>
+
+                                        <label class="checkbox-inline">
+                                            <input type="checkbox" name="webhook_enabled" value="1" <?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                            <span>Fallback to token webhook</span>
+                                        </label>
+                                    </div>
+
+                                    <div class="campaign-edit-buttons">
+                                        <button type="submit">Save</button>
+                                        <button type="button" class="primary-button" data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
