@@ -2,6 +2,14 @@
 
 ---
 
+## [v2.9.1] - Minor Bug Fix
+
+### Bug Fix
+
+Correct error in title during the default seed in dp.php
+
+---
+
 ## [v2.9.0] — UI Cleanup and Workflow Improvements
 
 ### Token Workflow Improvements
