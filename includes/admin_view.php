@@ -1460,7 +1460,12 @@ function renderAdminPage(
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
 		    <td class="mono">
-		        <a class="table-link mono-link" href="<?= h($buildAdminUrl(['token' => (string) $link['token'], 'tab' => 'links'])) ?>">
+		        <a class="table-link mono-link" href="<?= h($buildDashboardUrl([
+                            'token' => (string) $link['token'],
+                            'hide_behavioral' => '1',
+                            'hide_subdomains' => '1',
+                            'page' => null,
+                        ])) ?>">
 		            <?= h((string) $link['token']) ?>
 		        </a>
 		    </td>
