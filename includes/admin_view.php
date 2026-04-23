@@ -54,7 +54,7 @@ function signalLabel(string $signal): ?string
 
 /**
  * Extracts the subdomain prefix from a host value given the configured base URL.
- * e.g. host='vpn.gvsu.site', baseUrl='https://gvsu.site' → 'vpn'
+ * e.g. host='vpn.example.com', baseUrl='https://example.com' → 'vpn'
  * Returns empty string if host matches the base domain or cannot be parsed.
  */
 function extractSubdomain(string $host, string $baseUrl): string
