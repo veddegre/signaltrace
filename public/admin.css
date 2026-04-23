@@ -1150,3 +1150,41 @@ tr:hover td { background: var(--surface-alt); }
 .token-action-row {
     align-items: center;
 }
+/* Explicit primary action styling for links and non-submit buttons */
+.primary-button,
+a.primary-button,
+button.primary-button,
+.button-link.primary-button,
+.primary-button.button-link {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border: 1px solid var(--accent) !important;
+    font-weight: 600 !important;
+}
+
+.primary-button:hover,
+a.primary-button:hover,
+button.primary-button:hover,
+.button-link.primary-button:hover,
+.primary-button.button-link:hover {
+    background: var(--accent-hover) !important;
+    color: #fff !important;
+    border-color: var(--accent-hover) !important;
+}
+
+.template-toggle-button,
+button.template-toggle-button,
+.inline-action-form .template-toggle-button {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border: 1px solid var(--accent) !important;
+    font-weight: 600 !important;
+}
+
+.template-toggle-button:hover,
+button.template-toggle-button:hover,
+.inline-action-form .template-toggle-button:hover {
+    background: var(--accent-hover) !important;
+    color: #fff !important;
+    border-color: var(--accent-hover) !important;
+}
