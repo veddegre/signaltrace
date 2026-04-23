@@ -80,6 +80,88 @@ SignalTrace processes every request in real time:
 
 ---
 
+## Screenshots
+
+### Dashboard
+
+<p align="center"> 
+  <img src="docs/images/dashboard-dark.webp" alt="SignalTrace dashboard — dark mode, showing activity feed with behaviorally flagged IPs panel" width="49%"> 
+  <img src="docs/images/dashboard-light.webp" alt="SignalTrace dashboard — light mode" width="49%"> 
+</p>
+
+<p align="center">
+  Real-time activity feed with classification badges, scores, and the Behaviorally Flagged IPs panel. Available in both dark and light themes.
+</p>
+
+---
+
+### Event Details
+
+<p align="center"> 
+  <img src="docs/images/details.webp" alt="SignalTrace event details — full request breakdown with scoring signals and actions" width="80%"> 
+</p>
+
+<p align="center">
+  Expand any event to view the full request, identity, scoring signals, headers, and inline actions — including Block IP and Allow IP.
+</p>
+
+---
+
+### Token & Rule Management
+
+<p align="center"> 
+  <img src="docs/images/tokens.webp" alt="SignalTrace token management — create and manage tracked tokens with feed exclusion" width="49%"> 
+  <img src="docs/images/skip.webp" alt="SignalTrace skip patterns — suppress known-noise paths from logging" width="49%"> 
+</p>
+
+<p align="center">
+  Create and manage tracked tokens with per-token feed controls and deployment templates, and configure skip patterns to suppress known-noise paths at the logging stage.
+</p>
+
+<p align="center"> 
+  <img src="docs/images/asn.webp" alt="SignalTrace ASN rules — apply scoring penalties and feed exclusions by autonomous system" width="49%"> 
+  <img src="docs/images/country.webp" alt="SignalTrace country rules — apply score penalties by country code" width="49%"> 
+</p>
+
+<p align="center">
+  Apply ASN-based scoring penalties and feed exclusions for specific networks, and add per-country score penalties by ISO code.
+</p>
+
+<p align="center"> 
+  <img src="docs/images/ip.webp" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
+</p>
+
+<p align="center">
+  IP overrides bypass scoring entirely — blocked IPs are always classified as bot and included in the threat feed; allowed IPs are always classified as human and excluded from the feed.
+</p>
+
+---
+
+### Splunk Dashboards
+
+<p align="center"> 
+  <img src="docs/images/splunk.webp" alt="SignalTrace Splunk Overview dashboard — SOC display with stat panels, events over time, top IPs, detection signals" width="49%"> 
+  <img src="docs/images/splunk2.webp" alt="SignalTrace Splunk Event Investigation dashboard — filterable event table with token, IP, country, and signal filters" width="49%"> 
+</p>
+
+<p align="center">
+  The Overview dashboard provides a live SOC display with stat panels, events over time, top IPs, countries, organisations, tokens, detection signals, and behavioral signal hits. The Event Investigation dashboard supports filtering by token, IP, classification, country, and detection signals for rapid investigation.
+</p>
+
+---
+
+### Grafana Dashboard
+
+<p align="center"> 
+  <img src="docs/images/grafana.webp" alt="SignalTrace Grafana dashboard — stat panels, confidence label distribution, top source IPs, top countries, and recent events table" width="80%"> 
+</p>
+
+<p align="center">
+  Pre-built Grafana dashboard using the Infinity datasource. Includes stat panels, confidence distribution, top source IPs and countries, and a recent events table — all powered by server-side aggregation endpoints with no Grafana transformations required.
+</p>
+
+---
+
 ## Requirements
 
 SignalTrace is designed to run on minimal hardware.
