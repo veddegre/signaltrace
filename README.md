@@ -242,12 +242,12 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 
 ## Features at a Glance
 
-* **Tracking:** custom tokens with redirect, full request logging, visitor fingerprinting, tracking pixel, GeoIP enrichment.
+* **Tracking:** request logging, redirect handling, visitor fingerprinting, tracking pixel support, and GeoIP/ASN enrichment applied to every hit.
 * **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout.
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
-* Token management: create/edit/activate/deactivate/delete, deployment templates (URL, HTML, markdown, pixel, email-safe button), per-token feed exclusion, force-include tokens, webhook and email controls.
+* **Token management:** create/edit/activate/deactivate/delete tokens, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
 * **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
