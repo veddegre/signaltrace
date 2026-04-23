@@ -1902,18 +1902,21 @@ function renderAdminPage(
                     </select>
 
 		    <div style="margin-bottom: 12px;">
-		         <label style="display: inline-flex; align-items: center; gap: 6px; margin-right: 16px;">
-			        <input type="checkbox" name="pixel_enabled" value="1" <?= $pixelEnabled ? 'checked' : '' ?>>
-			        <span>Pixel enabled</span>
-			 </label>
                          <label style="display: inline-flex; align-items: center; gap: 6px; margin-right: 16px;">
 			        <input type="checkbox" name="noise_filter_enabled" value="1" <?= $noiseFilterEnabled ? 'checked' : '' ?>>
 			        <span>Noise filter enabled</span>
 		         </label>
-                         <label style="display: inline-flex; align-items: center; gap: 6px;">
-			        <input type="checkbox" name="wildcard_mode" value="1" <?= $wildcardMode ? 'checked' : '' ?>>
-			        <span>Wildcard DNS mode</span>
-		         </label>
+                <?php if ($isDemo): ?>
+                    <span class="demo-locked-field" style="display:inline-flex; align-items:center; gap:6px; padding:7px 10px;">
+                        <?= $wildcardMode ? 'Wildcard DNS mode: Enabled' : 'Wildcard DNS mode: Disabled' ?>
+                        <span class="demo-lock-note">Not configurable in demo mode</span>
+                    </span>
+                <?php else: ?>
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="wildcard_mode" value="1" <?= $wildcardMode ? 'checked' : '' ?>>
+                        <span>Wildcard DNS mode</span>
+                    </label>
+                <?php endif; ?>
 		   </div>
                    <p class="muted">Wildcard DNS mode shows a Subdomain column in the activity table and enables host/subdomain filtering. Enable this when using a wildcard DNS record to capture traffic across multiple subdomains.</p>
 
