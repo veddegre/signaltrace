@@ -2,7 +2,7 @@
 
 ---
 
-## [v2.9.2] — Settings Simplification and Demo Mode Locking
+## [2.9.2] — Settings Simplification and Demo Mode Locking
 
 ### Settings Cleanup
 
@@ -32,7 +32,7 @@ No additional configuration is required.
 
 ---
 
-## [v2.9.1] - Minor Bug Fix
+## [2.9.1] - Minor Bug Fix
 
 ### Bug Fix
 
@@ -40,7 +40,7 @@ No additional configuration is required.
 
 ---
 
-## [v2.9.0] — UI Cleanup and Workflow Improvements
+## [2.9.0] — UI Cleanup and Workflow Improvements
 
 ### Token Workflow Improvements
 
@@ -75,7 +75,7 @@ Resolved inconsistencies where some buttons rendered as outlined instead of prim
 
 ---
 
-## [v2.8.2] — Seed Data and Schema Compatibility Fixes
+## [2.8.2] — Seed Data and Schema Compatibility Fixes
 
 ### Seed File Fixes
 
@@ -101,7 +101,7 @@ No functional changes — this release ensures reliability of initial setup and 
 
 ---
 
-## [v2.8.1] — Deployment Schema Fixes
+## [2.8.1] — Deployment Schema Fixes
 
 ### Database Initialization Fixes
 
@@ -120,7 +120,7 @@ This release ensures:
 
 ---
 
-## [v2.8.0] — Campaigns and Activity Correlation
+## [2.8.0] — Campaigns and Activity Correlation
 
 ### Campaigns
 
@@ -192,7 +192,7 @@ These changes improve usability and make campaign-based investigation more consi
 
 ---
 
-## [v2.7.1] — Splunk and Grafana SQLite Dashboard Fixes
+## [2.7.1] — Splunk and Grafana SQLite Dashboard Fixes
 
 Two dashboard bug fixes. No changes to application code, database schema, or the Infinity-based Grafana dashboard.
 
@@ -216,7 +216,7 @@ Three fixes to the direct SQLite datasource dashboard used by local Grafana inst
 
 ---
 
-## [v2.7.0] — April 19, 2026
+## [2.7.0] — April 19, 2026
 
 ### Webhook Enhancements
 
@@ -296,7 +296,7 @@ AbuseIPDB email_threshold null on save — the email threshold ternary could eva
 
 ---
 
-## [v2.6.1] — April 19, 2026
+## [2.6.1] — April 19, 2026
 
 Fixed README Docker environment variable table — The email alerting note incorrectly stated that SMTP credentials are not stored in .env. Corrected to reflect that EMAIL_SMTP_* variables are set in .env and written by the entrypoint into config.local.php as PHP constants, where they are never stored in the database or exposed through the admin UI.
 
