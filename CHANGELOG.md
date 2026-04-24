@@ -2,6 +2,58 @@
 
 ---
 
+## [v2.10.0] — IP Override Enhancements, Admin Protection, and Infrastructure Fixes
+
+### IP Override: Hide from Dashboard
+Added a new **Hide from Dashboard** option to IP overrides. When enabled, activity from that IP is still logged and scored normally but suppressed from the default dashboard activity feed. A **Show Hidden IPs** toggle on the dashboard reveals hidden traffic on demand.
+
+This is independent of the block/allow mode — any combination is supported: block+hide, allow+hide, block only, allow only, or hide only.
+
+**Hide from Dashboard** is available from:
+- The IP Overrides tab (create and edit forms)
+- Quick-action buttons in the activity feed, IP summary panel, and behavioral flags panel
+
+### IP Override: None Mode
+Added a **None** mode to IP overrides. This allows an override to exist purely for its hide flag without affecting scoring. Block and allow continue to pin confidence scores to 0 and 100 respectively.
+
+### IP Override: Schema Update
+The `ip_overrides` table now includes:
+- `hide_from_dashboard INTEGER NOT NULL DEFAULT 0`
+- `mode` updated to accept `block | allow | none`
+
+Existing installs are migrated automatically on first request via `ensureColumn`.
+
+### Admin Security Hardening
+Removed detailed Cloudflare Access error messages from the `/admin` endpoint. Unauthorized access attempts now return a generic `403 Access denied.` response to avoid disclosing authentication mechanisms or infrastructure details.
+
+### Admin Honeypot Detection
+Access attempts to `/admin` without a valid Cloudflare Access session are now treated as tracked SignalTrace events. These requests are logged using the standard request pipeline and appear alongside normal token activity, improving visibility into scanning, probing, and direct-origin access attempts.
+
+### Cloudflare Access Validation Logging
+Added detection and logging for invalid or suspicious Cloudflare Access scenarios:
+- Missing CF Access token: `admin_path_without_access`
+- Invalid or expired token: `admin_path_invalid_cf_access_token`
+- Audience mismatch: `admin_path_cf_access_audience_mismatch`
+
+These events are automatically scored as high-confidence bot activity (`confidence_score = 5`, `confidence_label = bot`).
+
+### Admin Probe Pipeline Integration
+Admin access probes now fully integrate with the SignalTrace pipeline — standard request collection, dashboard visibility, webhook and email alerts where applicable. No separate logging system was introduced. All logic is conditional on Cloudflare Access being enabled; standard auth behavior is unchanged when it is not.
+
+### Duplicate Logging Fix
+Removed redirect-based handling for unauthorized `/admin` access, which could cause duplicate events. Requests now terminate immediately with a generic `403`, ensuring only a single event is recorded.
+
+### Wildcard DNS + Apache Vhost Fix
+Fixed a routing issue where requests to wildcard subdomains (e.g. `random.trysig.win`) were incorrectly served by the admin Apache vhost due to a missing wildcard `ServerAlias` entry. The fix requires adding a wildcard vhost — see the wiki for the correct Apache configuration.
+
+### Setup Script: base_url Auto-Population
+The setup script now seeds `base_url` in the database when Cloudflare Access is configured. Previously this was left blank, which caused the admin subdomain redirect logic to fail silently. `base_url` is written as `http://` during database initialization and updated to `https://` automatically after a successful certbot run.
+
+### Schema: base_url Documentation
+Added an inline comment to `schema.sql` explaining why `base_url` defaults to blank and when the setup script populates it, to prevent confusion on manual installs.
+
+---
+
 ## [2.9.2] — Settings Simplification and Demo Mode Locking
 
 ### Settings Cleanup

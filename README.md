@@ -102,7 +102,7 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center">
-  Expand any event to view the full request, identity, scoring signals, headers, and inline actions — including Block IP and Allow IP.
+  Expand any event to view the full request, identity, scoring signals, headers, and inline actions — including Block IP, Allow IP, and Hide IP.
 </p>
 
 ---
@@ -128,11 +128,11 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center"> 
-  <img src="docs/images/ip.webp" alt="SignalTrace IP overrides — permanently block or allow specific IPs, bypassing scoring" width="80%"> 
+  <img src="docs/images/ip.webp" alt="SignalTrace IP overrides — block, allow, or hide specific IPs with independent scoring and dashboard controls" width="80%"> 
 </p>
 
 <p align="center">
-  IP overrides bypass scoring entirely — blocked IPs are always classified as bot and included in the threat feed; allowed IPs are always classified as human and excluded from the feed.
+  IP overrides give per-IP control over scoring and dashboard visibility. Block pins classification to bot; Allow pins to human; None leaves scoring untouched. Any override can independently hide an IP from the dashboard activity feed — traffic is still logged and scored, just suppressed from the default view.
 </p>
 
 ---
@@ -243,14 +243,14 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 ## Features at a Glance
 
 * **Tracking:** request logging, redirect handling, visitor fingerprinting, tracking pixel support, and GeoIP/ASN enrichment applied to every hit.
-* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout.
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
 * **Token management:** create/edit/activate/deactivate/delete tokens, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
-* **IP overrides:** pin any IP to always-block (bot) or always-allow (human), bypasses scoring entirely.
+* **IP overrides:** three modes — Block (always bot, score 0), Allow (always human, score 100), or None (scoring unchanged). Any override can independently hide an IP from the dashboard activity feed while still logging and scoring all traffic from it. The **Show Hidden IPs** toggle reveals suppressed activity on demand.
 * **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals. Configurable window, max rows, and hide-by-default.
 * **Skip patterns:** exact, contains, and prefix matching to suppress known noise.
 * **Threat feed:** ten endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, CIDR, MISP event, and STIX 2.1 bundle formats.
@@ -264,7 +264,7 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Grafana integration:** pre-built 16-panel dashboard using the Infinity datasource with nine aggregation export endpoints.
 * **Splunk integration:** scripted input with incremental fetching, two Dashboard Studio dashboards, props.conf with CIM field aliases and multivalue signal splitting.
 * **MISP and STIX 2.1 export:** threat intelligence exports for consumption by TI platforms.
-* **Cloudflare Access:** optional identity layer using Cloudflare Zero Trust.
+* **Cloudflare Access:** optional Cloudflare Zero Trust identity layer for the admin panel. When enabled, unauthorized `/admin` access attempts are denied with a generic 403 and automatically logged as tracked SignalTrace events — scored as high-confidence bot activity and visible in the dashboard alongside normal traffic.
 
 ---
 
@@ -313,6 +313,8 @@ All aggregation endpoints accept `?from=` and `?to=` as Unix millisecond timesta
 
 Admin login has rate limiting with a configurable lockout threshold and window. CSRF tokens protect all admin POST forms. Security response headers (CSP with per-request nonce, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) are sent on every response. Webhooks block private and loopback IP ranges to prevent SSRF. The export API token is compared in constant time.
 
+When Cloudflare Access is enabled, unauthorized access attempts to `/admin` return a generic `403 Access denied.` with no infrastructure details disclosed. These attempts are automatically logged as tracked events and scored as high-confidence bot activity.
+
 ---
 
 ## Production Checklist
@@ -326,7 +328,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 - [ ] Configure skip patterns to suppress known noise
 - [ ] Add ASN rules for infrastructure you own or trust
 - [ ] Add country rules for high-noise regions if applicable
-- [ ] Add IP overrides to permanently block known bad actors or allow your own monitoring IPs
+- [ ] Add IP overrides to permanently block known bad actors, allow your own monitoring IPs, or hide noisy-but-known IPs from the dashboard without affecting scoring
 - [ ] Set feed exclusions on tokens and ASNs that should never appear in your blocklist
 - [ ] Tune the threat feed confidence threshold, time window, and minimum hit count
 - [ ] Set `EXPORT_API_TOKEN` and configure your SIEM integration if applicable
@@ -335,7 +337,7 @@ Admin login has rate limiting with a configurable lockout threshold and window. 
 - [ ] Configure a token webhook for phishing simulation and campaign tracking if needed
 - [ ] Add an AbuseIPDB API key in Settings > IP Enrichment for abuse confidence scores
 - [ ] Review redirect rate limit settings
-- [ ] Consider enabling Cloudflare Access for per-user identity and MFA
+- [ ] Consider enabling Cloudflare Access for per-user identity and MFA on the admin panel
 
 ---
 

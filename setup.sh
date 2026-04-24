@@ -1189,11 +1189,19 @@ case "$DB_ACTION" in
             echo -e "${GREEN}  Sample data loaded.${RESET}"
         fi
 
+        # ── FIX: seed base_url when CF Access is enabled ──────────────────────
+        # base_url must be set for the admin subdomain redirect to work correctly.
+        # Demo mode sets it explicitly; for CF Access installs we derive it from
+        # APACHE_SERVER_NAME. It starts as http:// and is updated to https://
+        # further down once certbot confirms TLS is working.
         if [ "$DEMO_MODE_ENABLED" = true ]; then
             $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('app_name', '${DEMO_APP_NAME}');"
             $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', '${DEMO_BASE_URL}');"
             $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('default_redirect_url', '${DEMO_DEFAULT_REDIRECT_URL}');"
             echo -e "${GREEN}  Demo settings seeded into database.${RESET}"
+        elif [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$APACHE_SERVER_NAME" ] && [ "$APACHE_SERVER_NAME" != "localhost" ]; then
+            $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', 'http://${APACHE_SERVER_NAME}');"
+            echo -e "${GREEN}  base_url seeded as http://${APACHE_SERVER_NAME} (will be updated to https:// if TLS is configured).${RESET}"
         fi
         ;;
 esac
@@ -1321,6 +1329,11 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
                     -d "$APACHE_SERVER_NAME"
             fi
             HTTPS_ENABLED=true
+            # ── FIX: update base_url to https:// now that TLS is confirmed ────
+            if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$APACHE_SERVER_NAME" ] && [ "$DEMO_MODE_ENABLED" != "true" ]; then
+                $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', 'https://${APACHE_SERVER_NAME}');"
+                echo -e "${GREEN}  base_url updated to https://${APACHE_SERVER_NAME}.${RESET}"
+            fi
         else
             echo "  Requesting certificate using Apache validation..."
             if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$CF_ADMIN_SUBDOMAIN" ]; then
@@ -1340,6 +1353,11 @@ if [[ "$do_letsencrypt" =~ ^[Yy]$ ]]; then
                     --redirect
             fi
             HTTPS_ENABLED=true
+            # ── FIX: update base_url to https:// now that TLS is confirmed ────
+            if [ "$CF_ACCESS_ENABLED_VAL" = "true" ] && [ -n "$APACHE_SERVER_NAME" ] && [ "$DEMO_MODE_ENABLED" != "true" ]; then
+                $SUDO sqlite3 "$DB_FILE" "INSERT OR REPLACE INTO settings (key, value) VALUES ('base_url', 'https://${APACHE_SERVER_NAME}');"
+                echo -e "${GREEN}  base_url updated to https://${APACHE_SERVER_NAME}.${RESET}"
+            fi
         fi
 
         if [ "${HTTPS_ENABLED}" = "true" ] && [ "$CF_DNS_PLUGIN_ENABLED" = "true" ]; then

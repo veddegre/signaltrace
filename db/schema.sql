@@ -122,12 +122,13 @@ CREATE TABLE IF NOT EXISTS asn_rules (
 -- IP Overrides
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ip_overrides (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip         TEXT    NOT NULL UNIQUE,
-    mode       TEXT    NOT NULL DEFAULT 'block',  -- block | allow
-    notes      TEXT,
-    active     INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT    NOT NULL
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip                   TEXT    NOT NULL UNIQUE,
+    mode                 TEXT    NOT NULL DEFAULT 'block',  -- block | allow | none
+    notes                TEXT,
+    active               INTEGER NOT NULL DEFAULT 1,
+    hide_from_dashboard  INTEGER NOT NULL DEFAULT 0,
+    created_at           TEXT    NOT NULL
 );
 
 -- ============================================================
@@ -220,6 +221,10 @@ CREATE INDEX IF NOT EXISTS idx_links_token             ON links(token);
 -- ============================================================
 INSERT OR IGNORE INTO settings (key, value) VALUES
     ('app_name',                  'SignalTrace - Tracking & Analysis'),
+    -- base_url is intentionally left blank here. For Cloudflare Access / wildcard
+    -- DNS installs it must be set to your public domain (e.g. https://trysig.win)
+    -- so the admin subdomain redirect works correctly. The setup script writes this
+    -- automatically when CF_ACCESS_ENABLED is configured.
     ('base_url',                  ''),
     ('default_redirect_url',      'https://example.com/'),
     ('unknown_path_behavior',     'redirect'),
