@@ -277,6 +277,8 @@ if (defined('CF_ACCESS_ENABLED') && CF_ACCESS_ENABLED) {
     if (defined('CF_ACCESS_TEAM_DOMAIN')) {
         $baseHostPart = parse_url((string) \getSetting($pdo, 'base_url', ''), PHP_URL_HOST);
         $adminHost = 'admin.' . ltrim((string) ($baseHostPart ?: ''), '.');
+            error_log('SignalTrace debug: requestHost=' . $requestHost . ' adminHost=' . $adminHost . ' baseHostPart=' . $baseHostPart);
+
         if ($requestHost !== '' && $adminHost !== '' && $requestHost === strtolower($adminHost)) {
             if ($path === '/') {
                 $path = '/admin';
