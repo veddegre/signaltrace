@@ -2,7 +2,7 @@
 
 ---
 
-## [v2.11.0] — May 1, 2026 — Honeypot Expansion, Token Lifecycle, and Dashboard Polish
+## [v2.11.0] —  Honeypot Expansion, Token Lifecycle, and Dashboard Polish
 
 ### UI declutter and consistency pass
 
