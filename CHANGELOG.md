@@ -95,6 +95,14 @@ Added lightweight regression coverage and CI wiring:
   - bulk deletion (pack only, or pack + related click history)
 - Preserved token `type` and `decoy_pack_id` on token edits so decoy tokens remain correctly associated after updates.
 
+### Admin post-action navigation
+
+- Token actions (create/update/delete, activate/deactivate, health check, campaign create/update/delete, decoy pack create with flash redirects) now redirect to **`/admin?tab=links`** instead of an unscoped `/admin` load that reopened the dashboard.
+- When drilling down with **`?decoy_pack=`**, forms pass **`_return_decoy_pack`** so the redirect keeps the same pack filter after submit.
+- Dashboard cleanup actions (**delete token clicks**, **delete IP clicks**, **bulk delete filtered clicks**) rebuild **`tab=dashboard`** plus the active filter set (token, IP, visitor, campaign, host, date range, known-only, show-all/hidden/behavioral/subdomain/top-tokens toggles as applicable).
+- Skip-pattern create/delete/toggle redirects now land on **`/admin?tab=skip`**.
+- Activity-row action menus include expanded **`_filter_*`** hidden fields (host, campaign, optional UI toggles) so **`adminRedirectUrl()`** can return to the same filtered dashboard view.
+
 ---
 
 ## [v2.10.0] — IP Override Enhancements, Admin Protection, and Infrastructure Fixes
