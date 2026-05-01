@@ -390,6 +390,63 @@ function handleExportOverTime(PDO $pdo): void
     exit;
 }
 
+function handleExecutiveCountryDensity(PDO $pdo): void
+{
+    $windowHours = max(1, min(24 * 90, (int) ($_GET['window_hours'] ?? 168)));
+    $limit = max(1, min(200, (int) ($_GET['limit'] ?? 100)));
+    $rows = getExecutiveCountryDensity($pdo, $windowHours, $limit);
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode([
+        'generated_at' => gmdate('c'),
+        'window_hours' => $windowHours,
+        'rows' => $rows,
+    ], JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExecutiveSummaryExport(PDO $pdo): void
+{
+    $windowHours = max(1, min(24 * 90, (int) ($_GET['window_hours'] ?? 168)));
+    $kpis = getExecutiveReportKpis($pdo, $windowHours);
+    $countries = getExecutiveCountryDensity($pdo, $windowHours, 20);
+    $tokens = getExecutiveTopTokens($pdo, $windowHours, 10);
+
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode([
+        'generated_at' => gmdate('c'),
+        'kpis' => $kpis,
+        'country_density' => $countries,
+        'top_tokens' => $tokens,
+    ], JSON_PRETTY_PRINT);
+    exit;
+}
+
+function handleExecutiveCountryDensityCsv(PDO $pdo): void
+{
+    $windowHours = max(1, min(24 * 90, (int) ($_GET['window_hours'] ?? 168)));
+    $limit = max(1, min(200, (int) ($_GET['limit'] ?? 100)));
+    $rows = getExecutiveCountryDensity($pdo, $windowHours, $limit);
+
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="signaltrace-country-density-' . date('Ymd-His') . '.csv"');
+    header('Cache-Control: no-store');
+
+    if (empty($rows)) {
+        exit;
+    }
+
+    $out = fopen('php://output', 'w');
+    fputcsv($out, array_keys($rows[0]));
+    foreach ($rows as $row) {
+        fputcsv($out, $row);
+    }
+    fclose($out);
+    exit;
+}
+
 /* ======================================================
    ADMIN PAGE
    ====================================================== */
@@ -415,27 +472,6 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
     $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
     $showHidden     = isset($_GET['show_hidden'])     && $_GET['show_hidden']     === '1';
-    $presetId       = max(0, (int) ($_GET['preset_id'] ?? 0));
-
-    if ($presetId > 0) {
-        foreach (getFilterPresets($pdo) as $preset) {
-            if ((int) ($preset['id'] ?? 0) !== $presetId) {
-                continue;
-            }
-            $query = json_decode((string) ($preset['query_json'] ?? '{}'), true);
-            if (is_array($query)) {
-                $tokenFilter = trim((string) ($query['token'] ?? $tokenFilter));
-                $ipFilter = trim((string) ($query['ip'] ?? $ipFilter));
-                $visitorFilter = trim((string) ($query['visitor'] ?? $visitorFilter));
-                $campaignFilter = max(0, (int) ($query['campaign'] ?? $campaignFilter));
-                $hostFilter = trim((string) ($query['host'] ?? $hostFilter));
-                $knownOnly = (($query['known'] ?? '') === '1') || $knownOnly;
-                $dateFrom = trim((string) ($query['date_from'] ?? $dateFrom));
-                $dateTo = trim((string) ($query['date_to'] ?? $dateTo));
-            }
-            break;
-        }
-    }
     $asnRules       = getAsnRules($pdo);
 
     // Pagination

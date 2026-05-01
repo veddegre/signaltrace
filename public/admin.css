@@ -1421,43 +1421,24 @@ button.template-toggle-button:hover,
     flex-wrap: wrap;
 }
 
-.kpi-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-    gap: 8px;
-    margin: 8px 0 12px;
-}
-
-.kpi-card {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    padding: 9px 10px;
-    box-shadow: var(--shadow-sm);
-}
-
-.kpi-label {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 2px;
-}
-
-.kpi-value {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--text);
-}
-
 body.density-compact {
     --font-size: 13px;
 }
 
-body.density-compact th,
-body.density-compact td {
-    padding-top: 6px;
-    padding-bottom: 6px;
+body.density-compact .compact-table th,
+body.density-compact .compact-table td {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+    font-size: 0.75rem;
+    line-height: 1.3;
+}
+
+body.density-compact .details-cell {
+    padding: 0.7rem 0.9rem;
+}
+
+body.density-compact .detail-box {
+    padding: 0.65rem 0.8rem;
 }
 
 .admin-flash {
@@ -1611,6 +1592,93 @@ body.density-compact td {
     color: var(--text-secondary);
     font-size: 0.84rem;
     margin: 8px 0 12px;
+}
+
+.reports-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.report-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    background: var(--surface-alt);
+}
+
+.report-value {
+    margin: 0.2rem 0 0.35rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.report-map-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-alt);
+    padding: 0.75rem;
+}
+
+.report-map-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.report-map-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-left: auto;
+}
+
+.report-map-legend-bar {
+    display: inline-block;
+    width: 130px;
+    height: 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: linear-gradient(90deg, rgba(248, 113, 113, 0.2), rgba(248, 113, 113, 0.9));
+}
+
+.report-map {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.report-map svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.report-map-graticule line {
+    stroke: var(--border);
+    stroke-width: 0.7;
+    opacity: 0.45;
+}
+
+.report-map-land ellipse {
+    fill: color-mix(in srgb, var(--surface) 85%, var(--text-secondary) 15%);
+    stroke: var(--border-strong);
+    stroke-width: 1;
+    opacity: 0.9;
+}
+
+[data-theme="dark"] .report-map-legend-bar {
+    border-color: color-mix(in srgb, var(--border-strong) 70%, #f8fafc 30%);
+    background: linear-gradient(90deg, rgba(251, 146, 60, 0.22), rgba(251, 113, 133, 0.94));
+}
+
+[data-theme="dark"] .report-map-land ellipse {
+    fill: color-mix(in srgb, var(--surface) 75%, #e2e8f0 25%);
+    stroke: color-mix(in srgb, var(--border-strong) 55%, #e2e8f0 45%);
 }
 
 .action-menu-inner {

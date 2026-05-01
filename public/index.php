@@ -39,7 +39,15 @@ if (str_starts_with($path, '/admin') && session_status() === PHP_SESSION_NONE) {
 /* ============================================================
    SECURITY HEADERS
    ============================================================ */
-$dataRoutes = ['/export/json', '/export/csv', '/feed/ips.txt', '/health'];
+$dataRoutes = [
+    '/export/json',
+    '/export/csv',
+    '/export/executive-summary',
+    '/export/reports/country-density',
+    '/export/reports/country-density.csv',
+    '/feed/ips.txt',
+    '/health',
+];
 
 header('X-Content-Type-Options: nosniff');
 
@@ -229,6 +237,24 @@ if ($path === '/export/over-time') {
     exit;
 }
 
+if ($path === '/export/executive-summary') {
+    requireExportAuth();
+    handleExecutiveSummaryExport($pdo);
+    exit;
+}
+
+if ($path === '/export/reports/country-density') {
+    requireExportAuth();
+    handleExecutiveCountryDensity($pdo);
+    exit;
+}
+
+if ($path === '/export/reports/country-density.csv') {
+    requireExportAuth();
+    handleExecutiveCountryDensityCsv($pdo);
+    exit;
+}
+
 /* ============================================================
    ADMIN ACTIONS (POST)
    ============================================================ */
@@ -297,8 +323,6 @@ $reserved = [
     '/admin/save-settings',
     '/admin/create-link',
     '/admin/create-decoy-pack',
-    '/admin/create-filter-preset',
-    '/admin/delete-filter-preset',
     '/admin/check-link-health',
     '/admin/update-link',
     '/admin/delete-link',
@@ -366,6 +390,9 @@ $reserved = [
     '/export/by-signal',
     '/export/behavioral',
     '/export/over-time',
+    '/export/executive-summary',
+    '/export/reports/country-density',
+    '/export/reports/country-density.csv',
     '/feed/misp.json',
     '/feed/stix.json',
 ];

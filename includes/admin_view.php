@@ -338,17 +338,6 @@ function renderAdminPage(
         + (int) $showHidden
         + (int) $showTopTokens;
 
-    $dashboardKpis = getDashboardKpis(
-        $pdo,
-        $tokenFilter !== '' ? $tokenFilter : null,
-        $ipFilter !== '' ? $ipFilter : null,
-        $visitorFilter !== '' ? $visitorFilter : null,
-        $knownOnly,
-        $dateFrom !== '' ? $dateFrom : null,
-        $dateTo !== '' ? $dateTo : null,
-        $hostFilter !== '' ? $hostFilter : null,
-        $campaignFilter > 0 ? $campaignFilter : null
-    );
     $filterDrawerOpen = $secondaryFilterCount > 0;
 
     $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
@@ -369,8 +358,11 @@ function renderAdminPage(
     $sqliteVacuumLastRun = $sqliteVacuumLastRunTs > 0 ? date('Y-m-d H:i:s T', $sqliteVacuumLastRunTs) : 'Never';
     $adaptiveDeceptionEnabled = getSetting($pdo, 'adaptive_deception_enabled', '0') === '1';
     $staleTokenDays = max(0, (int) getSetting($pdo, 'stale_token_days', '30'));
-    $serverFilterPresets = getFilterPresets($pdo);
     $dbStats = getSqliteDatabaseStats($pdo);
+    $reportWindowHours = max(24, min(24 * 90, (int) ($_GET['report_window_hours'] ?? 168)));
+    $reportKpis = getExecutiveReportKpis($pdo, $reportWindowHours);
+    $reportCountries = getExecutiveCountryDensity($pdo, $reportWindowHours, 20);
+    $reportTopTokens = getExecutiveTopTokens($pdo, $reportWindowHours, 10);
 
     $behavioralWindowHours = max(1, (int) getSetting($pdo, 'behavioral_window_hours', '24'));
     $behavioralMaxRows     = max(1, (int) getSetting($pdo, 'behavioral_max_rows', '25'));
@@ -470,6 +462,10 @@ function renderAdminPage(
         return $buildAdminUrl(array_merge(['tab' => 'dashboard'], $overrides));
     };
 
+    $buildReportsUrl = function (array $overrides = []) use ($buildAdminUrl): string {
+        return $buildAdminUrl(array_merge(['tab' => 'reports'], $overrides));
+    };
+
     $buildExportUrl = function () use ($tokenFilter, $ipFilter, $visitorFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $activeTab): string {
         $params = [];
 
@@ -538,6 +534,7 @@ function renderAdminPage(
 
         <div class="tabs">
             <div class="tab" id="tab-dashboard" data-tab="dashboard">Dashboard</div>
+            <div class="tab" id="tab-reports" data-tab="reports">Reports</div>
             <div class="tab" id="tab-links" data-tab="links">Tokens</div>
 	    <div class="tab" id="tab-skip" data-tab="skip">Skip Patterns</div>
             <div class="tab" id="tab-asn" data-tab="asn">ASN Rules</div>
@@ -603,43 +600,6 @@ function renderAdminPage(
                         </div>
                     </div>
 
-                    <div class="filter-quick-row" style="margin-top:6px;">
-                        <?php if (!$isDemo): ?>
-                        <form method="post" action="/admin/create-filter-preset" class="inline-form" style="display:flex; gap:6px; align-items:center;">
-                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
-                            <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
-                            <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
-                            <input type="hidden" name="visitor" value="<?= h($visitorFilter) ?>">
-                            <input type="hidden" name="campaign" value="<?= h((string) $campaignFilter) ?>">
-                            <input type="hidden" name="host" value="<?= h($hostFilter) ?>">
-                            <input type="hidden" name="known" value="<?= $knownOnly ? '1' : '' ?>">
-                            <input type="hidden" name="date_from" value="<?= h($dateFrom) ?>">
-                            <input type="hidden" name="date_to" value="<?= h($dateTo) ?>">
-                            <input type="text" name="preset_name" placeholder="Server preset name" style="margin-bottom:0;">
-                            <button type="submit" class="btn-small">Save server preset</button>
-                        </form>
-                        <?php else: ?>
-                        <p class="muted demo-lock-note">Server filter presets are read-only in demo mode.</p>
-                        <?php endif; ?>
-                    </div>
-
-                    <?php if (!empty($serverFilterPresets)): ?>
-                    <div class="filter-quick-row" style="margin-top:4px;">
-                        <div class="filter-presets">
-                            <span class="small">Server presets:</span>
-                            <?php foreach ($serverFilterPresets as $serverPreset): ?>
-                                <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['preset_id' => (string) ((int) $serverPreset['id']), 'page' => null])) ?>"><?= h((string) $serverPreset['name']) ?></a>
-                                <?php if (!$isDemo): ?>
-                                <form method="post" action="/admin/delete-filter-preset" class="inline-action-form">
-                                    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
-                                    <input type="hidden" name="id" value="<?= (int) $serverPreset['id'] ?>">
-                                    <button type="submit" class="btn-small">Delete</button>
-                                </form>
-                                <?php endif; ?>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
 
                     <details class="filter-more" <?= $filterDrawerOpen ? 'open' : '' ?>>
                         <summary class="filter-more-summary">
@@ -693,29 +653,6 @@ function renderAdminPage(
                     </details>
 		</div>
             </form>
-
-            <div class="kpi-strip">
-                <div class="kpi-card">
-                    <div class="kpi-label">Events</div>
-                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['total_events']) ?></div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Unique IPs</div>
-                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['unique_ips']) ?></div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Known hits</div>
-                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['known_hits']) ?></div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Bot/suspicious rate</div>
-                    <div class="kpi-value"><?= h((string) $dashboardKpis['risky_rate_pct']) ?>%</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Feed candidates</div>
-                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['feed_candidates']) ?></div>
-                </div>
-            </div>
 
             <?php if ($hasActiveFilter): ?>
                 <div class="active-filters">
@@ -1490,6 +1427,135 @@ function renderAdminPage(
             </div>
             <?php endif; ?>
 
+        </div>
+
+        <div class="tab-content" id="content-reports">
+            <h2>Executive reports</h2>
+            <p class="muted">Snapshot for the selected window with period-over-period deltas and exportable country density for map tooling.</p>
+
+            <form method="get" action="/admin" class="inline-form" style="margin-bottom:1rem;">
+                <input type="hidden" name="tab" value="reports">
+                <label for="report-window-hours">Window</label>
+                <select id="report-window-hours" name="report_window_hours" style="width:auto;margin-bottom:0;">
+                    <option value="24" <?= $reportWindowHours === 24 ? 'selected' : '' ?>>24h</option>
+                    <option value="72" <?= $reportWindowHours === 72 ? 'selected' : '' ?>>72h</option>
+                    <option value="168" <?= $reportWindowHours === 168 ? 'selected' : '' ?>>7d</option>
+                    <option value="720" <?= $reportWindowHours === 720 ? 'selected' : '' ?>>30d</option>
+                </select>
+                <button type="submit">Refresh report</button>
+                <a class="button-link" href="<?= h('/export/executive-summary?window_hours=' . $reportWindowHours) ?>" target="_blank" rel="noopener">Export report JSON</a>
+                <a class="button-link" href="<?= h('/export/reports/country-density?window_hours=' . $reportWindowHours . '&limit=200') ?>" target="_blank" rel="noopener">Country density JSON</a>
+                <a class="button-link" href="<?= h('/export/reports/country-density.csv?window_hours=' . $reportWindowHours . '&limit=200') ?>" target="_blank" rel="noopener">Country density CSV</a>
+                <a class="button-link" href="<?= h($buildReportsUrl(['report_window_hours' => null])) ?>">Reset</a>
+            </form>
+
+            <div class="reports-grid">
+                <div class="report-card">
+                    <div class="small muted">Events</div>
+                    <div class="report-value"><?= number_format((int) ($reportKpis['current']['total_events'] ?? 0)) ?></div>
+                    <div class="small">Δ <?= h((string) ($reportKpis['deltas']['total_events'] ?? 0)) ?>%</div>
+                </div>
+                <div class="report-card">
+                    <div class="small muted">Unique IPs</div>
+                    <div class="report-value"><?= number_format((int) ($reportKpis['current']['unique_ips'] ?? 0)) ?></div>
+                    <div class="small">Δ <?= h((string) ($reportKpis['deltas']['unique_ips'] ?? 0)) ?>%</div>
+                </div>
+                <div class="report-card">
+                    <div class="small muted">Known token hits</div>
+                    <div class="report-value"><?= number_format((int) ($reportKpis['current']['known_hits'] ?? 0)) ?></div>
+                    <div class="small">Δ <?= h((string) ($reportKpis['deltas']['known_hits'] ?? 0)) ?>%</div>
+                </div>
+                <div class="report-card">
+                    <div class="small muted">Feed candidates</div>
+                    <div class="report-value"><?= number_format((int) ($reportKpis['current']['feed_candidates'] ?? 0)) ?></div>
+                    <div class="small">Δ <?= h((string) ($reportKpis['deltas']['feed_candidates'] ?? 0)) ?>%</div>
+                </div>
+                <div class="report-card">
+                    <div class="small muted">Risky hit rate</div>
+                    <div class="report-value"><?= h((string) ($reportKpis['current']['risky_rate_pct'] ?? 0)) ?>%</div>
+                    <div class="small">Δ <?= h((string) ($reportKpis['deltas']['risky_rate_pct'] ?? 0)) ?> pts</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top:1rem;">Country overlay heatmap</h3>
+            <div class="report-map-card">
+                <div class="report-map-toolbar">
+                    <label for="report-map-metric" class="small">Metric</label>
+                    <select id="report-map-metric" style="width:auto;margin-bottom:0;">
+                        <option value="total_events" selected>Total events</option>
+                        <option value="risky_hits">Risky hits</option>
+                    </select>
+                    <div class="report-map-legend" aria-hidden="true">
+                        <span class="small muted">Low</span>
+                        <span class="report-map-legend-bar"></span>
+                        <span class="small muted">High</span>
+                    </div>
+                </div>
+                <div id="reports-country-map" class="report-map" aria-label="Country activity map"></div>
+                <p class="muted small" style="margin-top:0.5rem;">
+                    Bubble intensity and size reflect the selected metric for each country in the selected window.
+                </p>
+            </div>
+
+            <h3 style="margin-top:1rem;">Country density</h3>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>Country</th>
+                            <th>Total events</th>
+                            <th>Unique IPs</th>
+                            <th>Risky hits</th>
+                            <th>Risky rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if (!empty($reportCountries)): ?>
+                        <?php foreach ($reportCountries as $countryRow): ?>
+                            <tr>
+                                <td><span class="mono-link"><?= h((string) ($countryRow['country_code'] ?? '??')) ?></span></td>
+                                <td><?= number_format((int) ($countryRow['total_events'] ?? 0)) ?></td>
+                                <td><?= number_format((int) ($countryRow['unique_ips'] ?? 0)) ?></td>
+                                <td><?= number_format((int) ($countryRow['risky_hits'] ?? 0)) ?></td>
+                                <td><?= h((string) ($countryRow['risky_rate_pct'] ?? 0)) ?>%</td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="5" class="muted">No country-level activity in this window.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin-top:1rem;">Top tokens</h3>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>Token/path</th>
+                            <th>Total hits</th>
+                            <th>Unique IPs</th>
+                            <th>Risky hits</th>
+                            <th>Last seen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if (!empty($reportTopTokens)): ?>
+                        <?php foreach ($reportTopTokens as $tokenRow): ?>
+                            <tr>
+                                <td><a class="table-link mono-link" href="<?= h($buildDashboardUrl(['token' => (string) ($tokenRow['token'] ?? ''), 'show_all' => '1'])) ?>"><?= h((string) ($tokenRow['token'] ?? '')) ?></a></td>
+                                <td><?= number_format((int) ($tokenRow['total_hits'] ?? 0)) ?></td>
+                                <td><?= number_format((int) ($tokenRow['unique_ips'] ?? 0)) ?></td>
+                                <td><?= number_format((int) ($tokenRow['risky_hits'] ?? 0)) ?></td>
+                                <td><?= h((string) ($tokenRow['last_seen'] ?? '')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="5" class="muted">No token activity in this window.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
 	<div class="tab-content" id="content-links">
@@ -3048,6 +3114,16 @@ function renderAdminPage(
            CSRF TOKEN INJECTION
            -------------------------------------------------------- */
         const CSRF_TOKEN = <?= json_encode($csrfToken) ?>;
+        const REPORT_COUNTRY_ROWS = <?= json_encode($reportCountries, JSON_UNESCAPED_SLASHES) ?>;
+
+        const COUNTRY_CENTROIDS = {
+            US: [39.8, -98.6], CA: [56.1, -106.3], MX: [23.6, -102.5], BR: [-10.8, -52.9], AR: [-34.0, -64.0], CL: [-30.0, -71.0], CO: [4.5, -74.0], PE: [-9.1, -75.0],
+            GB: [55.3, -3.4], IE: [53.4, -8.0], FR: [46.2, 2.2], DE: [51.2, 10.4], ES: [40.3, -3.7], PT: [39.5, -8.0], IT: [41.9, 12.5], NL: [52.1, 5.3], BE: [50.5, 4.5],
+            CH: [46.8, 8.2], AT: [47.6, 14.1], SE: [60.1, 18.6], NO: [60.5, 8.4], FI: [64.5, 26.0], DK: [56.0, 9.5], PL: [52.1, 19.1], CZ: [49.8, 15.5], RO: [45.9, 24.9], UA: [49.0, 31.4], RU: [61.5, 105.3], TR: [39.1, 35.2],
+            SA: [23.9, 45.1], AE: [24.3, 54.3], IL: [31.4, 35.0], IR: [32.4, 53.7], IQ: [33.2, 43.7], EG: [26.8, 30.8], ZA: [-30.6, 22.9], NG: [9.1, 8.7], KE: [0.0, 37.9], MA: [31.8, -7.1], DZ: [28.0, 1.6],
+            IN: [22.6, 79.0], PK: [30.3, 69.3], BD: [23.7, 90.4], CN: [35.9, 104.2], JP: [36.2, 138.3], KR: [36.5, 127.9], TW: [23.7, 121.0], HK: [22.3, 114.2], SG: [1.35, 103.8], ID: [-2.5, 118.0], MY: [4.2, 102.0], TH: [15.9, 100.9], VN: [14.1, 108.3], PH: [12.9, 121.8],
+            AU: [-25.3, 133.8], NZ: [-41.3, 174.8]
+        };
 
         function injectCsrf() {
             document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function (form) {
@@ -3256,6 +3332,69 @@ function renderAdminPage(
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        function projectLatLon(lat, lon, width, height) {
+            var x = ((lon + 180) / 360) * width;
+            var y = ((90 - lat) / 180) * height;
+            return [x, y];
+        }
+
+        function renderReportCountryMap(metric) {
+            var mount = document.getElementById('reports-country-map');
+            if (!mount) return;
+            var rows = Array.isArray(REPORT_COUNTRY_ROWS) ? REPORT_COUNTRY_ROWS : [];
+            var selectedMetric = (metric === 'risky_hits') ? 'risky_hits' : 'total_events';
+            if (rows.length === 0) {
+                mount.innerHTML = '<div class="empty-state">No country activity in this window.</div>';
+                return;
+            }
+
+            var width = 920;
+            var height = 420;
+            var maxEvents = rows.reduce(function (acc, row) {
+                return Math.max(acc, Number(row[selectedMetric] || 0));
+            }, 0) || 1;
+
+            var circles = rows.map(function (row) {
+                var code = String(row.country_code || '').toUpperCase();
+                var centroid = COUNTRY_CENTROIDS[code];
+                if (!centroid) return '';
+                var events = Number(row[selectedMetric] || 0);
+                var intensity = Math.max(0.15, events / maxEvents);
+                var radius = 4 + Math.sqrt(events) * 1.8;
+                var xy = projectLatLon(centroid[0], centroid[1], width, height);
+                var fill = 'rgba(248, 113, 113, ' + Math.min(0.88, 0.2 + intensity * 0.68) + ')';
+                var stroke = 'rgba(248, 113, 113, 0.92)';
+                var label = selectedMetric === 'risky_hits' ? 'risky hits' : 'events';
+                var title = code + ' - ' + events + ' ' + label;
+                return '<g><title>' + escHtml(title) + '</title><circle cx="' + xy[0].toFixed(2) + '" cy="' + xy[1].toFixed(2) + '" r="' + radius.toFixed(2) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"></circle></g>';
+            }).join('');
+
+            var graticule = '';
+            for (var lon = -150; lon <= 150; lon += 30) {
+                var x = ((lon + 180) / 360) * width;
+                graticule += '<line x1="' + x.toFixed(2) + '" y1="0" x2="' + x.toFixed(2) + '" y2="' + height + '"></line>';
+            }
+            for (var lat = -60; lat <= 60; lat += 30) {
+                var y = ((90 - lat) / 180) * height;
+                graticule += '<line x1="0" y1="' + y.toFixed(2) + '" x2="' + width + '" y2="' + y.toFixed(2) + '"></line>';
+            }
+
+            mount.innerHTML = ''
+                + '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Country heatmap overlay">'
+                + '<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="var(--surface-alt)"></rect>'
+                + '<g class="report-map-graticule">' + graticule + '</g>'
+                + '<g class="report-map-land">'
+                + '<ellipse cx="185" cy="168" rx="125" ry="88"></ellipse>'
+                + '<ellipse cx="285" cy="305" rx="72" ry="104"></ellipse>'
+                + '<ellipse cx="470" cy="150" rx="118" ry="74"></ellipse>'
+                + '<ellipse cx="510" cy="258" rx="92" ry="112"></ellipse>'
+                + '<ellipse cx="706" cy="176" rx="178" ry="96"></ellipse>'
+                + '<ellipse cx="804" cy="328" rx="72" ry="40"></ellipse>'
+                + '</g>'
+                + '<g class="report-map-points">' + circles + '</g>'
+                + '</svg>';
         }
 
         /* --------------------------------------------------------
@@ -3657,6 +3796,14 @@ function renderAdminPage(
                     var next = document.body.classList.contains('density-compact') ? 'comfy' : 'compact';
                     localStorage.setItem(densityKey, next);
                     applyDensity(next);
+                });
+            }
+
+            var mapMetricSelect = document.getElementById('report-map-metric');
+            renderReportCountryMap(mapMetricSelect ? mapMetricSelect.value : 'total_events');
+            if (mapMetricSelect) {
+                mapMetricSelect.addEventListener('change', function () {
+                    renderReportCountryMap(mapMetricSelect.value);
                 });
             }
         });

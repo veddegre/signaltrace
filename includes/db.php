@@ -146,16 +146,6 @@ function initializeDatabase(PDO $pdo): void
         )
     ");
 
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS filter_presets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            query_json TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-    ");
-
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
@@ -1053,36 +1043,6 @@ function createDecoyPack(PDO $pdo, string $pack, string $destination): int
     return $created;
 }
 
-function getFilterPresets(PDO $pdo): array
-{
-    $stmt = $pdo->query("SELECT * FROM filter_presets ORDER BY name ASC");
-    return $stmt->fetchAll();
-}
-
-function createFilterPreset(PDO $pdo, string $name, array $query): bool
-{
-    $json = json_encode($query, JSON_UNESCAPED_SLASHES);
-    $stmt = $pdo->prepare("
-        INSERT INTO filter_presets (name, query_json, created_at, updated_at)
-        VALUES (:name, :query_json, :created_at, :updated_at)
-        ON CONFLICT(name) DO UPDATE SET
-            query_json = excluded.query_json,
-            updated_at = excluded.updated_at
-    ");
-    return $stmt->execute([
-        ':name' => $name,
-        ':query_json' => $json ?: '{}',
-        ':created_at' => date('c'),
-        ':updated_at' => date('c'),
-    ]);
-}
-
-function deleteFilterPreset(PDO $pdo, int $id): bool
-{
-    $stmt = $pdo->prepare("DELETE FROM filter_presets WHERE id = :id");
-    return $stmt->execute([':id' => $id]);
-}
-
 function recordLinkHealth(PDO $pdo, int $linkId, int $statusCode): void
 {
     $stmt = $pdo->prepare("
@@ -1193,80 +1153,6 @@ function getClickCountsByToken(PDO $pdo, bool $knownOnly = false, ?string $dateF
     $stmt->execute();
 
     return $stmt->fetchAll();
-}
-
-function getDashboardKpis(
-    PDO $pdo,
-    ?string $tokenFilter = null,
-    ?string $ipFilter = null,
-    ?string $visitorFilter = null,
-    bool $knownOnly = false,
-    ?string $dateFrom = null,
-    ?string $dateTo = null,
-    ?string $hostFilter = null,
-    ?int $campaignId = null
-): array {
-    $where = ['1=1'];
-    $params = [];
-
-    if ($tokenFilter !== null && $tokenFilter !== '') {
-        $where[] = 'c.token LIKE :token';
-        $params[':token'] = '%' . $tokenFilter . '%';
-    }
-    if ($ipFilter !== null && $ipFilter !== '') {
-        $where[] = 'c.ip = :ip';
-        $params[':ip'] = $ipFilter;
-    }
-    if ($visitorFilter !== null && $visitorFilter !== '') {
-        $where[] = 'c.visitor_hash = :visitor';
-        $params[':visitor'] = $visitorFilter;
-    }
-    if ($knownOnly) {
-        $where[] = 'c.link_id IS NOT NULL';
-    }
-    if ($dateFrom !== null && $dateFrom !== '') {
-        $where[] = 'c.clicked_at >= :date_from';
-        $params[':date_from'] = $dateFrom;
-    }
-    if ($dateTo !== null && $dateTo !== '') {
-        $where[] = 'c.clicked_at <= :date_to';
-        $params[':date_to'] = $dateTo . ' 23:59:59';
-    }
-    if ($hostFilter !== null && $hostFilter !== '') {
-        $where[] = 'c.host LIKE :host';
-        $params[':host'] = '%' . $hostFilter . '%';
-    }
-    if ($campaignId !== null && $campaignId > 0) {
-        $where[] = 'l.campaign_id = :campaign_id';
-        $params[':campaign_id'] = $campaignId;
-    }
-
-    $sql = "
-        SELECT
-            COUNT(*) AS total_events,
-            COUNT(DISTINCT c.ip) AS unique_ips,
-            SUM(CASE WHEN c.link_id IS NOT NULL THEN 1 ELSE 0 END) AS known_hits,
-            SUM(CASE WHEN c.confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS risky_hits,
-            SUM(CASE WHEN c.confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS feed_candidates
-        FROM clicks c
-        LEFT JOIN links l ON l.id = c.link_id
-        WHERE " . implode(' AND ', $where);
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $row = $stmt->fetch() ?: [];
-
-    $total = (int) ($row['total_events'] ?? 0);
-    $risky = (int) ($row['risky_hits'] ?? 0);
-    $riskRate = $total > 0 ? round(($risky / $total) * 100, 1) : 0.0;
-
-    return [
-        'total_events' => $total,
-        'unique_ips' => (int) ($row['unique_ips'] ?? 0),
-        'known_hits' => (int) ($row['known_hits'] ?? 0),
-        'risky_rate_pct' => $riskRate,
-        'feed_candidates' => (int) ($row['feed_candidates'] ?? 0),
-    ];
 }
 
 function getAllLinks(PDO $pdo): array
@@ -3123,6 +3009,121 @@ function exportOverTime(
     ");
 
     $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function getExecutiveReportKpis(PDO $pdo, int $windowHours = 168): array
+{
+    $windowHours = max(1, min(24 * 90, $windowHours));
+    $windowMs = $windowHours * 3600 * 1000;
+    $nowMs = currentUnixMs();
+    $currFrom = $nowMs - $windowMs;
+    $prevFrom = $nowMs - (2 * $windowMs);
+
+    $sql = "
+        SELECT
+            COUNT(*) AS total_events,
+            COUNT(DISTINCT ip) AS unique_ips,
+            SUM(CASE WHEN link_id IS NOT NULL THEN 1 ELSE 0 END) AS known_hits,
+            SUM(CASE WHEN confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS risky_hits
+        FROM clicks
+        WHERE clicked_at_unix_ms >= :from_ms
+          AND clicked_at_unix_ms < :to_ms
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':from_ms' => $currFrom, ':to_ms' => $nowMs]);
+    $current = $stmt->fetch() ?: [];
+    $stmt->execute([':from_ms' => $prevFrom, ':to_ms' => $currFrom]);
+    $previous = $stmt->fetch() ?: [];
+
+    $normalize = static function (array $row): array {
+        $total = (int) ($row['total_events'] ?? 0);
+        $risky = (int) ($row['risky_hits'] ?? 0);
+        return [
+            'total_events' => $total,
+            'unique_ips' => (int) ($row['unique_ips'] ?? 0),
+            'known_hits' => (int) ($row['known_hits'] ?? 0),
+            'feed_candidates' => $risky,
+            'risky_rate_pct' => $total > 0 ? round(($risky / $total) * 100, 1) : 0.0,
+        ];
+    };
+
+    $curr = $normalize($current);
+    $prev = $normalize($previous);
+    $pctDelta = static function (float|int $currVal, float|int $prevVal): float {
+        if ((float) $prevVal === 0.0) {
+            return (float) $currVal > 0 ? 100.0 : 0.0;
+        }
+        return round((((float) $currVal - (float) $prevVal) / (float) $prevVal) * 100, 1);
+    };
+
+    return [
+        'window_hours' => $windowHours,
+        'current' => $curr,
+        'previous' => $prev,
+        'deltas' => [
+            'total_events' => $pctDelta($curr['total_events'], $prev['total_events']),
+            'unique_ips' => $pctDelta($curr['unique_ips'], $prev['unique_ips']),
+            'known_hits' => $pctDelta($curr['known_hits'], $prev['known_hits']),
+            'feed_candidates' => $pctDelta($curr['feed_candidates'], $prev['feed_candidates']),
+            'risky_rate_pct' => round($curr['risky_rate_pct'] - $prev['risky_rate_pct'], 1),
+        ],
+    ];
+}
+
+function getExecutiveCountryDensity(PDO $pdo, int $windowHours = 168, int $limit = 20): array
+{
+    $windowHours = max(1, min(24 * 90, $windowHours));
+    $limit = max(1, min(200, $limit));
+
+    $stmt = $pdo->prepare("
+        SELECT
+            COALESCE(NULLIF(ip_country, ''), '??') AS country_code,
+            COUNT(*) AS total_events,
+            COUNT(DISTINCT ip) AS unique_ips,
+            SUM(CASE WHEN confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS risky_hits
+        FROM clicks
+        WHERE clicked_at_unix_ms >= (strftime('%s','now') - :window_hours * 3600) * 1000
+        GROUP BY COALESCE(NULLIF(ip_country, ''), '??')
+        ORDER BY total_events DESC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':window_hours', $windowHours, PDO::PARAM_INT);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$row) {
+        $total = (int) ($row['total_events'] ?? 0);
+        $risky = (int) ($row['risky_hits'] ?? 0);
+        $row['risky_rate_pct'] = $total > 0 ? round(($risky / $total) * 100, 1) : 0.0;
+    }
+    unset($row);
+    return $rows;
+}
+
+function getExecutiveTopTokens(PDO $pdo, int $windowHours = 168, int $limit = 10): array
+{
+    $windowHours = max(1, min(24 * 90, $windowHours));
+    $limit = max(1, min(100, $limit));
+
+    $stmt = $pdo->prepare("
+        SELECT
+            token,
+            COUNT(*) AS total_hits,
+            COUNT(DISTINCT ip) AS unique_ips,
+            SUM(CASE WHEN confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS risky_hits,
+            MIN(clicked_at) AS first_seen,
+            MAX(clicked_at) AS last_seen
+        FROM clicks
+        WHERE clicked_at_unix_ms >= (strftime('%s','now') - :window_hours * 3600) * 1000
+        GROUP BY token
+        ORDER BY total_hits DESC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':window_hours', $windowHours, PDO::PARAM_INT);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
     return $stmt->fetchAll();
 }
 

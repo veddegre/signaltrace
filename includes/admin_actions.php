@@ -102,16 +102,6 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleCreateDecoyPack($pdo);
             return true;
 
-        case '/admin/create-filter-preset':
-            requireAdminAuth();
-            handleCreateFilterPreset($pdo);
-            return true;
-
-        case '/admin/delete-filter-preset':
-            requireAdminAuth();
-            handleDeleteFilterPreset($pdo);
-            return true;
-
         case '/admin/check-link-health':
             requireAdminAuth();
             handleCheckLinkHealth($pdo);
@@ -841,43 +831,6 @@ function buildRedirectPoolJson(string $raw): ?string
         return null;
     }
     return json_encode($pool, JSON_UNESCAPED_SLASHES) ?: null;
-}
-
-function handleCreateFilterPreset(PDO $pdo): void
-{
-    if (defined('DEMO_MODE') && DEMO_MODE) {
-        http_response_code(403);
-        exit('Not available in demo mode.');
-    }
-    $name = trim((string) ($_POST['preset_name'] ?? ''));
-    if ($name === '') {
-        adminRedirectWithFlash('/admin?tab=dashboard', 'Preset name is required.', 'warning');
-    }
-    $query = [
-        'token' => trim((string) ($_POST['token'] ?? '')),
-        'ip' => trim((string) ($_POST['ip'] ?? '')),
-        'visitor' => trim((string) ($_POST['visitor'] ?? '')),
-        'campaign' => trim((string) ($_POST['campaign'] ?? '')),
-        'host' => trim((string) ($_POST['host'] ?? '')),
-        'known' => isset($_POST['known']) && $_POST['known'] === '1' ? '1' : '',
-        'date_from' => trim((string) ($_POST['date_from'] ?? '')),
-        'date_to' => trim((string) ($_POST['date_to'] ?? '')),
-    ];
-    createFilterPreset($pdo, $name, array_filter($query, static fn($v) => $v !== ''));
-    adminRedirectWithFlash('/admin?tab=dashboard', 'Filter preset saved.');
-}
-
-function handleDeleteFilterPreset(PDO $pdo): void
-{
-    if (defined('DEMO_MODE') && DEMO_MODE) {
-        http_response_code(403);
-        exit('Not available in demo mode.');
-    }
-    $id = (int) ($_POST['id'] ?? 0);
-    if ($id > 0) {
-        deleteFilterPreset($pdo, $id);
-    }
-    adminRedirectWithFlash('/admin?tab=dashboard', 'Filter preset deleted.');
 }
 
 function handleCheckLinkHealth(PDO $pdo): void

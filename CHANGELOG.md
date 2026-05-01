@@ -63,11 +63,19 @@ Added lightweight regression coverage and CI wiring:
 
 ### Dashboard and operator UX upgrades
 
-- Added KPI strip for key activity metrics and triage quick-view context.
 - Added density toggle (comfy/compact), sticky table headers/first-column context, and triage quick-view chips.
-- Added server-side saved filter presets (shared and persistent) alongside browser-local presets.
 - Added token watchlist panel for stale or failing-link triage, with inline health recheck actions.
 - Added dashboard/UI polish pass: improved badge readability, subtle motion/interactions, and clearer empty states.
+- Kept filter presets browser-local (no server-side shared preset storage).
+
+### Executive reports
+
+- Added a dedicated Reports tab with windowed executive metrics and period-over-period deltas.
+- Added country density reporting and top token summaries for operational and leadership review.
+- Added map-ready and export-friendly report endpoints:
+  - `/export/executive-summary`
+  - `/export/reports/country-density`
+  - `/export/reports/country-density.csv`
 
 ---
 

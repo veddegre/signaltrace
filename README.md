@@ -244,7 +244,8 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 ## Features at a Glance
 
 * **Tracking:** request logging, redirect handling, visitor fingerprinting, tracking pixel support, and GeoIP/ASN enrichment applied to every hit.
-* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, KPI strip, triage view chips, density toggle (comfy/compact), sticky table context, date range filtering, classification badges with scores, token watchlist triage panel, bulk delete by filter, dark mode, mobile layout, and progressive disclosure controls.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, triage view chips, density toggle (comfy/compact), sticky table context, date range filtering, classification badges with scores, token watchlist triage panel, bulk delete by filter, dark mode, mobile layout, and progressive disclosure controls.
+* **Executive reports:** dedicated Reports tab with period-over-period KPI deltas, country density ranking, top token activity, and map-ready export endpoints for reporting pipelines.
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
@@ -292,6 +293,9 @@ All export endpoints require authentication via `Authorization: Bearer YOUR_TOKE
 | `/export/by-signal` | Detection signal hit counts |
 | `/export/behavioral` | IPs with behavioral signals |
 | `/export/over-time` | Hourly event counts |
+| `/export/executive-summary` | Combined report snapshot (KPIs, country density, top tokens) |
+| `/export/reports/country-density` | Country density JSON for map visualization |
+| `/export/reports/country-density.csv` | Country density CSV export |
 
 All aggregation endpoints accept `?from=` and `?to=` as Unix millisecond timestamps.
 
