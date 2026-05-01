@@ -231,9 +231,8 @@ function reportCountryBorderPaths(): array
     return $paths;
 }
 
-function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_events'): string
+function renderReportCountryHeatmapSvg(array $rows): string
 {
-    $metric = $metric === 'risky_hits' ? 'risky_hits' : 'total_events';
     $width = 2000.0;
     $height = 1001.0;
     $countryPaths = reportCountryBorderPaths();
@@ -291,12 +290,11 @@ function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_even
         $risky = (float) ($riskyByCountry[$countryCode] ?? 0.0);
         $fillTotal = $total > 0 ? $heatColor($total, $maxTotal) : '';
         $fillRisky = $risky > 0 ? $heatColor($risky, $maxRisky) : '';
-        $activeFill = $metric === 'risky_hits' ? $fillRisky : $fillTotal;
         $title = $countryCode
             . ' - events: ' . (string) ((int) $total)
             . ', risky hits: ' . (string) ((int) $risky);
         $svg[] = '<path data-country="' . h((string) $countryCode) . '" d="' . h((string) $shapePath) . '"'
-            . ($activeFill !== '' ? ' style="fill:' . h($activeFill) . ';"' : '')
+            . ($fillTotal !== '' ? ' style="fill:' . h($fillTotal) . ';"' : '')
             . ' data-fill-total="' . h($fillTotal) . '"'
             . ' data-fill-risky="' . h($fillRisky) . '"'
             . '><title>' . h($title) . '</title></path>';
@@ -1539,12 +1537,15 @@ function renderAdminPage(
                     <option value="168" <?= $reportWindowHours === 168 ? 'selected' : '' ?>>7d</option>
                     <option value="720" <?= $reportWindowHours === 720 ? 'selected' : '' ?>>30d</option>
                 </select>
-                <button type="submit">Refresh report</button>
+                <button type="submit">Apply window and refresh map</button>
                 <a class="button-link" href="<?= h('/export/executive-summary?window_hours=' . $reportWindowHours) ?>" target="_blank" rel="noopener">Export report JSON</a>
                 <a class="button-link" href="<?= h('/export/reports/country-density?window_hours=' . $reportWindowHours . '&limit=200') ?>" target="_blank" rel="noopener">Country density JSON</a>
                 <a class="button-link" href="<?= h('/export/reports/country-density.csv?window_hours=' . $reportWindowHours . '&limit=200') ?>" target="_blank" rel="noopener">Country density CSV</a>
                 <a class="button-link" href="<?= h($buildReportsUrl(['report_window_hours' => null])) ?>">Reset</a>
             </form>
+            <p class="muted small" style="margin-top:-0.5rem;margin-bottom:1rem;">
+                Map and report metrics update when the selected window is applied.
+            </p>
 
             <div class="reports-grid reports-kpi-grid">
                 <article class="report-card report-kpi-card">
@@ -1577,11 +1578,7 @@ function renderAdminPage(
             <h3 style="margin-top:1rem;">Country overlay heatmap</h3>
             <div class="report-map-card">
                 <div class="report-map-toolbar">
-                    <label for="report-map-metric" class="small">Metric</label>
-                    <select id="report-map-metric" style="width:auto;margin-bottom:0;">
-                        <option value="total_events" selected>Total events</option>
-                        <option value="risky_hits">Risky hits</option>
-                    </select>
+                    <span class="small muted">Metric: total events</span>
                     <div class="report-map-legend" aria-hidden="true">
                         <span class="small muted">Low</span>
                         <span class="report-map-legend-wrap">
@@ -1598,10 +1595,10 @@ function renderAdminPage(
                     </div>
                 </div>
                 <div class="report-map" aria-label="Country activity map">
-                    <div id="report-map-single"><?= renderReportCountryHeatmapSvg($reportCountries, 'total_events') ?></div>
+                    <div id="report-map-single"><?= renderReportCountryHeatmapSvg($reportCountries) ?></div>
                 </div>
                 <p class="muted small" style="margin-top:0.5rem;">
-                    Country fill intensity reflects the selected metric for each country in the selected window.
+                    Country fill intensity reflects total events for each country in the selected window.
                 </p>
             </div>
 
@@ -3432,20 +3429,6 @@ function renderAdminPage(
                 .replace(/"/g, '&quot;');
         }
 
-        function applyReportMapMetric(metric) {
-            var selected = (metric === 'risky_hits') ? 'risky_hits' : 'total_events';
-            document.querySelectorAll('.report-map-land path').forEach(function (path) {
-                var fill = selected === 'risky_hits'
-                    ? (path.dataset.fillRisky || '')
-                    : (path.dataset.fillTotal || '');
-                if (fill) {
-                    path.style.fill = fill;
-                } else {
-                    path.style.removeProperty('fill');
-                }
-            });
-        }
-
         /* --------------------------------------------------------
            COPY TO CLIPBOARD
            -------------------------------------------------------- */
@@ -3848,13 +3831,15 @@ function renderAdminPage(
                 });
             }
 
-            var mapMetricSelect = document.getElementById('report-map-metric');
-            applyReportMapMetric(mapMetricSelect ? mapMetricSelect.value : 'total_events');
-            if (mapMetricSelect) {
-                mapMetricSelect.addEventListener('change', function () {
-                    applyReportMapMetric(mapMetricSelect.value);
+            var reportWindow = document.getElementById('report-window-hours');
+            if (reportWindow) {
+                reportWindow.addEventListener('change', function () {
+                    if (reportWindow.form) {
+                        reportWindow.form.submit();
+                    }
                 });
             }
+
         });
         </script>
     </div><!-- /.page-body -->
