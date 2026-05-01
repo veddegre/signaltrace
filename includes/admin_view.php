@@ -237,16 +237,21 @@ function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_even
     $width = 2000.0;
     $height = 1001.0;
     $countryPaths = reportCountryBorderPaths();
-    $metricByCountry = [];
-    $maxValue = 1.0;
+    $totalByCountry = [];
+    $riskyByCountry = [];
+    $maxTotal = 1.0;
+    $maxRisky = 1.0;
     foreach ($rows as $row) {
         $code = strtoupper((string) ($row['country_code'] ?? ''));
         if (strlen($code) !== 2) {
             continue;
         }
-        $value = max(0.0, (float) ($row[$metric] ?? 0));
-        $metricByCountry[$code] = $value;
-        $maxValue = max($maxValue, $value);
+        $total = max(0.0, (float) ($row['total_events'] ?? 0));
+        $risky = max(0.0, (float) ($row['risky_hits'] ?? 0));
+        $totalByCountry[$code] = $total;
+        $riskyByCountry[$code] = $risky;
+        $maxTotal = max($maxTotal, $total);
+        $maxRisky = max($maxRisky, $risky);
     }
 
     $heatColor = static function (float $value, float $max): string {
@@ -282,12 +287,18 @@ function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_even
     $svg[] = '</g>';
     $svg[] = '<g class="report-map-land">';
     foreach ($countryPaths as $countryCode => $shapePath) {
-        $value = (float) ($metricByCountry[$countryCode] ?? 0.0);
-        $fill = $value > 0 ? $heatColor($value, $maxValue) : null;
-        $label = $metric === 'risky_hits' ? 'risky hits' : 'events';
-        $title = $countryCode . ' - ' . (string) ((int) $value) . ' ' . $label;
+        $total = (float) ($totalByCountry[$countryCode] ?? 0.0);
+        $risky = (float) ($riskyByCountry[$countryCode] ?? 0.0);
+        $fillTotal = $total > 0 ? $heatColor($total, $maxTotal) : '';
+        $fillRisky = $risky > 0 ? $heatColor($risky, $maxRisky) : '';
+        $activeFill = $metric === 'risky_hits' ? $fillRisky : $fillTotal;
+        $title = $countryCode
+            . ' - events: ' . (string) ((int) $total)
+            . ', risky hits: ' . (string) ((int) $risky);
         $svg[] = '<path data-country="' . h((string) $countryCode) . '" d="' . h((string) $shapePath) . '"'
-            . ($fill !== null ? ' style="fill:' . h($fill) . ';"' : '')
+            . ($activeFill !== '' ? ' style="fill:' . h($activeFill) . ';"' : '')
+            . ' data-fill-total="' . h($fillTotal) . '"'
+            . ' data-fill-risky="' . h($fillRisky) . '"'
             . '><title>' . h($title) . '</title></path>';
     }
     $svg[] = '</g>';
@@ -1587,8 +1598,7 @@ function renderAdminPage(
                     </div>
                 </div>
                 <div class="report-map" aria-label="Country activity map">
-                    <div id="report-map-total" data-map-panel="total_events"><?= renderReportCountryHeatmapSvg($reportCountries, 'total_events') ?></div>
-                    <div id="report-map-risky" data-map-panel="risky_hits" hidden><?= renderReportCountryHeatmapSvg($reportCountries, 'risky_hits') ?></div>
+                    <div id="report-map-single"><?= renderReportCountryHeatmapSvg($reportCountries, 'total_events') ?></div>
                 </div>
                 <p class="muted small" style="margin-top:0.5rem;">
                     Country fill intensity reflects the selected metric for each country in the selected window.
@@ -3424,11 +3434,14 @@ function renderAdminPage(
 
         function applyReportMapMetric(metric) {
             var selected = (metric === 'risky_hits') ? 'risky_hits' : 'total_events';
-            document.querySelectorAll('[data-map-panel]').forEach(function (panel) {
-                if (panel.dataset.mapPanel === selected) {
-                    panel.removeAttribute('hidden');
+            document.querySelectorAll('.report-map-land path').forEach(function (path) {
+                var fill = selected === 'risky_hits'
+                    ? (path.dataset.fillRisky || '')
+                    : (path.dataset.fillTotal || '');
+                if (fill) {
+                    path.style.fill = fill;
                 } else {
-                    panel.setAttribute('hidden', '');
+                    path.style.removeProperty('fill');
                 }
             });
         }
