@@ -236,12 +236,36 @@ function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_even
     $metric = $metric === 'risky_hits' ? 'risky_hits' : 'total_events';
     $width = 2000.0;
     $height = 1001.0;
-    $centroids = reportCountryCentroids();
     $countryPaths = reportCountryBorderPaths();
+    $metricByCountry = [];
     $maxValue = 1.0;
     foreach ($rows as $row) {
-        $maxValue = max($maxValue, (float) ($row[$metric] ?? 0));
+        $code = strtoupper((string) ($row['country_code'] ?? ''));
+        if (strlen($code) !== 2) {
+            continue;
+        }
+        $value = max(0.0, (float) ($row[$metric] ?? 0));
+        $metricByCountry[$code] = $value;
+        $maxValue = max($maxValue, $value);
     }
+
+    $heatColor = static function (float $value, float $max): string {
+        $t = $max > 0 ? max(0.0, min(1.0, $value / $max)) : 0.0;
+        // 3-stop gradient: cool blue -> amber -> hot red.
+        if ($t < 0.5) {
+            $u = $t / 0.5;
+            $r = (int) round(56 + (245 - 56) * $u);   // #38bdf8 -> #f59e0b
+            $g = (int) round(189 + (158 - 189) * $u);
+            $b = (int) round(248 + (11 - 248) * $u);
+        } else {
+            $u = ($t - 0.5) / 0.5;
+            $r = (int) round(245 + (239 - 245) * $u); // #f59e0b -> #ef4444
+            $g = (int) round(158 + (68 - 158) * $u);
+            $b = (int) round(11 + (68 - 11) * $u);
+        }
+        $a = 0.25 + ($t * 0.72);
+        return 'rgba(' . $r . ', ' . $g . ', ' . $b . ', ' . number_format(min(0.97, $a), 2, '.', '') . ')';
+    };
 
     $svg = [];
     $svg[] = '<svg viewBox="0 0 2000 1001" role="img" aria-label="Country heatmap overlay">';
@@ -258,28 +282,13 @@ function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_even
     $svg[] = '</g>';
     $svg[] = '<g class="report-map-land">';
     foreach ($countryPaths as $countryCode => $shapePath) {
-        $svg[] = '<path data-country="' . h((string) $countryCode) . '" d="' . h((string) $shapePath) . '"></path>';
-    }
-    $svg[] = '</g>';
-    $svg[] = '<g class="report-map-points">';
-    foreach ($rows as $row) {
-        $code = strtoupper((string) ($row['country_code'] ?? ''));
-        if (!isset($centroids[$code])) {
-            continue;
-        }
-        [$lat, $lon] = $centroids[$code];
-        $value = max(0.0, (float) ($row[$metric] ?? 0));
-        $intensity = max(0.15, $value / $maxValue);
-        $radius = 4.0 + sqrt($value) * 1.8;
-        $x = (($lon + 180) / 360) * $width;
-        $y = ((90 - $lat) / 180) * $height;
-        $alpha = min(0.88, 0.2 + $intensity * 0.68);
+        $value = (float) ($metricByCountry[$countryCode] ?? 0.0);
+        $fill = $value > 0 ? $heatColor($value, $maxValue) : null;
         $label = $metric === 'risky_hits' ? 'risky hits' : 'events';
-
-        $svg[] = '<g>'
-            . '<title>' . h($code . ' - ' . (string) ((int) $value) . ' ' . $label) . '</title>'
-            . '<circle cx="' . number_format($x, 2, '.', '') . '" cy="' . number_format($y, 2, '.', '') . '" r="' . number_format($radius, 2, '.', '') . '" fill="rgba(248, 113, 113, ' . number_format($alpha, 2, '.', '') . ')" stroke="rgba(248, 113, 113, 0.92)" stroke-width="1.2"></circle>'
-            . '</g>';
+        $title = $countryCode . ' - ' . (string) ((int) $value) . ' ' . $label;
+        $svg[] = '<path data-country="' . h((string) $countryCode) . '" d="' . h((string) $shapePath) . '"'
+            . ($fill !== null ? ' style="fill:' . h($fill) . ';"' : '')
+            . '><title>' . h($title) . '</title></path>';
     }
     $svg[] = '</g>';
     $svg[] = '</svg>';
@@ -1564,7 +1573,16 @@ function renderAdminPage(
                     </select>
                     <div class="report-map-legend" aria-hidden="true">
                         <span class="small muted">Low</span>
-                        <span class="report-map-legend-bar"></span>
+                        <span class="report-map-legend-wrap">
+                            <span class="report-map-legend-bar"></span>
+                            <span class="report-map-legend-ticks">
+                                <span>0%</span>
+                                <span>25%</span>
+                                <span>50%</span>
+                                <span>75%</span>
+                                <span>100%</span>
+                            </span>
+                        </span>
                         <span class="small muted">High</span>
                     </div>
                 </div>
@@ -1573,7 +1591,7 @@ function renderAdminPage(
                     <div id="report-map-risky" data-map-panel="risky_hits" hidden><?= renderReportCountryHeatmapSvg($reportCountries, 'risky_hits') ?></div>
                 </div>
                 <p class="muted small" style="margin-top:0.5rem;">
-                    Bubble intensity and size reflect the selected metric for each country in the selected window.
+                    Country fill intensity reflects the selected metric for each country in the selected window.
                 </p>
             </div>
 
