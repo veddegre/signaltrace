@@ -146,6 +146,15 @@ function initializeDatabase(PDO $pdo): void
         )
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS decoy_packs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            preset        TEXT    NOT NULL,
+            destination   TEXT    NOT NULL,
+            created_at    TEXT    NOT NULL
+        )
+    ");
+
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
@@ -191,11 +200,14 @@ function initializeDatabase(PDO $pdo): void
         'redirect_strategy'        => "TEXT NOT NULL DEFAULT 'single'",
         'last_health_check_at'     => 'TEXT',
         'last_health_http_code'    => 'INTEGER',
+        'decoy_pack_id'            => 'INTEGER REFERENCES decoy_packs(id) ON DELETE CASCADE',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
         ensureColumn($pdo, 'links', $column, $definition);
     }
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_links_decoy_pack_id ON links(decoy_pack_id)');
 
     $campaignColumnDefinitions = [
         'webhook_enabled' => 'INTEGER NOT NULL DEFAULT 0',
@@ -684,7 +696,8 @@ function createLink(
     bool $alertOnFirstHit = false,
     int $dormancyAlertHours = 0,
     ?string $redirectPoolJson = null,
-    string $redirectStrategy = 'single'
+    string $redirectStrategy = 'single',
+    ?int $decoyPackId = null
 ): bool
 {
     $stmt = $pdo->prepare("
@@ -693,14 +706,14 @@ function createLink(
             include_in_token_webhook, include_in_email, campaign_id, type, recipient_name,
             recipient_email, notes, burn_after_first_hit, expires_at, document_kind, document_label,
             token_state, activates_at, owner, source, objective, channel, alert_on_first_hit, dormancy_alert_hours,
-            redirect_pool_json, redirect_strategy, created_at
+            redirect_pool_json, redirect_strategy, decoy_pack_id, created_at
         )
         VALUES (
             :token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed,
             :include_in_token_webhook, :include_in_email, :campaign_id, :type, :recipient_name,
             :recipient_email, :notes, :burn_after_first_hit, :expires_at, :document_kind, :document_label,
             :token_state, :activates_at, :owner, :source, :objective, :channel, :alert_on_first_hit, :dormancy_alert_hours,
-            :redirect_pool_json, :redirect_strategy, :created_at
+            :redirect_pool_json, :redirect_strategy, :decoy_pack_id, :created_at
         )
     ");
 
@@ -731,6 +744,7 @@ function createLink(
         ':dormancy_alert_hours'     => max(0, $dormancyAlertHours),
         ':redirect_pool_json'       => $redirectPoolJson,
         ':redirect_strategy'        => in_array($redirectStrategy, ['single', 'weighted'], true) ? $redirectStrategy : 'single',
+        ':decoy_pack_id'            => $decoyPackId !== null && $decoyPackId > 0 ? $decoyPackId : null,
         ':created_at'               => date('c'),
     ]);
 }
@@ -763,7 +777,8 @@ function updateLink(
     bool $alertOnFirstHit = false,
     int $dormancyAlertHours = 0,
     ?string $redirectPoolJson = null,
-    string $redirectStrategy = 'single'
+    string $redirectStrategy = 'single',
+    ?int $decoyPackId = null
 ): bool
 {
     $stmt = $pdo->prepare("
@@ -793,7 +808,8 @@ function updateLink(
             alert_on_first_hit       = :alert_on_first_hit,
             dormancy_alert_hours     = :dormancy_alert_hours,
             redirect_pool_json       = :redirect_pool_json,
-            redirect_strategy        = :redirect_strategy
+            redirect_strategy        = :redirect_strategy,
+            decoy_pack_id            = :decoy_pack_id
         WHERE id = :id
     ");
 
@@ -825,6 +841,7 @@ function updateLink(
         ':dormancy_alert_hours'     => max(0, $dormancyAlertHours),
         ':redirect_pool_json'       => $redirectPoolJson,
         ':redirect_strategy'        => in_array($redirectStrategy, ['single', 'weighted'], true) ? $redirectStrategy : 'single',
+        ':decoy_pack_id'            => $decoyPackId !== null && $decoyPackId > 0 ? $decoyPackId : null,
     ]);
 }
 
@@ -1010,7 +1027,10 @@ function getTokenAlertContext(PDO $pdo, int $linkId): array
 
 function createDecoyPack(PDO $pdo, string $pack, string $destination): int
 {
-    $templates = match ($pack) {
+    $allowed = ['baseline', 'wordpress', 'laravel', 'phpmyadmin', 'k8s', 'git'];
+    $packKey = in_array($pack, $allowed, true) ? $pack : 'baseline';
+
+    $templates = match ($packKey) {
         'wordpress' => ['wp-admin/login', 'wp-login.php', 'wp-content/uploads/debug.log'],
         'laravel' => ['.env', 'storage/logs/laravel.log', '_ignition/execute-solution'],
         'phpmyadmin' => ['phpmyadmin', 'phpMyAdmin/index.php'],
@@ -1019,28 +1039,192 @@ function createDecoyPack(PDO $pdo, string $pack, string $destination): int
         default => ['admin/login', '.env', 'api/internal/status'],
     };
 
+    $ins = $pdo->prepare('
+        INSERT INTO decoy_packs (preset, destination, created_at)
+        VALUES (:preset, :destination, :created_at)
+    ');
+    $ins->execute([
+        ':preset'       => $packKey,
+        ':destination' => $destination,
+        ':created_at'   => date('c'),
+    ]);
+    $packId = (int) $pdo->lastInsertId();
+
     $created = 0;
     foreach ($templates as $token) {
         try {
-            createLink(
+            $ok = createLink(
                 $pdo,
                 $token,
                 $destination,
-                'Decoy pack: ' . $pack,
+                'Decoy pack: ' . $packKey,
                 false,
                 true,
                 false,
                 true,
                 null,
-                'decoy'
+                'decoy',
+                '',
+                '',
+                '',
+                false,
+                null,
+                null,
+                null,
+                'active',
+                null,
+                '',
+                '',
+                '',
+                '',
+                false,
+                0,
+                null,
+                'single',
+                $packId
             );
-            $created++;
+            if ($ok) {
+                $created++;
+            }
         } catch (Throwable $e) {
             // Ignore duplicates while creating packs.
         }
     }
 
+    if ($created === 0) {
+        $pdo->prepare('DELETE FROM decoy_packs WHERE id = :id')->execute([':id' => $packId]);
+    }
+
     return $created;
+}
+
+function getDecoyPackById(PDO $pdo, int $id): ?array
+{
+    if ($id <= 0) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT * FROM decoy_packs WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $id]);
+    $row = $stmt->fetch();
+    return $row !== false ? $row : null;
+}
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function getDecoyPacksWithStats(PDO $pdo): array
+{
+    $stmt = $pdo->query("
+        SELECT
+            dp.id,
+            dp.preset,
+            dp.destination,
+            dp.created_at,
+            COUNT(DISTINCT l.id) AS token_count,
+            COUNT(cl.id)         AS total_hits
+        FROM decoy_packs dp
+        LEFT JOIN links  l  ON l.decoy_pack_id = dp.id
+        LEFT JOIN clicks cl ON cl.link_id = l.id
+        GROUP BY dp.id
+        ORDER BY dp.id DESC
+    ");
+
+    return $stmt->fetchAll();
+}
+
+function deleteDecoyPack(PDO $pdo, int $packId, bool $deleteClicks = false): bool
+{
+    if ($packId <= 0) {
+        return false;
+    }
+    $pack = getDecoyPackById($pdo, $packId);
+    if (!$pack) {
+        return false;
+    }
+
+    $idsStmt = $pdo->prepare('SELECT id FROM links WHERE decoy_pack_id = :pid');
+    $idsStmt->execute([':pid' => $packId]);
+    /** @var list<int> $linkIds */
+    $linkIds = array_map('intval', $idsStmt->fetchAll(PDO::FETCH_COLUMN));
+
+    if ($deleteClicks && $linkIds !== []) {
+        $placeholders = implode(',', array_fill(0, count($linkIds), '?'));
+        $delClicks = $pdo->prepare('DELETE FROM clicks WHERE link_id IN (' . $placeholders . ')');
+        $delClicks->execute($linkIds);
+    }
+
+    $delPack = $pdo->prepare('DELETE FROM decoy_packs WHERE id = :id');
+    return $delPack->execute([':id' => $packId]);
+}
+
+/**
+ * Stream a CSV report for one decoy pack (pack metadata + one row per token).
+ */
+function emitDecoyPackReportCsv(PDO $pdo, int $packId): void
+{
+    $pack = getDecoyPackById($pdo, $packId);
+    if (!$pack) {
+        http_response_code(404);
+        echo 'Decoy pack not found.';
+        return;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            l.id AS link_id,
+            l.token,
+            l.description,
+            l.destination AS link_destination,
+            l.token_state,
+            l.active,
+            l.force_include_in_feed,
+            l.include_in_token_webhook,
+            (SELECT COUNT(*) FROM clicks c WHERE c.link_id = l.id) AS click_count
+        FROM links l
+        WHERE l.decoy_pack_id = :pid
+        ORDER BY l.token
+    ");
+    $stmt->execute([':pid' => $packId]);
+    $rows = $stmt->fetchAll();
+
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="signaltrace-decoy-pack-' . $packId . '-' . date('Ymd-His') . '.csv"');
+    header('Cache-Control: no-store');
+
+    $out = fopen('php://output', 'w');
+    fputcsv($out, [
+        'pack_id',
+        'pack_preset',
+        'pack_destination',
+        'pack_created_at',
+        'link_id',
+        'token',
+        'description',
+        'link_destination',
+        'token_state',
+        'active',
+        'force_include_in_feed',
+        'include_in_token_webhook',
+        'click_count',
+    ]);
+    foreach ($rows as $r) {
+        fputcsv($out, [
+            $pack['id'],
+            $pack['preset'],
+            $pack['destination'],
+            $pack['created_at'],
+            $r['link_id'],
+            $r['token'],
+            $r['description'],
+            $r['link_destination'],
+            $r['token_state'],
+            $r['active'],
+            $r['force_include_in_feed'],
+            $r['include_in_token_webhook'],
+            $r['click_count'],
+        ]);
+    }
+    fclose($out);
 }
 
 function recordLinkHealth(PDO $pdo, int $linkId, int $statusCode): void

@@ -842,6 +842,9 @@ tr:hover td { background: var(--surface-alt); }
 .badge-suspicious::before { content: "! "; font-weight: 700; opacity: 0.8; }
 .badge-bot::before        { content: "!! "; font-weight: 700; opacity: 0.85; }
 
+/* Table / toggle flags: same palette as human/bot/suspicious but no + / ! / !! prefix. */
+.badge--no-prefix::before { content: none; }
+
 .score-pill {
     display: inline-block;
     margin-left: 5px;

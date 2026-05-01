@@ -283,6 +283,13 @@ if ($path === '/admin/enrichment/rescan') {
     exit;
 }
 
+if ($path === '/admin/export-decoy-pack') {
+    requireAdminAuth();
+    $packId = max(0, (int) ($_GET['id'] ?? 0));
+    emitDecoyPackReportCsv($pdo, $packId);
+    exit;
+}
+
 /* ============================================================
    PIXEL TRACKING
    ============================================================ */
@@ -323,6 +330,8 @@ $reserved = [
     '/admin/save-settings',
     '/admin/create-link',
     '/admin/create-decoy-pack',
+    '/admin/delete-decoy-pack',
+    '/admin/export-decoy-pack',
     '/admin/check-link-health',
     '/admin/update-link',
     '/admin/delete-link',

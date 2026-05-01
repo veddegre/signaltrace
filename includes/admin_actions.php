@@ -102,6 +102,11 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleCreateDecoyPack($pdo);
             return true;
 
+        case '/admin/delete-decoy-pack':
+            requireAdminAuth();
+            handleDeleteDecoyPack($pdo);
+            return true;
+
         case '/admin/check-link-health':
             requireAdminAuth();
             handleCheckLinkHealth($pdo);
@@ -310,6 +315,13 @@ function handleUpdateLink(PDO $pdo): void
         exit;
     }
 
+    $existing = getLinkById($pdo, $id);
+    if (!$existing) {
+        http_response_code(400);
+        echo 'Invalid link id.';
+        exit;
+    }
+
     if ($token === '' || $destination === '') {
         http_response_code(400);
         echo 'Path/token and destination are required.';
@@ -330,6 +342,13 @@ function handleUpdateLink(PDO $pdo): void
         exit;
     }
 
+    $linkType = strtolower(trim((string) ($_POST['link_type'] ?? $existing['type'] ?? 'link')));
+    if (!in_array($linkType, ['link', 'decoy'], true)) {
+        $linkType = 'link';
+    }
+    $decoyPackIdRaw = trim((string) ($_POST['decoy_pack_id'] ?? ''));
+    $decoyPackId = ($decoyPackIdRaw !== '' && ctype_digit($decoyPackIdRaw)) ? (int) $decoyPackIdRaw : null;
+
     try {
         updateLink(
             $pdo,
@@ -342,7 +361,7 @@ function handleUpdateLink(PDO $pdo): void
             $includeInEmail,
             $forceIncludeInFeed,
             $campaignId,
-            'link',
+            $linkType,
             '',
             '',
             '',
@@ -359,7 +378,8 @@ function handleUpdateLink(PDO $pdo): void
             $alertOnFirstHit,
             $dormancyAlertHours,
             $redirectPoolJson,
-            $redirectStrategy
+            $redirectStrategy,
+            $decoyPackId
         );
         header('Location: /admin?tab=links', true, 302);
         exit;
@@ -780,7 +800,8 @@ function handleCreateLink(PDO $pdo): void
             $alertOnFirstHit,
             $dormancyAlertHours,
             $redirectPoolJson,
-            $redirectStrategy
+            $redirectStrategy,
+            null
         );
         header('Location: /admin?tab=links', true, 302);
         exit;
@@ -805,7 +826,40 @@ function handleCreateDecoyPack(PDO $pdo): void
         exit('Valid destination URL required.');
     }
     $created = createDecoyPack($pdo, $pack, $destination);
-    adminRedirectWithFlash('/admin?tab=links', 'Decoy pack created: ' . $created . ' tokens.');
+    if ($created === 0) {
+        adminRedirectWithFlash(
+            '/admin?tab=links',
+            'No new decoy tokens were created (those paths may already exist).',
+            'warning'
+        );
+    }
+    adminRedirectWithFlash('/admin?tab=links', 'Decoy pack created: ' . $created . ' new tokens.');
+}
+
+function handleDeleteDecoyPack(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+
+    $id = (int) ($_POST['id'] ?? 0);
+    $deleteClicks = isset($_POST['delete_clicks']) && $_POST['delete_clicks'] === '1';
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo 'Invalid decoy pack id.';
+        exit;
+    }
+
+    if (!deleteDecoyPack($pdo, $id, $deleteClicks)) {
+        adminRedirectWithFlash('/admin?tab=links', 'Decoy pack not found.', 'warning');
+    }
+
+    $msg = $deleteClicks
+        ? 'Decoy pack deleted along with its tokens and their click history.'
+        : 'Decoy pack and its tokens were deleted. Related clicks were kept with cleared token links.';
+    adminRedirectWithFlash('/admin?tab=links', $msg);
 }
 
 function buildRedirectPoolJson(string $raw): ?string

@@ -376,6 +376,7 @@ function renderAdminPage(
     $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
     $showHidden     = isset($_GET['show_hidden'])     && $_GET['show_hidden']     === '1';
     $showTopTokens  = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1';
+    $decoyPackFilter = max(0, (int) ($_GET['decoy_pack'] ?? 0));
 
     $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
@@ -388,6 +389,15 @@ function renderAdminPage(
                 break;
             }
         }
+    }
+
+    $decoyPacks = getDecoyPacksWithStats($pdo);
+    $linksForTokenTable = $links;
+    if ($decoyPackFilter > 0) {
+        $linksForTokenTable = array_values(array_filter(
+            $links,
+            static fn(array $l): bool => (int) ($l['decoy_pack_id'] ?? 0) === $decoyPackFilter
+        ));
     }
 
     $linksByCampaign = [];
@@ -495,7 +505,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $showHidden, $showTopTokens, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $showHidden, $showTopTokens, $activeTab, $decoyPackFilter): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -536,6 +546,9 @@ function renderAdminPage(
         }
         if ($hostFilter !== '') {
             $params['host'] = $hostFilter;
+        }
+        if ($decoyPackFilter > 0) {
+            $params['decoy_pack'] = (string) $decoyPackFilter;
         }
 
         if ($activeTab !== '') {
@@ -1780,6 +1793,9 @@ function renderAdminPage(
 
 	        <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
 	        <input type="hidden" name="id" value="<?= (int) $editLink['id'] ?>">
+	        <input type="hidden" name="link_type" value="<?= h((string) ($editLink['type'] ?? 'link')) ?>">
+	        <?php $editDecoyPackId = (int) ($editLink['decoy_pack_id'] ?? 0); ?>
+	        <input type="hidden" name="decoy_pack_id" value="<?= $editDecoyPackId > 0 ? (string) $editDecoyPackId : '' ?>">
 
 	        <label for="edit_token">Token / Path</label>
 	        <input id="edit_token" type="text" name="token" required value="<?= h((string) $editLink['token']) ?>">
@@ -2028,7 +2044,60 @@ function renderAdminPage(
                 </form>
             <?php endif; ?>
 
+            <h2 id="decoy-packs">Decoy packs</h2>
+            <p class="muted" style="margin-bottom: 1rem;">Each row is one time you deployed a preset. Open <strong>Tokens</strong> to filter the table below to that pack only, <strong>CSV</strong> for a report, or delete the pack to remove all of its paths together.</p>
+            <?php if (empty($decoyPacks)): ?>
+                <p class="muted" style="margin-bottom: 1.5rem;">No decoy packs yet. Create one with the form above.</p>
+            <?php else: ?>
+            <div class="table-wrap" style="margin-bottom: 2rem;">
+                <table class="compact-table">
+                    <tr>
+                        <th>ID</th>
+                        <th>Preset</th>
+                        <th>Destination</th>
+                        <th>Created</th>
+                        <th>Tokens</th>
+                        <th>Hits</th>
+                        <th class="actions-col">Actions</th>
+                    </tr>
+                    <?php foreach ($decoyPacks as $dp): ?>
+                    <tr>
+                        <td><?= (int) $dp['id'] ?></td>
+                        <td class="mono"><?= h((string) $dp['preset']) ?></td>
+                        <td class="wrap"><?= h((string) $dp['destination']) ?></td>
+                        <td class="muted"><?= h((string) $dp['created_at']) ?></td>
+                        <td><?= (int) $dp['token_count'] ?></td>
+                        <td><?= (int) $dp['total_hits'] ?></td>
+                        <td class="actions-col">
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                                <a class="button-link btn-small" href="<?= h($buildAdminUrl(['tab' => 'links', 'decoy_pack' => (string) ((int) $dp['id'])])) ?>#decoy-packs">Tokens</a>
+                                <a class="button-link btn-small" href="/admin/export-decoy-pack?id=<?= (int) $dp['id'] ?>">CSV</a>
+                                <?php if (!$isDemo): ?>
+                                <form method="post" action="/admin/delete-decoy-pack" class="inline-action-form" data-confirm="Delete decoy pack #<?= (int) $dp['id'] ?> and all <?= (int) $dp['token_count'] ?> tokens? Related click rows are kept but unlinked unless you use Delete + clicks.">
+                                    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                    <input type="hidden" name="id" value="<?= (int) $dp['id'] ?>">
+                                    <button type="submit" class="btn-small">Delete pack</button>
+                                </form>
+                                <form method="post" action="/admin/delete-decoy-pack" class="inline-action-form" data-confirm="Delete decoy pack #<?= (int) $dp['id'] ?>, all its tokens, and all click history for those tokens? This cannot be undone.">
+                                    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                    <input type="hidden" name="id" value="<?= (int) $dp['id'] ?>">
+                                    <input type="hidden" name="delete_clicks" value="1">
+                                    <button type="submit" class="btn-small">Delete + clicks</button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+
             <h2>Token summary</h2>
+            <?php if ($decoyPackFilter > 0): ?>
+                <p class="muted" style="margin-bottom: 0.75rem;">Showing tokens for decoy pack #<?= (int) $decoyPackFilter ?> only.
+                    <a href="<?= h($buildAdminUrl(['tab' => 'links', 'decoy_pack' => null])) ?>">Show all tokens</a></p>
+            <?php endif; ?>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -2036,6 +2105,7 @@ function renderAdminPage(
                         <th>Token / Path</th>
                         <th>Description</th>
                         <th>Campaign</th>
+                        <th>Pack</th>
                         <th>State</th>
                         <th>Destination</th>
                         <th>Active</th>
@@ -2048,7 +2118,7 @@ function renderAdminPage(
                         <th>Stale</th>
                         <th class="actions-col">Actions</th>
                     </tr>
-		    <?php foreach ($links as $link): ?>
+		    <?php foreach ($linksForTokenTable as $link): ?>
 		<tr>
 		    <td><?= (int) $link['id'] ?></td>
 		    <td class="mono">
@@ -2069,34 +2139,42 @@ function renderAdminPage(
 		            —
 		        <?php endif; ?>
 		    </td>
+		    <td class="muted">
+		        <?php $packId = (int) ($link['decoy_pack_id'] ?? 0); ?>
+		        <?php if ($packId > 0): ?>
+		            <a class="table-link" href="<?= h($buildAdminUrl(['tab' => 'links', 'decoy_pack' => (string) $packId])) ?>#decoy-packs"><?= $packId ?></a>
+		        <?php else: ?>
+		            —
+		        <?php endif; ?>
+		    </td>
                     <td><?= h((string) ($link['token_state'] ?? 'active')) ?></td>
 		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
 		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
 		    <td><?= (int) $link['click_count'] ?></td>
 		    <td>
 		        <?php if ((int) ($link['exclude_from_feed'] ?? 0) === 1): ?>
-		            <span class="badge badge-suspicious" title="IPs hitting this token are excluded from the threat feed">Yes</span>
+		            <span class="badge badge-suspicious badge--no-prefix" title="IPs hitting this token are excluded from the threat feed">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
 		    </td>
 		    <td>
 		        <?php if ((int) ($link['force_include_in_feed'] ?? 0) === 1): ?>
-		            <span class="badge badge-bot" title="Any IP hitting this token is always in the threat feed">Yes</span>
+		            <span class="badge badge-bot badge--no-prefix" title="Any IP hitting this token is always in the threat feed">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
 		    </td>
 		    <td>
 		        <?php if ((int) ($link['include_in_token_webhook'] ?? 0) === 1): ?>
-		            <span class="badge badge-human" title="Token webhook fires on hit">Yes</span>
+		            <span class="badge badge-human badge--no-prefix" title="Token webhook fires on hit">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
 		    </td>
 		    <td>
 		        <?php if ((int) ($link['include_in_email'] ?? 0) === 1): ?>
-		            <span class="badge badge-human" title="Email alert fires on hit">Yes</span>
+		            <span class="badge badge-human badge--no-prefix" title="Email alert fires on hit">Yes</span>
 		        <?php else: ?>
 		            No
 		        <?php endif; ?>
@@ -2111,7 +2189,7 @@ function renderAdminPage(
                         $stale = ($staleTokenDays > 0 && $lastHitMs > 0) ? ((currentUnixMs() - $lastHitMs) > ($staleTokenDays * 86400000)) : false;
                         ?>
                         <?php if ($stale): ?>
-                            <span class="badge badge-suspicious">stale</span>
+                            <span class="badge badge-suspicious badge--no-prefix">stale</span>
                         <?php else: ?>
                             —
                         <?php endif; ?>

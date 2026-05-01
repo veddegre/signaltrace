@@ -77,6 +77,24 @@ Added lightweight regression coverage and CI wiring:
   - `/export/reports/country-density`
   - `/export/reports/country-density.csv`
 
+### Token UX clarity and workflow refinements
+
+- Removed token saved-filter preset controls from the dashboard to reduce clutter and keep filtering focused on live context.
+- Moved row-density controls into Settings with clearer copy (`comfortable` / `compact`) and persistent local preference.
+- Clarified token attribution wording by renaming the ambiguous **Channel** field to **Placement (optional)** with helper text explaining it is documentation-only and separate from webhook/email toggles.
+- Updated token status badges in the summary table to remove severity glyph prefixes (`+`, `!`, `!!`) for plain operational `Yes/No` readability.
+
+### Decoy packs promoted to first-class entities
+
+- Added a dedicated `decoy_packs` table and linked tokens via `links.decoy_pack_id` for true pack-level lifecycle management.
+- Updated decoy pack creation to persist each deployment as a distinct pack instance with preset and destination metadata.
+- Added a new **Decoy packs** management section in the Tokens tab with per-pack token/hit counts.
+- Added pack-level actions for:
+  - filtered token drilldown
+  - CSV pack report export (`/admin/export-decoy-pack?id=...`)
+  - bulk deletion (pack only, or pack + related click history)
+- Preserved token `type` and `decoy_pack_id` on token edits so decoy tokens remain correctly associated after updates.
+
 ---
 
 ## [v2.10.0] — IP Override Enhancements, Admin Protection, and Infrastructure Fixes

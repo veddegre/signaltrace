@@ -249,7 +249,7 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
-* **Token management:** create/edit/activate/deactivate/delete tokens, lifecycle states (draft/active/paused/expired/archived), optional activation/expiration windows, owner/source/objective/channel attribution, weighted redirect pools, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
+* **Token management:** create/edit/activate/deactivate/delete tokens, lifecycle states (draft/active/paused/expired/archived), optional activation/expiration windows, owner/source/objective/placement attribution, weighted redirect pools, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
 * **IP overrides:** five modes — Block (always bot, score 0), Allow (always human, score 100), None (scoring unchanged), Feed include (always include in threat feeds), or Feed exclude (never include in threat feeds). Any override can independently hide an IP from the dashboard activity feed while still logging and scoring all traffic from it. The **Show Hidden IPs** toggle reveals suppressed activity on demand.
@@ -261,7 +261,7 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Token event context:** first-hit and dormancy-reactivation markers can be embedded in token alert reason strings for downstream automation.
 * **Email alerting:** plain text SMTP alerts for threats and tracked token hits. Per-token opt-in. Configurable threshold and deduplication window.
 * **Adaptive deception:** optional realistic decoy responses for suspicious unknown-path probes (e.g. fake env/login/API responses) to improve observation depth.
-* **Decoy packs:** one-click honeypot token bundles for common probe surfaces (WordPress, Laravel, phpMyAdmin, Kubernetes, Git, baseline).
+* **Decoy packs:** one-click honeypot token bundles for common probe surfaces (WordPress, Laravel, phpMyAdmin, Kubernetes, Git, baseline), now tracked as first-class pack instances with grouped token management, pack-level CSV reporting, and bulk delete options.
 * **Redirect rate limiting:** per IP per token, configurable count and window.
 * **Cleanup tools:** delete by token, IP, filter, or unknown-token hits.
 * **Data retention:** per-table retention windows for clicks, auth failures, and enrichment cache; optional archive-before-cleanup CSV; and manual cleanup from Settings.
