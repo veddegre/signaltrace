@@ -1810,8 +1810,6 @@ function renderAdminPage(
             <input id="edit_source" type="text" name="source" value="<?= h((string) ($editLink['source'] ?? '')) ?>" placeholder="Email campaign / web form / integration">
             <label for="edit_objective">Objective</label>
             <input id="edit_objective" type="text" name="objective" value="<?= h((string) ($editLink['objective'] ?? '')) ?>" placeholder="Detection / validation / monitoring">
-            <label for="edit_channel">Channel</label>
-            <input id="edit_channel" type="text" name="channel" value="<?= h((string) ($editLink['channel'] ?? '')) ?>" placeholder="Email / SMS / web / API">
 
             <label for="edit_redirect_strategy">Redirect strategy</label>
             <select id="edit_redirect_strategy" name="redirect_strategy">
@@ -1880,6 +1878,10 @@ function renderAdminPage(
             <input id="edit_dormancy_alert_hours" type="number" min="0" name="dormancy_alert_hours" value="<?= (int) ($editLink['dormancy_alert_hours'] ?? 0) ?>">
             <p class="muted" style="margin: 4px 0 12px 0;">When set, emits `token_dormant_reactivation` marker after this inactivity window.</p>
 
+            <label for="edit_channel">Placement (optional)</label>
+            <input id="edit_channel" type="text" name="channel" value="<?= h((string) ($editLink['channel'] ?? '')) ?>" placeholder="e.g. Q1 sim email, intranet page, partner newsletter">
+            <p class="muted" style="margin: 4px 0 12px 0;">Free text for your team’s records about where this link is used. It does not turn on webhooks or email — those are the checkboxes above.</p>
+
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 	            <button type="submit">Save token</button>
 	            <form method="get" action="/admin" class="inline-action-form">
@@ -1934,8 +1936,6 @@ function renderAdminPage(
                 <input id="source" type="text" name="source" placeholder="Email campaign / web form / integration">
                 <label for="objective">Objective</label>
                 <input id="objective" type="text" name="objective" placeholder="Detection / validation / monitoring">
-                <label for="channel">Channel</label>
-                <input id="channel" type="text" name="channel" placeholder="Email / SMS / web / API">
 
                 <label for="redirect_strategy">Redirect strategy</label>
                 <select id="redirect_strategy" name="redirect_strategy">
@@ -1995,6 +1995,10 @@ function renderAdminPage(
                 </div>
                 <label for="dormancy_alert_hours">Dormancy reactivation threshold (hours)</label>
                 <input id="dormancy_alert_hours" type="number" min="0" name="dormancy_alert_hours" value="0">
+
+                <label for="channel">Placement (optional)</label>
+                <input id="channel" type="text" name="channel" placeholder="e.g. Q1 sim email, intranet page, partner newsletter">
+                <p class="muted" style="margin: 4px 0 12px 0;">Free text for your team’s records about where this link is used. It does not turn on webhooks or email — those are the checkboxes above.</p>
 
                 <button type="submit">Create token</button>
             </form>
