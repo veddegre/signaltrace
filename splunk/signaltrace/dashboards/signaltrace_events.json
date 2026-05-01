@@ -45,8 +45,8 @@
                         "value": "suspicious"
                     },
                     {
-                        "label": "Likely-Human",
-                        "value": "likely-human"
+                        "label": "Uncertain",
+                        "value": "uncertain"
                     },
                     {
                         "label": "Human",

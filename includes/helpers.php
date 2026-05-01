@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/classification.php';
+
 function h(string $value): string
 {
     return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -558,8 +560,8 @@ function collectRequestData(string $path, PDO $pdo): array
         $data['ip_country'] = $geo['ip_country'];
     }
 
-    // Check for an active IP override — if one exists, apply the pinned
-    // classification (allow/block), or fall through to normal scoring (none).
+    // Check for an active IP override. allow/block pin classification; other
+    // modes (none/feed_include/feed_exclude) leave scoring unchanged.
     if (!empty($data['ip'])) {
         $override = getIpOverrideByIp($pdo, $data['ip']);
         if ($override && (int) $override['active'] === 1) {
@@ -857,12 +859,29 @@ function maybeFireTokenAlert(PDO $pdo, array $requestData): void
         return;
     }
 
-    // Check the per-token opt-in flag.
+    // Check per-token opt-in, with optional campaign-level fallback.
     $linkId = (int) $requestData['link_id'];
-    $stmt = $pdo->prepare("SELECT include_in_token_webhook FROM links WHERE id = :id LIMIT 1");
+    $stmt = $pdo->prepare("
+        SELECT
+            l.include_in_token_webhook,
+            COALESCE(c.webhook_enabled, 0) AS campaign_webhook_enabled,
+            COALESCE(c.active, 0)          AS campaign_active
+        FROM links l
+        LEFT JOIN campaigns c ON c.id = l.campaign_id
+        WHERE l.id = :id
+        LIMIT 1
+    ");
     $stmt->execute([':id' => $linkId]);
-    $includeInWebhook = (int) ($stmt->fetchColumn() ?: 0);
-    if ($includeInWebhook !== 1) {
+    $row = $stmt->fetch();
+    if (!$row) {
+        return;
+    }
+
+    $includeInWebhook       = (int) ($row['include_in_token_webhook'] ?? 0) === 1;
+    $campaignWebhookEnabled = (int) ($row['campaign_webhook_enabled'] ?? 0) === 1;
+    $campaignActive         = (int) ($row['campaign_active'] ?? 0) === 1;
+
+    if (!isTokenWebhookEnabledForLink($includeInWebhook, $campaignWebhookEnabled, $campaignActive)) {
         return;
     }
 

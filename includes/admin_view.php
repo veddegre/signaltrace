@@ -269,6 +269,7 @@ function renderAdminPage(
     $hostFilter     = trim((string) ($_GET['host']    ?? ''));
     $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
     $showHidden     = isset($_GET['show_hidden'])     && $_GET['show_hidden']     === '1';
+    $showTopTokens  = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1';
 
     $activeTab  = trim((string) ($_GET['tab'] ?? ''));
     $editLinkId = (int) ($_GET['edit_link_id'] ?? 0);
@@ -316,6 +317,17 @@ function renderAdminPage(
     );
     $exportUrl = ($baseUrl !== '' ? rtrim($baseUrl, '/') : '') . '/export/json';
 
+    $secondaryFilterCount = (int) ($visitorFilter !== '')
+        + (int) ($campaignFilter > 0)
+        + (int) ($hostFilter !== '')
+        + (int) ($dateFrom !== '')
+        + (int) ($dateTo !== '')
+        + (int) $knownOnly
+        + (int) $showAll
+        + (int) $showHidden
+        + (int) $showTopTokens;
+    $filterDrawerOpen = $secondaryFilterCount > 0;
+
     $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
     $threatFeedWindowHours = (string) (getSetting($pdo, 'threat_feed_window_hours', '168') ?? '168');
     $threatFeedMinConfidence = (string) (getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
@@ -358,7 +370,7 @@ function renderAdminPage(
         }
     }
 
-    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $showHidden, $activeTab): string {
+    $buildAdminUrl = function (array $overrides = []) use ($tokenFilter, $ipFilter, $visitorFilter, $campaignFilter, $knownOnly, $dateFrom, $dateTo, $showAll, $hideBehavioral, $hostFilter, $hideSubdomains, $showHidden, $showTopTokens, $activeTab): string {
         $params = [];
 
         if ($tokenFilter !== '') {
@@ -393,6 +405,9 @@ function renderAdminPage(
         }
         if ($showHidden) {
             $params['show_hidden'] = '1';
+        }
+        if ($showTopTokens) {
+            $params['show_top_tokens'] = '1';
         }
         if ($hostFilter !== '') {
             $params['host'] = $hostFilter;
@@ -471,7 +486,7 @@ function renderAdminPage(
                 </a>
                 <span class="header-tag">Admin</span>
             </div>
-            <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle dark mode">
+            <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle theme">
                 <span class="theme-icon" id="theme-icon">☀️</span>
                 <span id="theme-label">Light</span>
             </button>
@@ -493,54 +508,14 @@ function renderAdminPage(
                 <input type="hidden" name="tab" value="dashboard">
                 <?php if ($hideBehavioral): ?><input type="hidden" name="hide_behavioral" value="1"><?php endif; ?>
                 <?php if ($hideSubdomains): ?><input type="hidden" name="hide_subdomains" value="1"><?php endif; ?>
-		<h2>Filter Activity</h2>
+		<h2>Filter activity</h2>
 		<div class="filter-container">
-                    <div class="filter-inputs">
-	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Filter by token or path">
-	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="Filter by IP">
-	                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Filter by visitor hash">
-                    <select name="campaign">
-                        <option value="">All campaigns</option>
-                        <?php foreach ($campaigns as $campaignOption): ?>
-                        <option value="<?= (int) $campaignOption['id'] ?>" <?= $campaignFilter === (int) $campaignOption['id'] ? 'selected' : '' ?>>
-                            <?= h((string) $campaignOption['name']) ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-	                <?php if ($wildcardMode): ?>
-	                <input type="text" name="host" value="<?= h($hostFilter) ?>" placeholder="Filter by subdomain or host" class="hide-mobile">
-	                <?php endif; ?>
-	                <label class="date-filter-label">
-	                    <span class="date-filter-hint">📅 From</span>
-	                    <input type="date" name="date_from" value="<?= h($dateFrom) ?>">
-	                </label>
-	                <label class="date-filter-label">
-	                    <span class="date-filter-hint">📅 To</span>
-	                    <input type="date" name="date_to" value="<?= h($dateTo) ?>">
-	                </label>
-		    </div>
-                    <div class="filter-toggles">
-	                <label>
-	                    <input type="checkbox" name="known" value="1" <?= $knownOnly ? 'checked' : '' ?>>
-	                    Known tokens only
-			</label>
-			<label>
-			    <input type="checkbox" name="show_top_tokens" value="1"
-			        <?= (isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1') ? 'checked' : '' ?>>
-			    Show Top Tokens
-			</label>
-			<label>
-			    <input type="checkbox" name="show_all" value="1" <?= (isset($_GET['show_all']) && $_GET['show_all'] === '1') ? 'checked' : '' ?>>
-			    Show all
-			</label>
-			<label>
-			    <input type="checkbox" name="show_hidden" value="1" <?= $showHidden ? 'checked' : '' ?>>
-			    Show hidden IPs
-			</label>
-                </div>
-                <div class="filter-actions">
-                    <button type="submit">Apply Filter</button>
-                    <a class="button-link" href="<?= h($buildDashboardUrl(['token' => null, 'ip' => null, 'visitor' => null, 'campaign' => null, 'host' => null, 'known' => null, 'show_top_tokens' => null, 'show_all' => null, 'date_from' => null, 'date_to' => null, 'page' => null])) ?>">Clear Filter</a>
+                    <div class="filter-bar-primary">
+	                <input type="text" name="token" value="<?= h($tokenFilter) ?>" placeholder="Token or path" autocomplete="off">
+	                <input type="text" name="ip" value="<?= h($ipFilter) ?>" placeholder="IP address" autocomplete="off">
+                        <div class="filter-bar-primary-actions filter-actions">
+                    <button type="submit">Apply filters</button>
+                    <a class="button-link" href="<?= h($buildDashboardUrl(['token' => null, 'ip' => null, 'visitor' => null, 'campaign' => null, 'host' => null, 'known' => null, 'show_top_tokens' => null, 'show_all' => null, 'show_hidden' => null, 'date_from' => null, 'date_to' => null, 'page' => null])) ?>">Clear filters</a>
                     <a class="button-link" href="<?= h($refreshUrl) ?>">Refresh</a>
                     <?php
                     $exportParams = [];
@@ -556,8 +531,60 @@ function renderAdminPage(
                     ?>
                     <a class="button-link" href="<?= h($exportHref) ?>" target="_blank" rel="noopener">Export JSON</a>
                     <a class="button-link" href="<?= h(str_replace('/export/json', '/export/csv', $exportHref)) ?>" target="_blank" rel="noopener">Export CSV</a>
+                        </div>
+                    </div>
+
+                    <details class="filter-more" <?= $filterDrawerOpen ? 'open' : '' ?>>
+                        <summary class="filter-more-summary">
+                            More filters
+                            <?php if ($secondaryFilterCount > 0): ?>
+                                <span class="filter-more-badge"><?= (int) $secondaryFilterCount ?></span>
+                            <?php endif; ?>
+                        </summary>
+                        <div class="filter-more-body">
+                            <div class="filter-inputs">
+                                <input type="text" name="visitor" value="<?= h($visitorFilter) ?>" placeholder="Visitor hash" autocomplete="off">
+                                <select name="campaign">
+                                    <option value="">All campaigns</option>
+                                    <?php foreach ($campaigns as $campaignOption): ?>
+                                    <option value="<?= (int) $campaignOption['id'] ?>" <?= $campaignFilter === (int) $campaignOption['id'] ? 'selected' : '' ?>>
+                                        <?= h((string) $campaignOption['name']) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php if ($wildcardMode): ?>
+                                <input type="text" name="host" value="<?= h($hostFilter) ?>" placeholder="Subdomain or host" class="hide-mobile" autocomplete="off">
+                                <?php endif; ?>
+                                <label class="date-filter-label">
+                                    <span class="date-filter-hint">From</span>
+                                    <input type="date" name="date_from" value="<?= h($dateFrom) ?>">
+                                </label>
+                                <label class="date-filter-label">
+                                    <span class="date-filter-hint">To</span>
+                                    <input type="date" name="date_to" value="<?= h($dateTo) ?>">
+                                </label>
+                            </div>
+                            <div class="filter-toggles">
+                                <label>
+                                    <input type="checkbox" name="known" value="1" <?= $knownOnly ? 'checked' : '' ?>>
+                                    Known tokens only
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="show_top_tokens" value="1" <?= $showTopTokens ? 'checked' : '' ?>>
+                                    Show top tokens
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="show_all" value="1" <?= $showAll ? 'checked' : '' ?>>
+                                    Show all scores
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="show_hidden" value="1" <?= $showHidden ? 'checked' : '' ?>>
+                                    Show hidden IPs
+                                </label>
+                            </div>
+                        </div>
+                    </details>
 		</div>
-               </div>
             </form>
 
             <?php if ($hasActiveFilter): ?>
@@ -624,86 +651,101 @@ function renderAdminPage(
 		            <a href="<?= h($buildDashboardUrl(['show_all' => null])) ?>">×</a>
 		       </span>
 		    <?php endif; ?>
+
+                    <?php if ($showHidden): ?>
+                        <span class="filter-pill">
+                            hidden IPs
+                            <a href="<?= h($buildDashboardUrl(['show_hidden' => null])) ?>">×</a>
+                        </span>
+                    <?php endif; ?>
+
+                    <?php if ($showTopTokens): ?>
+                        <span class="filter-pill">
+                            top tokens
+                            <a href="<?= h($buildDashboardUrl(['show_top_tokens' => null])) ?>">×</a>
+                        </span>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
 
 
 
 <?php if ($tokenFilter !== '' && !$knownOnly && $ipFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
-    <form method="post" action="/admin/delete-token-clicks" class="inline-form">
-        <h2>Token Cleanup</h2>
-        <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
-
-        <div class="filter-actions" style="margin-left: 0;">
-            <button type="submit"
-                    name="mode"
-                    value="unknown_only"
-                    class="warning-button"
-                    data-confirm="Delete unknown-only clicks for this token/path?">
-                Delete Unknown Token Hits
-            </button>
-
-            <button type="submit"
-                    name="mode"
-                    value="all"
-                    class="danger-button"
-                    data-confirm="Delete ALL clicks for this token/path?">
-                Delete All Clicks for Token
-            </button>
-        </div>
-    </form>
+    <details class="admin-maintenance-block">
+        <summary>Token maintenance — delete clicks for this path</summary>
+        <form method="post" action="/admin/delete-token-clicks" class="inline-form">
+            <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
+            <div class="filter-actions" style="margin-left: 0;">
+                <button type="submit"
+                        name="mode"
+                        value="unknown_only"
+                        class="warning-button"
+                        data-confirm="Delete unknown-only clicks for this token/path?">
+                    Delete unknown token hits
+                </button>
+                <button type="submit"
+                        name="mode"
+                        value="all"
+                        class="danger-button"
+                        data-confirm="Delete ALL clicks for this token/path?">
+                    Delete all clicks for token
+                </button>
+            </div>
+        </form>
+    </details>
 <?php endif; ?>
 
 <?php if ($ipFilter !== '' && !$knownOnly && $tokenFilter === '' && $visitorFilter === '' && $dateFrom === '' && $dateTo === ''): ?>
-    <form method="post" action="/admin/delete-ip-clicks" class="inline-form">
-        <h2>IP Cleanup</h2>
-        <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
-
-        <div class="filter-actions" style="margin-left: 0;">
-            <button type="submit"
-                    name="mode"
-                    value="unknown_only"
-                    class="warning-button"
-                    data-confirm="Delete unknown-only clicks for this IP?">
-                Delete Unknown IP Hits
-            </button>
-
-            <button type="submit"
-                    name="mode"
-                    value="all"
-                    class="danger-button"
-                    data-confirm="Delete ALL clicks for this IP?">
-                Delete All Clicks for IP
-            </button>
-        </div>
-    </form>
+    <details class="admin-maintenance-block">
+        <summary>IP maintenance — delete clicks for this address</summary>
+        <form method="post" action="/admin/delete-ip-clicks" class="inline-form">
+            <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+            <div class="filter-actions" style="margin-left: 0;">
+                <button type="submit"
+                        name="mode"
+                        value="unknown_only"
+                        class="warning-button"
+                        data-confirm="Delete unknown-only clicks for this IP?">
+                    Delete unknown IP hits
+                </button>
+                <button type="submit"
+                        name="mode"
+                        value="all"
+                        class="danger-button"
+                        data-confirm="Delete ALL clicks for this IP?">
+                    Delete all clicks for IP
+                </button>
+            </div>
+        </form>
+    </details>
 <?php endif; ?>
 
 <?php if ($hasActiveFilter): ?>
-    <form method="post" action="/admin/delete-filtered-clicks" class="inline-form">
-        <h2>Bulk Delete</h2>
-        <p class="muted">Delete all <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter.</p>
-        <?php if ($tokenFilter   !== ''): ?><input type="hidden" name="token"     value="<?= h($tokenFilter) ?>"><?php endif; ?>
-        <?php if ($ipFilter      !== ''): ?><input type="hidden" name="ip"        value="<?= h($ipFilter) ?>"><?php endif; ?>
-        <?php if ($visitorFilter !== ''): ?><input type="hidden" name="visitor"   value="<?= h($visitorFilter) ?>"><?php endif; ?>
-        <?php if ($knownOnly):            ?><input type="hidden" name="known"     value="1"><?php endif; ?>
-        <?php if ($dateFrom      !== ''): ?><input type="hidden" name="date_from" value="<?= h($dateFrom) ?>"><?php endif; ?>
-        <?php if ($dateTo        !== ''): ?><input type="hidden" name="date_to"   value="<?= h($dateTo) ?>"><?php endif; ?>
-        <div class="filter-actions" style="margin-left: 0;">
-            <button type="submit"
-                    class="danger-button"
-                    data-confirm="Delete ALL <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter? This cannot be undone.">
-                Delete All Matching Clicks
-            </button>
-        </div>
-    </form>
+    <details class="admin-maintenance-block admin-danger-zone">
+        <summary>Bulk delete — all clicks matching current filters</summary>
+        <form method="post" action="/admin/delete-filtered-clicks" class="inline-form">
+            <p class="muted">Deletes <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the active filter. Cannot be undone.</p>
+            <?php if ($tokenFilter   !== ''): ?><input type="hidden" name="token"     value="<?= h($tokenFilter) ?>"><?php endif; ?>
+            <?php if ($ipFilter      !== ''): ?><input type="hidden" name="ip"        value="<?= h($ipFilter) ?>"><?php endif; ?>
+            <?php if ($visitorFilter !== ''): ?><input type="hidden" name="visitor"   value="<?= h($visitorFilter) ?>"><?php endif; ?>
+            <?php if ($knownOnly):            ?><input type="hidden" name="known"     value="1"><?php endif; ?>
+            <?php if ($dateFrom      !== ''): ?><input type="hidden" name="date_from" value="<?= h($dateFrom) ?>"><?php endif; ?>
+            <?php if ($dateTo        !== ''): ?><input type="hidden" name="date_to"   value="<?= h($dateTo) ?>"><?php endif; ?>
+            <div class="filter-actions" style="margin-left: 0;">
+                <button type="submit"
+                        class="danger-button"
+                        data-confirm="Delete ALL <?= number_format($totalCount) ?> click<?= $totalCount !== 1 ? 's' : '' ?> matching the current filter? This cannot be undone.">
+                    Delete all matching clicks
+                </button>
+            </div>
+        </form>
+    </details>
 <?php endif; ?>
 
 
 
-	    <?php $showTopTokens = isset($_GET['show_top_tokens']) && $_GET['show_top_tokens'] === '1'; ?>
             <?php if ($showTopTokens): ?>
-            <h2>Top Tokens</h2>
+            <h2>Top tokens</h2>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -783,38 +825,47 @@ function renderAdminPage(
                             <td><?= h((string) ($flag['lowest_score'] ?? '')) ?></td>
                             <td><?= h((string) ($flag['first_seen'] ?? '')) ?></td>
                             <td><?= h((string) ($flag['last_seen'] ?? '')) ?></td>
-                            <td class="actions-col">
+                            <td class="actions-col actions-col--menu">
                                 <?php
                                 $existingOverride = $ipOverrideMap[$flagIp] ?? null;
                                 $existingMode     = $existingOverride['mode'] ?? null;
                                 ?>
-                                <?php if ($existingOverride === null): ?>
-                                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
-                                        <input type="hidden" name="mode" value="block">
-                                        <input type="hidden" name="notes" value="Added from behavioral flags">
-                                        <button type="submit" class="danger-button">Block</button>
-                                    </form>
-                                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
-                                        <input type="hidden" name="mode" value="allow">
-                                        <input type="hidden" name="notes" value="Added from behavioral flags">
-                                        <button type="submit" class="warning-button">Allow</button>
-                                    </form>
-                                    <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
-                                        <input type="hidden" name="mode" value="block">
-                                        <input type="hidden" name="hide_from_dashboard" value="1">
-                                        <input type="hidden" name="notes" value="Added from behavioral flags">
-                                        <button type="submit">Hide</button>
-                                    </form>
-                                <?php else: ?>
-                                    <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : ($existingMode === 'allow' ? 'badge-human' : 'badge-muted') ?>"><?= h($existingMode) ?></span>
+                                <?php if ($existingOverride !== null): ?>
+                                    <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : ($existingMode === 'allow' ? 'badge-human' : 'badge-muted') ?>"><?= h((string) $existingMode) ?></span>
                                     <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
                                         <span class="badge badge-muted">hidden</span>
                                     <?php endif; ?>
-                                    <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
                                 <?php endif; ?>
+                                <div class="action-menu" data-action-menu>
+                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Override actions for IP">⋯</button>
+                                    <div class="action-menu-panel" hidden>
+                                        <div class="action-menu-inner">
+                                            <?php if ($existingOverride === null): ?>
+                                                <form method="post" action="/admin/create-ip-override" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
+                                                    <input type="hidden" name="mode" value="block">
+                                                    <input type="hidden" name="notes" value="Added from behavioral flags">
+                                                    <button type="submit" class="danger-button action-menu-submit">Block IP</button>
+                                                </form>
+                                                <form method="post" action="/admin/create-ip-override" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
+                                                    <input type="hidden" name="mode" value="allow">
+                                                    <input type="hidden" name="notes" value="Added from behavioral flags">
+                                                    <button type="submit" class="warning-button action-menu-submit">Allow IP</button>
+                                                </form>
+                                                <form method="post" action="/admin/create-ip-override" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="ip" value="<?= h($flagIp) ?>">
+                                                    <input type="hidden" name="mode" value="block">
+                                                    <input type="hidden" name="hide_from_dashboard" value="1">
+                                                    <input type="hidden" name="notes" value="Added from behavioral flags">
+                                                    <button type="submit" class="action-menu-submit">Hide from dashboard</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <a class="action-menu-link copy-button" href="/admin?tab=overrides" style="margin-left:0;">Manage overrides</a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -1028,8 +1079,8 @@ function renderAdminPage(
 					    <a class="pill-link mono" href="<?= h($buildDashboardUrl(['ip' => $rowIp])) ?>"><?= h($rowIp) ?></a>
 					    <button type="button" class="copy-button" data-copy="<?= h($rowIp) ?>" title="Copy IP">Copy</button>
 					    <a class="copy-button" href="https://www.virustotal.com/gui/ip-address/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Open in VirusTotal">VT</a>
-					    <a class="copy-button" href="https://www.abuseipdb.com/check/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Check AbuseIPDB">Abuse</a>
-					    <a class="copy-button" href="https://ipinfo.io/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="View IPInfo">Info</a>
+					    <a class="copy-button" href="https://www.abuseipdb.com/check/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Open in AbuseIPDB">Abuse</a>
+					    <a class="copy-button" href="https://ipinfo.io/<?= h($rowIp) ?>" target="_blank" rel="noopener" title="Open in IPinfo">Info</a>
 					</div>
 					<?php
                         $rowAsn = (string) ($c['ip_asn'] ?? '');
@@ -1134,71 +1185,77 @@ function renderAdminPage(
                                         if ($knownOnly)            $filterHiddens .= '<input type="hidden" name="_filter_known"     value="1">';
                                         if ($dateFrom      !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
                                         if ($dateTo        !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
-                                        ?>
-
-                                        <form method="post" action="/admin/delete-click" class="inline-action-form" data-confirm="Delete this click?">
-                                            <?= $filterHiddens ?>
-                                            <input type="hidden" name="id" value="<?= h((string) ($c['id'] ?? '')) ?>">
-                                            <button type="submit" class="danger-button">Delete This Click</button>
-                                        </form>
-
-                                        <form method="post" action="/admin/add-token-to-skip" class="inline-action-form" data-confirm="Add this token/path to skip patterns?">
-                                            <?= $filterHiddens ?>
-                                            <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                            <button type="submit" class="warning-button">Skip Exact Token</button>
-                                        </form>
-
-                                        <?php if (empty($c['link_id'])): ?>
-                                            <form method="post" action="/admin/delete-token-clicks" class="inline-action-form" data-confirm="Delete unknown-only clicks for this token/path?">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                                <input type="hidden" name="mode" value="unknown_only">
-                                                <button type="submit" class="warning-button">Delete Unknown Token Hits</button>
-                                            </form>
-                                        <?php endif; ?>
-
-                                        <form method="post" action="/admin/delete-token-clicks" class="inline-action-form" data-confirm="Delete ALL clicks for this token/path?">
-                                            <?= $filterHiddens ?>
-                                            <input type="hidden" name="token" value="<?= h($rowToken) ?>">
-                                            <input type="hidden" name="mode" value="all">
-                                            <button type="submit" class="danger-button">Delete All Clicks for Token</button>
-                                        </form>
-
-                                        <?php
                                         $existingOverride     = $ipOverrideMap[$rowIp] ?? null;
                                         $existingOverrideMode = $existingOverride['mode'] ?? null;
                                         ?>
-                                        <?php if ($existingOverride === null): ?>
-                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-                                                <input type="hidden" name="mode" value="block">
-                                                <input type="hidden" name="notes" value="Added from activity feed">
-                                                <button type="submit" class="danger-button">Block IP</button>
-                                            </form>
-                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-                                                <input type="hidden" name="mode" value="allow">
-                                                <input type="hidden" name="notes" value="Added from activity feed">
-                                                <button type="submit" class="warning-button">Allow IP</button>
-                                            </form>
-                                            <form method="post" action="/admin/create-ip-override" class="inline-action-form">
-                                                <?= $filterHiddens ?>
-                                                <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
-                                                <input type="hidden" name="mode" value="block">
-                                                <input type="hidden" name="hide_from_dashboard" value="1">
-                                                <input type="hidden" name="notes" value="Added from activity feed">
-                                                <button type="submit">Hide IP</button>
-                                            </form>
-                                        <?php else: ?>
+                                        <div class="action-menu" data-action-menu>
+                                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Event row actions">⋯</button>
+                                            <div class="action-menu-panel" hidden>
+                                                <div class="action-menu-inner">
+                                                    <form method="post" action="/admin/delete-click" class="inline-action-form action-menu-form" data-confirm="Delete this click?">
+                                                        <?= $filterHiddens ?>
+                                                        <input type="hidden" name="id" value="<?= h((string) ($c['id'] ?? '')) ?>">
+                                                        <button type="submit" class="danger-button action-menu-submit">Delete this click</button>
+                                                    </form>
+
+                                                    <form method="post" action="/admin/add-token-to-skip" class="inline-action-form action-menu-form" data-confirm="Add this token/path to skip patterns?">
+                                                        <?= $filterHiddens ?>
+                                                        <input type="hidden" name="token" value="<?= h($rowToken) ?>">
+                                                        <button type="submit" class="warning-button action-menu-submit">Skip exact token</button>
+                                                    </form>
+
+                                                    <?php if (empty($c['link_id'])): ?>
+                                                        <form method="post" action="/admin/delete-token-clicks" class="inline-action-form action-menu-form" data-confirm="Delete unknown-only clicks for this token/path?">
+                                                            <?= $filterHiddens ?>
+                                                            <input type="hidden" name="token" value="<?= h($rowToken) ?>">
+                                                            <input type="hidden" name="mode" value="unknown_only">
+                                                            <button type="submit" class="warning-button action-menu-submit">Delete unknown token hits</button>
+                                                        </form>
+                                                    <?php endif; ?>
+
+                                                    <form method="post" action="/admin/delete-token-clicks" class="inline-action-form action-menu-form" data-confirm="Delete ALL clicks for this token/path?">
+                                                        <?= $filterHiddens ?>
+                                                        <input type="hidden" name="token" value="<?= h($rowToken) ?>">
+                                                        <input type="hidden" name="mode" value="all">
+                                                        <button type="submit" class="danger-button action-menu-submit">Delete all token clicks</button>
+                                                    </form>
+
+                                                    <?php if ($existingOverride === null): ?>
+                                                        <form method="post" action="/admin/create-ip-override" class="inline-action-form action-menu-form">
+                                                            <?= $filterHiddens ?>
+                                                            <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
+                                                            <input type="hidden" name="mode" value="block">
+                                                            <input type="hidden" name="notes" value="Added from activity feed">
+                                                            <button type="submit" class="danger-button action-menu-submit">Block IP</button>
+                                                        </form>
+                                                        <form method="post" action="/admin/create-ip-override" class="inline-action-form action-menu-form">
+                                                            <?= $filterHiddens ?>
+                                                            <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
+                                                            <input type="hidden" name="mode" value="allow">
+                                                            <input type="hidden" name="notes" value="Added from activity feed">
+                                                            <button type="submit" class="warning-button action-menu-submit">Allow IP</button>
+                                                        </form>
+                                                        <form method="post" action="/admin/create-ip-override" class="inline-action-form action-menu-form">
+                                                            <?= $filterHiddens ?>
+                                                            <input type="hidden" name="ip" value="<?= h($rowIp) ?>">
+                                                            <input type="hidden" name="mode" value="block">
+                                                            <input type="hidden" name="hide_from_dashboard" value="1">
+                                                            <input type="hidden" name="notes" value="Added from activity feed">
+                                                            <button type="submit" class="action-menu-submit">Hide IP from dashboard</button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <a class="action-menu-link copy-button" href="/admin?tab=overrides" style="margin-left:0;">Manage IP override</a>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <?php if ($existingOverride !== null): ?>
                                             <span class="badge <?= $existingOverrideMode === 'block' ? 'badge-bot' : ($existingOverrideMode === 'allow' ? 'badge-human' : 'badge-muted') ?>">
-                                                IP override: <?= h($existingOverrideMode) ?>
+                                                IP override: <?= h((string) $existingOverrideMode) ?>
                                             </span>
                                             <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
                                                 <span class="badge badge-muted">hidden</span>
                                             <?php endif; ?>
-                                            <a class="copy-button" href="/admin?tab=overrides">Manage →</a>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -1211,7 +1268,7 @@ function renderAdminPage(
             <?php if ($totalPages > 1): ?>
             <div class="pagination">
                 <?php if ($currentPage > 1): ?>
-                    <a class="button-link" href="<?= h($buildDashboardUrl(['page' => (string) ($currentPage - 1)])) ?>">&larr; Prev</a>
+                    <a class="button-link" href="<?= h($buildDashboardUrl(['page' => (string) ($currentPage - 1)])) ?>">&larr; Previous</a>
                 <?php endif; ?>
 
                 <?php
@@ -1267,18 +1324,21 @@ function renderAdminPage(
                     <td class="muted"><?= $campaign['last_hit']  !== null ? h((string) $campaign['last_hit'])  : '—' ?></td>
                     <td><?= ((int) ($campaign['webhook_enabled'] ?? 0) === 1) ? 'Fallback' : '—' ?></td>
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
-                    <td class="actions-col campaign-actions-cell">
-                        <div class="button-row campaign-action-row">
-                            <a class="primary-button button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View Activity</a>
-                                                        <button type="button" class="primary-button" data-edit-campaign="<?= (int) $campaign['id'] ?>">
-                                Edit
-                            </button>
-                            <form method="post" action="/admin/delete-campaign" class="inline-action-form"
-                                  data-confirm="Delete this campaign? Tokens will not be deleted but will be unassigned.">
-                                <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
-                                <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
-                                <button type="submit" class="danger-button">Delete</button>
-                            </form>
+                    <td class="actions-col actions-col--menu campaign-actions-cell">
+                        <div class="action-menu" data-action-menu>
+                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Campaign actions">⋯</button>
+                            <div class="action-menu-panel" hidden>
+                                <div class="action-menu-inner">
+                                    <a class="action-menu-link button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View activity</a>
+                                    <button type="button" class="action-menu-item" data-edit-campaign="<?= (int) $campaign['id'] ?>">Edit campaign</button>
+                                    <form method="post" action="/admin/delete-campaign" class="inline-action-form action-menu-form"
+                                          data-confirm="Delete this campaign? Tokens will not be deleted but will be unassigned.">
+                                        <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                        <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
+                                        <button type="submit" class="danger-button action-menu-submit">Delete campaign</button>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -1317,7 +1377,7 @@ function renderAdminPage(
                                     </div>
 
                                     <div class="campaign-edit-buttons">
-                                        <button type="submit">Save</button>
+                                        <button type="submit">Save campaign</button>
                                         <button type="button" class="primary-button" data-cancel-campaign-edit="<?= (int) $campaign['id'] ?>">
                                             Cancel
                                         </button>
@@ -1333,7 +1393,7 @@ function renderAdminPage(
         <?php endif; ?>
 
         <form method="post" action="/admin/create-campaign" style="margin-bottom:2rem;">
-            <h2>Create Campaign</h2>
+            <h2>Create campaign</h2>
             <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
             <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
                 <div>
@@ -1349,14 +1409,14 @@ function renderAdminPage(
                     <label for="campaign_webhook_enabled" style="font-size:0.8125rem;margin:0;">Fallback to token webhook</label>
                 </div>
                 <div class="campaign-form-action" style="display:flex;align-items:flex-end;padding-bottom:1rem;">
-                    <button type="submit" style="align-self:flex-end;">Create Campaign</button>
+                    <button type="submit" style="align-self:flex-end;">Create campaign</button>
                 </div>
             </div>
         </form>
 
 	    <?php if ($editLink !== null): ?>
 	    <form method="post" action="/admin/update-link">
-	        <h2>Edit Token</h2>
+	        <h2>Edit token</h2>
 
 	        <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
 	        <input type="hidden" name="id" value="<?= (int) $editLink['id'] ?>">
@@ -1415,7 +1475,7 @@ function renderAdminPage(
 	        </div>
 
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-	            <button type="submit">Save Changes</button>
+	            <button type="submit">Save token</button>
 	            <form method="get" action="/admin" class="inline-action-form">
 	                <input type="hidden" name="tab" value="links">
 	                <button type="submit">Cancel</button>
@@ -1427,7 +1487,7 @@ function renderAdminPage(
                 $editTemplates = buildTokenDeploymentSnippets($baseUrl, $editLink);
             ?>
             <div class="deployment-panel" style="margin-bottom:2rem;">
-                <h2>Deployment Templates</h2>
+                <h2>Deployment templates</h2>
                 <p class="muted" style="margin-bottom:1rem;">Copy ready-to-use snippets for email, HTML, Markdown, and tracking pixel deployments.</p>
                 <div class="snippet-grid">
                     <?php foreach ($editTemplates as $snippetTitle => $snippetBody): ?>
@@ -1437,7 +1497,7 @@ function renderAdminPage(
             </div>
 	<?php endif; ?>
             <form method="post" action="/admin/create-link">
-                <h2>Create Token</h2>
+                <h2>Create token</h2>
                 <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
                 <label for="token">Token / Path</label>
                 <input id="token" type="text" name="token" required placeholder="payroll or abc123">
@@ -1490,10 +1550,10 @@ function renderAdminPage(
                     <p class="muted" style="margin: 4px 0 0 0;">When enabled, an email fires each time this token is hit regardless of classification (deduped per IP per the configured window). Requires Email Alerting configured in Settings.</p>
                 </div>
 
-                <button type="submit">Create Token</button>
+                <button type="submit">Create token</button>
             </form>
 
-            <h2>Token Summary</h2>
+            <h2>Token summary</h2>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -1563,40 +1623,39 @@ function renderAdminPage(
 		        <?php endif; ?>
 		    </td>
 
-		    <td class="actions-col token-actions-cell">
-                        <div class="button-row token-action-row">
-			   <form method="get" action="/admin" class="inline-action-form">
-			       <input type="hidden" name="tab" value="links">
-			       <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
-	 		       <button type="submit">Edit</button>
-			   </form>
-
-                           <form action="#" class="inline-action-form" onsubmit="return false;">
-                               <button type="button" class="template-toggle-button" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Templates</button>
-                           </form>
-
-		        <?php if ((int) $link['active'] === 1): ?>
-		            <form method="post" action="/admin/deactivate-link" class="inline-action-form">
-               			 <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		                <button type="submit">Deactivate</button>
-		            </form>
-		        <?php else: ?>
-		            <form method="post" action="/admin/activate-link" class="inline-action-form">
-		                <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		                <button type="submit">Activate</button>
-   		         </form>
-     			 <?php endif; ?>
-
-		        <form method="post" action="/admin/delete-link" class="inline-action-form" data-confirm="Delete this token/path?">
-		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		            <button type="submit">Delete</button>
-		        </form>
-
-		        <form method="post" action="/admin/delete-link" class="inline-action-form" data-confirm="Delete this token/path and all related clicks?">
-		            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
-		            <input type="hidden" name="delete_clicks" value="1">
-		            <button type="submit" class="danger-button">Delete + Clicks</button>
-		        </form>
+		    <td class="actions-col actions-col--menu token-actions-cell">
+                        <div class="action-menu" data-action-menu>
+                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Token actions">⋯</button>
+                            <div class="action-menu-panel" hidden>
+                                <div class="action-menu-inner">
+                                    <form method="get" action="/admin" class="inline-action-form action-menu-form">
+                                        <input type="hidden" name="tab" value="links">
+                                        <input type="hidden" name="edit_link_id" value="<?= (int) $link['id'] ?>">
+                                        <button type="submit" class="action-menu-submit">Edit token</button>
+                                    </form>
+                                    <button type="button" class="action-menu-item" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Deployment templates</button>
+                                    <?php if ((int) $link['active'] === 1): ?>
+                                        <form method="post" action="/admin/deactivate-link" class="inline-action-form action-menu-form">
+                                            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                                            <button type="submit" class="action-menu-submit">Deactivate token</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post" action="/admin/activate-link" class="inline-action-form action-menu-form">
+                                            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                                            <button type="submit" class="action-menu-submit">Activate token</button>
+                                        </form>
+                                    <?php endif; ?>
+                                    <form method="post" action="/admin/delete-link" class="inline-action-form action-menu-form" data-confirm="Delete this token/path?">
+                                        <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                                        <button type="submit" class="action-menu-submit">Delete token</button>
+                                    </form>
+                                    <form method="post" action="/admin/delete-link" class="inline-action-form action-menu-form" data-confirm="Delete this token/path and all related clicks?">
+                                        <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                                        <input type="hidden" name="delete_clicks" value="1">
+                                        <button type="submit" class="danger-button action-menu-submit">Delete token + clicks</button>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
 		    </td>
 		</tr>
@@ -1622,7 +1681,7 @@ function renderAdminPage(
 
 	    <?php if ($editAsnRule !== null): ?>
 	    <form method="post" action="/admin/update-asn-rule">
-	        <h2>Edit ASN Rule</h2>
+	        <h2>Edit ASN rule</h2>
 	        <input type="hidden" name="id" value="<?= (int) $editAsnRule['id'] ?>">
 
 	        <label for="edit_asn_asn">ASN</label>
@@ -1643,7 +1702,7 @@ function renderAdminPage(
 	        </div>
 
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-	            <button type="submit">Save Changes</button>
+	        <button type="submit">Save ASN rule</button>
 	            <form method="get" action="/admin" class="inline-action-form">
 	                <input type="hidden" name="tab" value="asn">
 	                <button type="submit">Cancel</button>
@@ -1653,7 +1712,7 @@ function renderAdminPage(
 	    <?php endif; ?>
 
 	    <form method="post" action="/admin/create-asn-rule">
-	        <h2>Create ASN Rule</h2>
+	        <h2>Create ASN rule</h2>
 	        <label for="asn">ASN</label>
 	        <input id="asn" type="text" name="asn" required placeholder="8075">
 	        <label for="asn_label">Label</label>
@@ -1667,10 +1726,10 @@ function renderAdminPage(
 	            </label>
 	            <p class="muted" style="margin: 4px 0 0 0;">Score penalty still applies. Use this for your own infrastructure, CDNs, or monitoring services.</p>
 	        </div>
-	        <button type="submit">Add ASN Rule</button>
+	        <button type="submit">Add ASN rule</button>
 	    </form>
 
-	    <h2>ASN Rules</h2>
+	    <h2>ASN rules</h2>
 	    <div class="table-wrap">
 	        <table class="compact-table">
 	            <tr>
@@ -1696,27 +1755,34 @@ function renderAdminPage(
 	                            No
 	                        <?php endif; ?>
 	                    </td>
-	                    <td class="actions-col">
-	                        <form method="get" action="/admin" class="inline-action-form">
-	                            <input type="hidden" name="tab" value="asn">
-	                            <input type="hidden" name="edit_asn_rule_id" value="<?= (int) $rule['id'] ?>">
-	                            <button type="submit">Edit</button>
-	                        </form>
-	                        <?php if ((int) $rule['active'] === 1): ?>
-	                            <form method="post" action="/admin/deactivate-asn-rule" class="inline-action-form">
-	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-	                                <button type="submit">Deactivate</button>
-	                            </form>
-	                        <?php else: ?>
-	                            <form method="post" action="/admin/activate-asn-rule" class="inline-action-form">
-	                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-	                                <button type="submit">Activate</button>
-	                            </form>
-	                        <?php endif; ?>
-	                        <form method="post" action="/admin/delete-asn-rule" class="inline-action-form" data-confirm="Delete this ASN rule?">
-	                            <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-	                            <button type="submit">Delete</button>
-	                        </form>
+	                    <td class="actions-col actions-col--menu">
+	                        <div class="action-menu" data-action-menu>
+	                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="ASN rule actions">⋯</button>
+	                            <div class="action-menu-panel" hidden>
+	                                <div class="action-menu-inner">
+	                                    <form method="get" action="/admin" class="inline-action-form action-menu-form">
+	                                        <input type="hidden" name="tab" value="asn">
+	                                        <input type="hidden" name="edit_asn_rule_id" value="<?= (int) $rule['id'] ?>">
+	                                        <button type="submit" class="action-menu-submit">Edit ASN rule</button>
+	                                    </form>
+	                                    <?php if ((int) $rule['active'] === 1): ?>
+	                                        <form method="post" action="/admin/deactivate-asn-rule" class="inline-action-form action-menu-form">
+	                                            <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+	                                            <button type="submit" class="action-menu-submit">Deactivate ASN rule</button>
+	                                        </form>
+	                                    <?php else: ?>
+	                                        <form method="post" action="/admin/activate-asn-rule" class="inline-action-form action-menu-form">
+	                                            <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+	                                            <button type="submit" class="action-menu-submit">Activate ASN rule</button>
+	                                        </form>
+	                                    <?php endif; ?>
+	                                    <form method="post" action="/admin/delete-asn-rule" class="inline-action-form action-menu-form" data-confirm="Delete this ASN rule?">
+	                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+	                                        <button type="submit" class="danger-button action-menu-submit">Delete ASN rule</button>
+	                                    </form>
+	                                </div>
+	                            </div>
+	                        </div>
 	                    </td>
 	                </tr>
 	            <?php endforeach; ?>
@@ -1728,7 +1794,7 @@ function renderAdminPage(
 
             <?php if ($editCountryRule !== null): ?>
             <form method="post" action="/admin/update-country-rule">
-                <h2>Edit Country Rule</h2>
+                <h2>Edit country rule</h2>
                 <input type="hidden" name="id" value="<?= (int) $editCountryRule['id'] ?>">
 
                 <label for="edit_country_code">Country Code</label>
@@ -1741,7 +1807,7 @@ function renderAdminPage(
                 <input id="edit_country_penalty" type="number" name="penalty" min="1" max="100" value="<?= (int) $editCountryRule['penalty'] ?>">
 
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button type="submit">Save Changes</button>
+                    <button type="submit">Save country rule</button>
                     <form method="get" action="/admin" class="inline-action-form">
                         <input type="hidden" name="tab" value="countries">
                         <button type="submit">Cancel</button>
@@ -1751,8 +1817,8 @@ function renderAdminPage(
             <?php endif; ?>
 
             <form method="post" action="/admin/create-country-rule">
-                <h2>Add Country Rule</h2>
-                <p class="muted">Applies a score penalty to all requests from the specified country. Use 2-letter ISO country codes (e.g. CN, RU, KP). Only affects scoring — does not exclude IPs from the threat feed.</p>
+                <h2>Add country rule</h2>
+                <p class="muted">Applies a score penalty to all requests from the specified country. Use 2-letter ISO country codes (for example, CN, RU, KP). Only affects scoring and does not exclude IPs from the threat feed.</p>
 
                 <label for="country_code">Country Code</label>
                 <input id="country_code" type="text" name="country_code" required maxlength="2" style="text-transform:uppercase; width: 80px;" placeholder="CN">
@@ -1763,10 +1829,10 @@ function renderAdminPage(
                 <label for="country_penalty">Score Penalty (1–100)</label>
                 <input id="country_penalty" type="number" name="penalty" min="1" max="100" value="15">
 
-                <button type="submit">Add Country Rule</button>
+                <button type="submit">Add country rule</button>
             </form>
 
-            <h2>Country Rules</h2>
+            <h2>Country rules</h2>
             <?php if (empty($countryRules)): ?>
                 <p class="muted">No country rules configured.</p>
             <?php else: ?>
@@ -1787,27 +1853,34 @@ function renderAdminPage(
                             <td>-<?= (int) $rule['penalty'] ?></td>
                             <td><?= ((int) $rule['active'] === 1) ? 'Yes' : 'No' ?></td>
                             <td><?= h((string) ($rule['created_at'] ?? '')) ?></td>
-                            <td class="actions-col">
-                                <form method="get" action="/admin" class="inline-action-form">
-                                    <input type="hidden" name="tab" value="countries">
-                                    <input type="hidden" name="edit_country_id" value="<?= (int) $rule['id'] ?>">
-                                    <button type="submit">Edit</button>
-                                </form>
-                                <?php if ((int) $rule['active'] === 1): ?>
-                                    <form method="post" action="/admin/deactivate-country-rule" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-                                        <button type="submit">Deactivate</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="/admin/activate-country-rule" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-                                        <button type="submit">Activate</button>
-                                    </form>
-                                <?php endif; ?>
-                                <form method="post" action="/admin/delete-country-rule" class="inline-action-form" data-confirm="Delete this country rule?">
-                                    <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
-                                    <button type="submit">Delete</button>
-                                </form>
+                            <td class="actions-col actions-col--menu">
+                                <div class="action-menu" data-action-menu>
+                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Country rule actions">⋯</button>
+                                    <div class="action-menu-panel" hidden>
+                                        <div class="action-menu-inner">
+                                            <form method="get" action="/admin" class="inline-action-form action-menu-form">
+                                                <input type="hidden" name="tab" value="countries">
+                                                <input type="hidden" name="edit_country_id" value="<?= (int) $rule['id'] ?>">
+                                                <button type="submit" class="action-menu-submit">Edit country rule</button>
+                                            </form>
+                                            <?php if ((int) $rule['active'] === 1): ?>
+                                                <form method="post" action="/admin/deactivate-country-rule" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+                                                    <button type="submit" class="action-menu-submit">Deactivate country rule</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <form method="post" action="/admin/activate-country-rule" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+                                                    <button type="submit" class="action-menu-submit">Activate country rule</button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <form method="post" action="/admin/delete-country-rule" class="inline-action-form action-menu-form" data-confirm="Delete this country rule?">
+                                                <input type="hidden" name="id" value="<?= (int) $rule['id'] ?>">
+                                                <button type="submit" class="danger-button action-menu-submit">Delete country rule</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -1820,7 +1893,7 @@ function renderAdminPage(
 
             <?php if ($editOverride !== null): ?>
             <form method="post" action="/admin/update-ip-override">
-                <h2>Edit IP Override</h2>
+                <h2>Edit IP override</h2>
                 <input type="hidden" name="id" value="<?= (int) $editOverride['id'] ?>">
 
                 <label for="edit_override_ip">IP Address</label>
@@ -1831,6 +1904,8 @@ function renderAdminPage(
                     <option value="none"  <?= $editOverride['mode'] === 'none'  ? 'selected' : '' ?>>None — score normally (use for hide-only overrides)</option>
                     <option value="block" <?= $editOverride['mode'] === 'block' ? 'selected' : '' ?>>Block — always classify as bot (score 0)</option>
                     <option value="allow" <?= $editOverride['mode'] === 'allow' ? 'selected' : '' ?>>Allow — always classify as human (score 100)</option>
+                    <option value="feed_include" <?= $editOverride['mode'] === 'feed_include' ? 'selected' : '' ?>>Always include in threat feed</option>
+                    <option value="feed_exclude" <?= $editOverride['mode'] === 'feed_exclude' ? 'selected' : '' ?>>Never include in threat feed</option>
                 </select>
 
                 <label>
@@ -1842,7 +1917,7 @@ function renderAdminPage(
                 <input id="edit_override_notes" type="text" name="notes" value="<?= h((string) ($editOverride['notes'] ?? '')) ?>" placeholder="Optional note">
 
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button type="submit">Save Changes</button>
+                    <button type="submit">Save IP override</button>
                     <form method="get" action="/admin" class="inline-action-form">
                         <input type="hidden" name="tab" value="overrides">
                         <button type="submit">Cancel</button>
@@ -1852,8 +1927,8 @@ function renderAdminPage(
             <?php endif; ?>
 
             <form method="post" action="/admin/create-ip-override">
-                <h2>Add IP Override</h2>
-                <p class="muted">Block/Allow bypass scoring entirely. Optionally hide the IP from the dashboard activity feed — it will still be logged and scored. Applies to future requests only.</p>
+                <h2>Add IP override</h2>
+                <p class="muted">Block/allow modes bypass scoring entirely. Feed modes force include/exclude behavior without changing scoring. You can also hide the IP from the dashboard activity feed; it is still logged and scored. Applies to future requests only.</p>
 
                 <label for="override_ip">IP Address</label>
                 <input id="override_ip" type="text" name="ip" required placeholder="1.2.3.4 or 2001:db8::1">
@@ -1863,6 +1938,8 @@ function renderAdminPage(
                     <option value="none">None — score normally (use for hide-only overrides)</option>
                     <option value="block">Block — always classify as bot (score 0)</option>
                     <option value="allow">Allow — always classify as human (score 100)</option>
+                    <option value="feed_include">Always include in threat feed</option>
+                    <option value="feed_exclude">Never include in threat feed</option>
                 </select>
 
                 <label>
@@ -1873,10 +1950,10 @@ function renderAdminPage(
                 <label for="override_notes">Notes</label>
                 <input id="override_notes" type="text" name="notes" placeholder="Optional note (e.g. monitoring service, your office IP)">
 
-                <button type="submit">Add Override</button>
+                <button type="submit">Add IP override</button>
             </form>
 
-            <h2>IP Overrides</h2>
+            <h2>IP overrides</h2>
             <?php if (empty($ipOverrides)): ?>
                 <p class="muted">No IP overrides configured.</p>
             <?php else: ?>
@@ -1899,6 +1976,10 @@ function renderAdminPage(
                                     <span class="badge badge-bot">block</span>
                                 <?php elseif ($override['mode'] === 'allow'): ?>
                                     <span class="badge badge-human">allow</span>
+                                <?php elseif ($override['mode'] === 'feed_include'): ?>
+                                    <span class="badge badge-suspicious">feed include</span>
+                                <?php elseif ($override['mode'] === 'feed_exclude'): ?>
+                                    <span class="badge badge-muted">feed exclude</span>
                                 <?php else: ?>
                                     <span class="badge badge-muted">none</span>
                                 <?php endif; ?>
@@ -1913,27 +1994,34 @@ function renderAdminPage(
                             <td><?= h((string) ($override['notes'] ?? '')) ?></td>
                             <td><?= ((int) $override['active'] === 1) ? 'Yes' : 'No' ?></td>
                             <td><?= h((string) ($override['created_at'] ?? '')) ?></td>
-                            <td class="actions-col">
-                                <form method="get" action="/admin" class="inline-action-form">
-                                    <input type="hidden" name="tab" value="overrides">
-                                    <input type="hidden" name="edit_override_id" value="<?= (int) $override['id'] ?>">
-                                    <button type="submit">Edit</button>
-                                </form>
-                                <?php if ((int) $override['active'] === 1): ?>
-                                    <form method="post" action="/admin/deactivate-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
-                                        <button type="submit">Deactivate</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="/admin/activate-ip-override" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
-                                        <button type="submit">Activate</button>
-                                    </form>
-                                <?php endif; ?>
-                                <form method="post" action="/admin/delete-ip-override" class="inline-action-form" data-confirm="Delete this IP override?">
-                                    <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
-                                    <button type="submit">Delete</button>
-                                </form>
+                            <td class="actions-col actions-col--menu">
+                                <div class="action-menu" data-action-menu>
+                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="IP override actions">⋯</button>
+                                    <div class="action-menu-panel" hidden>
+                                        <div class="action-menu-inner">
+                                            <form method="get" action="/admin" class="inline-action-form action-menu-form">
+                                                <input type="hidden" name="tab" value="overrides">
+                                                <input type="hidden" name="edit_override_id" value="<?= (int) $override['id'] ?>">
+                                                <button type="submit" class="action-menu-submit">Edit IP override</button>
+                                            </form>
+                                            <?php if ((int) $override['active'] === 1): ?>
+                                                <form method="post" action="/admin/deactivate-ip-override" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
+                                                    <button type="submit" class="action-menu-submit">Deactivate IP override</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <form method="post" action="/admin/activate-ip-override" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
+                                                    <button type="submit" class="action-menu-submit">Activate IP override</button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <form method="post" action="/admin/delete-ip-override" class="inline-action-form action-menu-form" data-confirm="Delete this IP override?">
+                                                <input type="hidden" name="id" value="<?= (int) $override['id'] ?>">
+                                                <button type="submit" class="danger-button action-menu-submit">Delete IP override</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -1998,6 +2086,8 @@ function renderAdminPage(
 
 		   <p class="muted">Hide lower-scored events from the dashboard unless “Show all” is checked.</p>
 
+                    <details class="admin-advanced">
+                    <summary>Dashboard layout &amp; behavioral panels</summary>
 
 		   <label for="page_size">Rows Per Page</label>
 		   <input id="page_size" type="number" min="10" max="500" name="page_size" value="<?= h($pageSizeSetting) ?>">
@@ -2030,6 +2120,11 @@ function renderAdminPage(
 		       </label>
 		       <p class="muted" style="margin-top: 4px;">When enabled, the subdomain summary starts collapsed on page load. Only applies when Wildcard DNS mode is on.</p>
 		   </div>
+
+                    </details>
+
+                    <details class="admin-advanced">
+                    <summary>Threat &amp; token webhooks</summary>
 
 		   <label for="webhook_url">Threat Webhook URL</label>
 		   <?php if ($isDemo): ?>
@@ -2113,8 +2208,10 @@ function renderAdminPage(
 		       Available: <code>{{ip}}</code> <code>{{token}}</code> <code>{{label}}</code> <code>{{score}}</code> <code>{{org}}</code> <code>{{asn}}</code> <code>{{country}}</code> <code>{{ua}}</code> <code>{{time}}</code> <code>{{triggers}}</code>
 		   </p>
 
-		   <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
-		   <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 1rem;">Email Alerting</strong>
+                    </details>
+
+                    <details class="admin-advanced">
+                    <summary>Email alerting</summary>
 
 		   <?php
 		   $smtpConfigured = defined('EMAIL_SMTP_HOST') && EMAIL_SMTP_HOST !== ''
@@ -2178,6 +2275,12 @@ function renderAdminPage(
 
 		   <?php endif; ?>
 
+                    </details>
+
+                    <details class="admin-advanced">
+                    <summary>Exports &amp; API endpoints</summary>
+
+		   <label for="export_min_confidence">Export minimum classification</label>
 		   <select id="export_min_confidence" name="export_min_confidence">
 		       <option value="human"        <?= $exportMinConf === 'human'        ? 'selected' : '' ?>>human</option>
 		       <option value="uncertain" <?= $exportMinConf === 'uncertain' ? 'selected' : '' ?>>uncertain</option>
@@ -2209,8 +2312,10 @@ function renderAdminPage(
 		   </div>
 		   <?php endif; ?>
 
-		   <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
-		   <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 1rem;">IP Enrichment</strong>
+                    </details>
+
+                    <details class="admin-advanced">
+                    <summary>IP enrichment (AbuseIPDB)</summary>
 
 		   <?php
 		   $abuseKey      = (string) getSetting($pdo, 'abuseipdb_api_key', '');
@@ -2253,7 +2358,9 @@ function renderAdminPage(
 		   </div>
 		   <?php endif; ?>
 
-                    <button type="submit">Save Settings</button>
+                    </details>
+
+                    <button type="submit">Save settings</button>
                 </form>
 
                 <div>
@@ -2280,12 +2387,14 @@ function renderAdminPage(
                         <input id="threat_feed_min_hits" type="number" min="1" name="threat_feed_min_hits" value="<?= h($threatFeedMinHits) ?>">
                         <p class="muted">An IP must be seen at least this many times within the window before appearing in the feed. Set to 1 to include on first hit.</p>
 
-                        <button type="submit">Save Threat Feed Settings</button>
+                        <button type="submit">Save threat feed settings</button>
                     </form>
 
                     <?php
                     $feedCount = getThreatFeedCount($pdo);
                     ?>
+                    <details class="admin-advanced">
+                    <summary>Feed URLs &amp; intel exports</summary>
                     <div style="margin-top: 1rem; padding: 0.875rem 1rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius);">
                         <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.6rem;">
                             Feed Preview
@@ -2359,9 +2468,11 @@ function renderAdminPage(
                         </div>
                         <?php endforeach; ?>
                     </div>
+                    </details>
 
+                    <details class="admin-advanced">
+                    <summary>Redirect rate limiting</summary>
                     <form method="post" action="/admin/save-rate-limit-settings">
-                        <h2>Redirect Rate Limiting</h2>
                         <?php if ($isDemo): ?>
                             <p class="muted demo-lock-note">Not configurable in demo mode.</p>
                             <div class="demo-locked-field"><?= h((string) getSetting($pdo, 'redirect_rate_limit_count', '10')) ?> requests <span class="demo-lock-note">Not configurable in demo mode</span></div>
@@ -2375,22 +2486,28 @@ function renderAdminPage(
                             <input id="redirect_rate_limit_window" type="number" min="0" name="redirect_rate_limit_window" value="<?= h((string) getSetting($pdo, 'redirect_rate_limit_window', '60')) ?>">
                             <p class="muted">Hits are still logged when the limit is exceeded — only the redirect is blocked (429).</p>
 
-                            <button type="submit">Save Rate Limit Settings</button>
+                            <button type="submit">Save rate limit settings</button>
                         <?php endif; ?>
                     </form>
+                    </details>
 
                     <?php if ($isDemo): ?>
+                        <details class="admin-advanced">
+                        <summary>Data retention &amp; cleanup</summary>
                         <div>
-                            <h2>Data Retention</h2>
+                            <h2>Data retention</h2>
                             <p class="muted demo-lock-note">Not available in demo mode. The database resets automatically on a schedule.</p>
                         </div>
                         <div>
-                            <h2>Manual Cleanup</h2>
+                            <h2>Manual cleanup</h2>
                             <p class="muted demo-lock-note">Not available in demo mode.</p>
                         </div>
+                        </details>
                     <?php else: ?>
+                    <details class="admin-advanced">
+                    <summary>Data retention &amp; cleanup</summary>
                     <form method="post" action="/admin/save-retention-settings">
-                        <h2>Data Retention</h2>
+                        <h2>Data retention</h2>
 
                         <label for="data_retention_days">Delete click data older than this many days</label>
                         <input id="data_retention_days" type="number" min="0" name="data_retention_days" value="<?= h($dataRetentionDays) ?>">
@@ -2399,14 +2516,15 @@ function renderAdminPage(
                             Set to 0 to disable automatic cleanup.
                         </p>
 
-                        <button type="submit">Save Retention Settings</button>
+                        <button type="submit">Save retention settings</button>
                     </form>
 
                     <form method="post" action="/admin/run-cleanup" data-confirm="Run cleanup using the current retention setting?">
-                        <h2>Manual Cleanup</h2>
+                        <h2>Manual cleanup</h2>
                         <p class="muted">Run cleanup now using the saved retention setting.</p>
-                        <button type="submit" class="warning-button">Run Cleanup Now</button>
+                        <button type="submit" class="warning-button">Run cleanup now</button>
                     </form>
+                    </details>
                     <?php endif; ?>
                 </div>
             </div>
@@ -2414,7 +2532,7 @@ function renderAdminPage(
 
         <div class="tab-content" id="content-skip">
             <form method="post" action="/admin/create-skip-pattern">
-                <h2>Create Skip Pattern</h2>
+                <h2>Create skip pattern</h2>
 
                 <label for="skip_type">Pattern Type</label>
                 <select id="skip_type" name="type">
@@ -2426,10 +2544,10 @@ function renderAdminPage(
                 <label for="skip_pattern">Pattern</label>
                 <input id="skip_pattern" type="text" name="pattern" required placeholder=".env or api/">
 
-                <button type="submit">Add Skip Pattern</button>
+                <button type="submit">Add skip pattern</button>
             </form>
 
-            <h2>Skip Patterns</h2>
+            <h2>Skip patterns</h2>
             <div class="table-wrap">
                 <table class="compact-table">
                     <tr>
@@ -2445,23 +2563,29 @@ function renderAdminPage(
                             <td><?= h((string) $pattern['type']) ?></td>
                             <td class="mono"><?= h((string) $pattern['pattern']) ?></td>
                             <td><?= ((int) $pattern['active'] === 1) ? 'Yes' : 'No' ?></td>
-                            <td class="skip-actions-col">
-                                <?php if ((int) $pattern['active'] === 1): ?>
-                                    <form method="post" action="/admin/deactivate-skip-pattern" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
-                                        <button type="submit">Deactivate</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="/admin/activate-skip-pattern" class="inline-action-form">
-                                        <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
-                                        <button type="submit">Activate</button>
-                                    </form>
-                                <?php endif; ?>
-
-                                <form method="post" action="/admin/delete-skip-pattern" class="inline-action-form" data-confirm="Delete this skip pattern?">
-                                    <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
-                                    <button type="submit">Delete</button>
-                                </form>
+                            <td class="skip-actions-col actions-col--menu">
+                                <div class="action-menu" data-action-menu>
+                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Skip pattern actions">⋯</button>
+                                    <div class="action-menu-panel" hidden>
+                                        <div class="action-menu-inner">
+                                            <?php if ((int) $pattern['active'] === 1): ?>
+                                                <form method="post" action="/admin/deactivate-skip-pattern" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
+                                                    <button type="submit" class="action-menu-submit">Deactivate skip pattern</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <form method="post" action="/admin/activate-skip-pattern" class="inline-action-form action-menu-form">
+                                                    <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
+                                                    <button type="submit" class="action-menu-submit">Activate skip pattern</button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <form method="post" action="/admin/delete-skip-pattern" class="inline-action-form action-menu-form" data-confirm="Delete this skip pattern?">
+                                                <input type="hidden" name="id" value="<?= (int) $pattern['id'] ?>">
+                                                <button type="submit" class="danger-button action-menu-submit">Delete skip pattern</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -2736,7 +2860,37 @@ function renderAdminPage(
            Replaces all inline onclick/onsubmit attributes so the
            page works under a strict nonce-based CSP.
            -------------------------------------------------------- */
+        function closeAllActionMenus() {
+            document.querySelectorAll('.action-menu-panel').forEach(function (p) {
+                p.setAttribute('hidden', '');
+            });
+            document.querySelectorAll('.action-menu-trigger').forEach(function (t) {
+                t.setAttribute('aria-expanded', 'false');
+            });
+        }
+
         document.addEventListener('click', function (e) {
+            // Close row action menus on outside click
+            if (!e.target.closest('.action-menu')) {
+                closeAllActionMenus();
+            }
+
+            var menuTrigger = e.target.closest('.action-menu-trigger');
+            if (menuTrigger) {
+                e.preventDefault();
+                var wrap = menuTrigger.closest('.action-menu');
+                var panel = wrap ? wrap.querySelector('.action-menu-panel') : null;
+                if (panel) {
+                    var wasHidden = panel.hasAttribute('hidden');
+                    closeAllActionMenus();
+                    if (wasHidden) {
+                        panel.removeAttribute('hidden');
+                        menuTrigger.setAttribute('aria-expanded', 'true');
+                    }
+                }
+                return;
+            }
+
             // Theme toggle
             if (e.target.closest('#theme-toggle')) {
                 toggleTheme();
@@ -2758,6 +2912,7 @@ function renderAdminPage(
                 if (row) {
                     row.style.display = (getComputedStyle(row).display === 'none') ? 'table-row' : 'none';
                 }
+                closeAllActionMenus();
                 return;
             }
 
@@ -2771,6 +2926,7 @@ function renderAdminPage(
                     editRow.style.display = 'table-row';
                     displayRow.style.display = 'none';
                 }
+                closeAllActionMenus();
                 return;
             }
 
@@ -2818,6 +2974,12 @@ function renderAdminPage(
             var msg = e.target.dataset.confirm;
             if (msg && !confirm(msg)) {
                 e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeAllActionMenus();
             }
         });
 

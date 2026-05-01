@@ -2,6 +2,49 @@
 
 ---
 
+## [v2.10.1] — May 1, 2026 — UI Consistency, Feed Controls, and Regression Coverage
+
+### UI declutter and consistency pass
+
+The admin UI was streamlined to reduce visual noise while preserving existing functionality:
+
+- Dashboard filtering now uses a compact primary filter row (token + IP + core actions) with a **More filters** drawer for secondary controls.
+- Maintenance and high-risk actions (token/IP cleanup and bulk delete) were moved into collapsible sections to keep the dashboard focused by default.
+- Settings and operations panels now use progressive disclosure (`details/summary`) for advanced sections.
+- Row actions across major tables were normalized to compact kebab menus for consistent interaction patterns.
+- Button and section copy was standardized to sentence case and consistent action wording.
+
+### IP override threat-feed modes
+
+IP overrides now support explicit threat-feed control modes in addition to scoring modes:
+
+- `feed_include` — always include the IP in threat feeds
+- `feed_exclude` — never include the IP in threat feeds
+
+Threat feed query logic now enforces these modes in both standard feed outputs and enriched feed exports.
+
+### Campaign webhook fallback runtime fix
+
+Token webhook dispatch now correctly honors campaign fallback at runtime:
+
+- if token webhook opt-in is enabled, it fires as before
+- if token webhook opt-in is disabled but the linked campaign is active and fallback-enabled, token webhook dispatch now fires
+- if neither condition is true, no token webhook is sent
+
+### Confidence label compatibility cleanup
+
+Threshold expansion and summary logic now consistently treat `uncertain` as the canonical label while maintaining compatibility with legacy `likely-human` records where needed.
+
+### Regression tests and CI
+
+Added lightweight regression coverage and CI wiring:
+
+- `includes/classification.php` introduced as a shared, testable logic module
+- `tests/regression.php` added to validate confidence-threshold expansion and webhook eligibility fallback logic
+- `.github/workflows/regression.yml` added to run regression tests on pushes and pull requests to `main`
+
+---
+
 ## [v2.10.0] — IP Override Enhancements, Admin Protection, and Infrastructure Fixes
 
 ### IP Override: Hide from Dashboard

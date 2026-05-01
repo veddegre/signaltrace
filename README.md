@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/Splunk-Ready-black" alt="Splunk">
   <img src="https://img.shields.io/badge/Grafana-Ready-orange" alt="Grafana">
   <img src="https://github.com/veddegre/signaltrace/actions/workflows/docker-image.yml/badge.svg" alt="Docker Build">
+  <img src="https://github.com/veddegre/signaltrace/actions/workflows/regression.yml/badge.svg" alt="Regression Tests">
 </p>
 
 <p align="center">
@@ -132,7 +133,7 @@ SignalTrace processes every request in real time:
 </p>
 
 <p align="center">
-  IP overrides give per-IP control over scoring and dashboard visibility. Block pins classification to bot; Allow pins to human; None leaves scoring untouched. Any override can independently hide an IP from the dashboard activity feed — traffic is still logged and scored, just suppressed from the default view.
+  IP overrides give per-IP control over scoring, threat-feed behavior, and dashboard visibility. Block pins classification to bot; Allow pins to human; None leaves scoring untouched; Feed include always includes the IP in threat feeds; Feed exclude never includes the IP in threat feeds. Any override can independently hide an IP from the dashboard activity feed — traffic is still logged and scored, just suppressed from the default view.
 </p>
 
 ---
@@ -243,14 +244,14 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 ## Features at a Glance
 
 * **Tracking:** request logging, redirect handling, visitor fingerprinting, tracking pixel support, and GeoIP/ASN enrichment applied to every hit.
-* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout, and progressive disclosure controls to reduce visual noise.
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
 * **Token management:** create/edit/activate/deactivate/delete tokens, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
-* **IP overrides:** three modes — Block (always bot, score 0), Allow (always human, score 100), or None (scoring unchanged). Any override can independently hide an IP from the dashboard activity feed while still logging and scoring all traffic from it. The **Show Hidden IPs** toggle reveals suppressed activity on demand.
+* **IP overrides:** five modes — Block (always bot, score 0), Allow (always human, score 100), None (scoring unchanged), Feed include (always include in threat feeds), or Feed exclude (never include in threat feeds). Any override can independently hide an IP from the dashboard activity feed while still logging and scoring all traffic from it. The **Show Hidden IPs** toggle reveals suppressed activity on demand.
 * **Behavioral flagging:** dashboard panel showing IPs that triggered burst, rapid-repeat, or multi-token signals. Configurable window, max rows, and hide-by-default.
 * **Skip patterns:** exact, contains, and prefix matching to suppress known noise.
 * **Threat feed:** ten endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, CIDR, MISP event, and STIX 2.1 bundle formats.
@@ -265,6 +266,7 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Splunk integration:** scripted input with incremental fetching, two Dashboard Studio dashboards, props.conf with CIM field aliases and multivalue signal splitting.
 * **MISP and STIX 2.1 export:** threat intelligence exports for consumption by TI platforms.
 * **Cloudflare Access:** optional Cloudflare Zero Trust identity layer for the admin panel. When enabled, unauthorized `/admin` access attempts are denied with a generic 403 and automatically logged as tracked SignalTrace events — scored as high-confidence bot activity and visible in the dashboard alongside normal traffic.
+* **Regression coverage:** no-dependency regression script at `tests/regression.php` validating confidence threshold expansion and token/campaign webhook fallback behavior, with CI execution via `.github/workflows/regression.yml`.
 
 ---
 

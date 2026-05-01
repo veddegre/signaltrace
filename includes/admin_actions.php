@@ -915,7 +915,7 @@ function handleCreateIpOverride(PDO $pdo): void
         exit;
     }
 
-    if (!in_array($mode, ['allow', 'block', 'none'], true)) {
+    if (!in_array($mode, ['allow', 'block', 'none', 'feed_include', 'feed_exclude'], true)) {
         http_response_code(400);
         echo 'Invalid mode.';
         exit;
@@ -956,7 +956,7 @@ function handleUpdateIpOverride(PDO $pdo): void
         exit;
     }
 
-    if (!in_array($mode, ['allow', 'block', 'none'], true)) {
+    if (!in_array($mode, ['allow', 'block', 'none', 'feed_include', 'feed_exclude'], true)) {
         http_response_code(400);
         echo 'Invalid mode.';
         exit;

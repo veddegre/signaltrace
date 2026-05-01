@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/classification.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 function db(): PDO
@@ -1229,12 +1230,7 @@ function getThreatFeedRows(PDO $pdo): array
     $minConfidence = strtolower((string) getSetting($pdo, 'threat_feed_min_confidence', 'suspicious'));
     $minHits       = max(1, (int) getSetting($pdo, 'threat_feed_min_hits', '1'));
 
-    $allowedLabels = match ($minConfidence) {
-        'bot'          => ['bot'],
-        'likely-human' => ['likely-human', 'suspicious', 'bot'],
-        'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
-        default        => ['suspicious', 'bot'],
-    };
+    $allowedLabels = confidenceLabelsAtOrAbove($minConfidence);
 
     $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
 
@@ -1250,7 +1246,7 @@ function getThreatFeedRows(PDO $pdo): array
         LEFT JOIN ip_overrides io
             ON io.ip = c.ip
            AND io.active = 1
-           AND io.mode = 'allow'
+           AND io.mode IN ('allow', 'feed_exclude')
         WHERE c.ip IS NOT NULL
           AND c.ip <> ''
           AND c.event_type = 'click'
@@ -1279,7 +1275,7 @@ function getThreatFeedRows(PDO $pdo): array
         SELECT ip, 0 AS hit_count
         FROM ip_overrides
         WHERE active = 1
-          AND mode = 'block'
+          AND mode IN ('block', 'feed_include')
           AND ip IS NOT NULL
           AND ip <> ''
 
@@ -1413,7 +1409,7 @@ function getThreatFeedEnriched(PDO $pdo): array
         LEFT JOIN ip_overrides io
             ON io.ip = c.ip
            AND io.active = 1
-           AND io.mode = 'allow'
+           AND io.mode IN ('allow', 'feed_exclude')
         WHERE c.ip IS NOT NULL
           AND c.ip <> ''
           AND c.event_type = 'click'
@@ -1444,17 +1440,17 @@ function getThreatFeedEnriched(PDO $pdo): array
 
         SELECT
             io.ip,
-            1                           AS hit_count,
-            io.created_at               AS first_seen,
-            io.created_at               AS last_seen,
-            'bot'                       AS confidence_label,
-            0                           AS lowest_score,
-            NULL                        AS ip_org,
-            NULL                        AS ip_country,
-            'override'                  AS source
+            1                                                                 AS hit_count,
+            io.created_at                                                       AS first_seen,
+            io.created_at                                                       AS last_seen,
+            CASE WHEN io.mode = 'block' THEN 'bot' ELSE 'suspicious' END       AS confidence_label,
+            CASE WHEN io.mode = 'block' THEN 0 ELSE 40 END                     AS lowest_score,
+            NULL                                                                AS ip_org,
+            NULL                                                                AS ip_country,
+            CASE WHEN io.mode = 'block' THEN 'override:block' ELSE 'override:feed_include' END AS source
         FROM ip_overrides io
         WHERE io.active = 1
-          AND io.mode = 'block'
+          AND io.mode IN ('block', 'feed_include')
           AND io.ip IS NOT NULL
           AND io.ip <> ''
 
@@ -1692,12 +1688,7 @@ function exportClicks(
     $windowHours   = max(1, (int) getSetting($pdo, 'export_window_hours', '168'));
     $minScore      = max(0, min(100, (int) getSetting($pdo, 'export_min_score', '0')));
 
-    $allowedLabels = match ($minConfidence) {
-        'bot'          => ['bot'],
-        'likely-human' => ['likely-human', 'suspicious', 'bot'],
-        'human'        => ['human', 'likely-human', 'suspicious', 'bot'],
-        default        => ['suspicious', 'bot'],
-    };
+    $allowedLabels = confidenceLabelsAtOrAbove($minConfidence);
 
     $placeholders = implode(',', array_fill(0, count($allowedLabels), '?'));
 
@@ -1740,7 +1731,7 @@ function getIpSummary(PDO $pdo, string $ip): array
             MIN(confidence_score)           AS lowest_score,
             SUM(CASE WHEN confidence_label = 'bot'          THEN 1 ELSE 0 END) AS bot_count,
             SUM(CASE WHEN confidence_label = 'suspicious'   THEN 1 ELSE 0 END) AS suspicious_count,
-            SUM(CASE WHEN confidence_label = 'likely-human' THEN 1 ELSE 0 END) AS likely_human_count,
+            SUM(CASE WHEN confidence_label IN ('uncertain', 'likely-human') THEN 1 ELSE 0 END) AS uncertain_count,
             SUM(CASE WHEN confidence_label = 'human'        THEN 1 ELSE 0 END) AS human_count,
             MAX(ip_org)                     AS ip_org,
             MAX(ip_asn)                     AS ip_asn,
