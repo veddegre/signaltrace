@@ -221,38 +221,46 @@ function reportCountryCentroids(): array
     ];
 }
 
+function reportCountryBorderPaths(): array
+{
+    static $paths = null;
+    if ($paths === null) {
+        $loaded = include __DIR__ . '/report_country_shapes.php';
+        $paths = is_array($loaded) ? $loaded : [];
+    }
+    return $paths;
+}
+
 function renderReportCountryHeatmapSvg(array $rows, string $metric = 'total_events'): string
 {
     $metric = $metric === 'risky_hits' ? 'risky_hits' : 'total_events';
-    $width = 920.0;
-    $height = 420.0;
+    $width = 2000.0;
+    $height = 1001.0;
     $centroids = reportCountryCentroids();
+    $countryPaths = reportCountryBorderPaths();
     $maxValue = 1.0;
     foreach ($rows as $row) {
         $maxValue = max($maxValue, (float) ($row[$metric] ?? 0));
     }
 
     $svg = [];
-    $svg[] = '<svg viewBox="0 0 920 420" role="img" aria-label="Country heatmap overlay">';
-    $svg[] = '<rect x="0" y="0" width="920" height="420" fill="var(--surface-alt)"></rect>';
+    $svg[] = '<svg viewBox="0 0 2000 1001" role="img" aria-label="Country heatmap overlay">';
+    $svg[] = '<rect x="0" y="0" width="2000" height="1001" fill="var(--surface-alt)"></rect>';
     $svg[] = '<g class="report-map-graticule">';
     for ($lon = -150; $lon <= 150; $lon += 30) {
         $x = (($lon + 180) / 360) * $width;
-        $svg[] = '<line x1="' . number_format($x, 2, '.', '') . '" y1="0" x2="' . number_format($x, 2, '.', '') . '" y2="420"></line>';
+        $svg[] = '<line x1="' . number_format($x, 2, '.', '') . '" y1="0" x2="' . number_format($x, 2, '.', '') . '" y2="1001"></line>';
     }
     for ($lat = -60; $lat <= 60; $lat += 30) {
         $y = ((90 - $lat) / 180) * $height;
-        $svg[] = '<line x1="0" y1="' . number_format($y, 2, '.', '') . '" x2="920" y2="' . number_format($y, 2, '.', '') . '"></line>';
+        $svg[] = '<line x1="0" y1="' . number_format($y, 2, '.', '') . '" x2="2000" y2="' . number_format($y, 2, '.', '') . '"></line>';
     }
     $svg[] = '</g>';
-    $svg[] = '<g class="report-map-land">'
-        . '<ellipse cx="185" cy="168" rx="125" ry="88"></ellipse>'
-        . '<ellipse cx="285" cy="305" rx="72" ry="104"></ellipse>'
-        . '<ellipse cx="470" cy="150" rx="118" ry="74"></ellipse>'
-        . '<ellipse cx="510" cy="258" rx="92" ry="112"></ellipse>'
-        . '<ellipse cx="706" cy="176" rx="178" ry="96"></ellipse>'
-        . '<ellipse cx="804" cy="328" rx="72" ry="40"></ellipse>'
-        . '</g>';
+    $svg[] = '<g class="report-map-land">';
+    foreach ($countryPaths as $countryCode => $shapePath) {
+        $svg[] = '<path data-country="' . h((string) $countryCode) . '" d="' . h((string) $shapePath) . '"></path>';
+    }
+    $svg[] = '</g>';
     $svg[] = '<g class="report-map-points">';
     foreach ($rows as $row) {
         $code = strtoupper((string) ($row['country_code'] ?? ''));
