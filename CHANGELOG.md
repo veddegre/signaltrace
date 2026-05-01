@@ -2,7 +2,7 @@
 
 ---
 
-## [v2.10.1] — May 1, 2026 — UI Consistency, Feed Controls, and Regression Coverage
+## [v2.11.0] — May 1, 2026 — Honeypot Expansion, Token Lifecycle, and Dashboard Polish
 
 ### UI declutter and consistency pass
 
@@ -42,6 +42,32 @@ Added lightweight regression coverage and CI wiring:
 - `includes/classification.php` introduced as a shared, testable logic module
 - `tests/regression.php` added to validate confidence-threshold expansion and webhook eligibility fallback logic
 - `.github/workflows/regression.yml` added to run regression tests on pushes and pull requests to `main`
+
+### Additional reliability and operability enhancements
+
+- Added feed-override integration coverage via `tests/integration_feed_overrides.php` and wired it into the regression runner.
+- Introduced a small admin view component helper (`renderActionMenuTrigger`) to reduce repeated action-menu markup.
+- Added inline admin flash notifications for key settings and maintenance actions.
+- Improved dashboard filter ergonomics with quick date chips (24h/7d/30d) and saved filter presets in local storage.
+- Expanded lifecycle controls with per-table retention settings (clicks, auth failures, enrichment), optional click archive before cleanup, and richer cleanup summaries.
+- Added SQLite operational hardening controls: one-click maintenance (`ANALYZE` + `PRAGMA optimize`) and settings-panel DB size/growth visibility.
+
+### Honeypot and token tracking expansion
+
+- Added token lifecycle and attribution fields (`token_state`, activation window, owner/source/objective/channel) plus stale-token watchdog support.
+- Added weighted redirect pool support with per-token routing strategy and weighted destination selection.
+- Added adaptive deception responses for suspicious unknown-path hits (contextual decoy outputs for env/login/API probe patterns).
+- Added decoy endpoint pack generation presets (baseline, WordPress, Laravel, phpMyAdmin, Kubernetes, Git).
+- Added first-hit and dormancy reactivation alert context markers to token webhook payload reasons.
+- Added UTM parameter capture (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`) in click logging.
+
+### Dashboard and operator UX upgrades
+
+- Added KPI strip for key activity metrics and triage quick-view context.
+- Added density toggle (comfy/compact), sticky table headers/first-column context, and triage quick-view chips.
+- Added server-side saved filter presets (shared and persistent) alongside browser-local presets.
+- Added token watchlist panel for stale or failing-link triage, with inline health recheck actions.
+- Added dashboard/UI polish pass: improved badge readability, subtle motion/interactions, and clearer empty states.
 
 ---
 

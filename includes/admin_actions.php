@@ -29,6 +29,24 @@ function adminRedirectUrl(string $tab = ''): string
     return '/admin' . (!empty($params) ? '?' . http_build_query($params) : '');
 }
 
+function adminSetFlash(string $message, string $type = 'success'): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        @session_start();
+    }
+    $_SESSION['admin_flash'] = [
+        'type' => $type,
+        'message' => $message,
+    ];
+}
+
+function adminRedirectWithFlash(string $url, string $message, string $type = 'success'): void
+{
+    adminSetFlash($message, $type);
+    header('Location: ' . $url, true, 302);
+    exit;
+}
+
 function handleAdminActions(PDO $pdo, string $path): bool
 {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -59,14 +77,44 @@ function handleAdminActions(PDO $pdo, string $path): bool
             handleSaveRateLimitSettings($pdo);
             return true;
 
+        case '/admin/save-db-maintenance-settings':
+            requireAdminAuth();
+            handleSaveDbMaintenanceSettings($pdo);
+            return true;
+
         case '/admin/run-cleanup':
             requireAdminAuth();
             handleRunCleanup($pdo);
             return true;
 
+        case '/admin/run-db-maintenance':
+            requireAdminAuth();
+            handleRunDbMaintenance($pdo);
+            return true;
+
         case '/admin/create-link':
             requireAdminAuth();
             handleCreateLink($pdo);
+            return true;
+
+        case '/admin/create-decoy-pack':
+            requireAdminAuth();
+            handleCreateDecoyPack($pdo);
+            return true;
+
+        case '/admin/create-filter-preset':
+            requireAdminAuth();
+            handleCreateFilterPreset($pdo);
+            return true;
+
+        case '/admin/delete-filter-preset':
+            requireAdminAuth();
+            handleDeleteFilterPreset($pdo);
+            return true;
+
+        case '/admin/check-link-health':
+            requireAdminAuth();
+            handleCheckLinkHealth($pdo);
             return true;
 
         case '/admin/update-link':
@@ -251,6 +299,20 @@ function handleUpdateLink(PDO $pdo): void
     $includeInEmail        = isset($_POST['include_in_email'])          && $_POST['include_in_email']          === '1';
     $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
     $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
+    $tokenState            = strtolower(trim((string) ($_POST['token_state'] ?? 'active')));
+    $activatesAtRaw        = trim((string) ($_POST['activates_at'] ?? ''));
+    $expiresAtRaw          = trim((string) ($_POST['expires_at'] ?? ''));
+    $owner                 = trim((string) ($_POST['owner'] ?? ''));
+    $source                = trim((string) ($_POST['source'] ?? ''));
+    $objective             = trim((string) ($_POST['objective'] ?? ''));
+    $channel               = trim((string) ($_POST['channel'] ?? ''));
+    $alertOnFirstHit       = isset($_POST['alert_on_first_hit']) && $_POST['alert_on_first_hit'] === '1';
+    $dormancyAlertHours    = max(0, (int) ($_POST['dormancy_alert_hours'] ?? 0));
+    $redirectStrategy      = strtolower(trim((string) ($_POST['redirect_strategy'] ?? 'single')));
+    $redirectPoolRaw       = trim((string) ($_POST['redirect_pool'] ?? ''));
+    $activatesAt           = $activatesAtRaw !== '' ? str_replace('T', ' ', $activatesAtRaw) : null;
+    $expiresAt             = $expiresAtRaw !== '' ? str_replace('T', ' ', $expiresAtRaw) : null;
+    $redirectPoolJson      = buildRedirectPoolJson($redirectPoolRaw);
 
     if ($id <= 0) {
         http_response_code(400);
@@ -279,7 +341,36 @@ function handleUpdateLink(PDO $pdo): void
     }
 
     try {
-        updateLink($pdo, $id, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId);
+        updateLink(
+            $pdo,
+            $id,
+            $token,
+            $destination,
+            $description,
+            $excludeFromFeed,
+            $includeInTokenWebhook,
+            $includeInEmail,
+            $forceIncludeInFeed,
+            $campaignId,
+            'link',
+            '',
+            '',
+            '',
+            false,
+            $expiresAt,
+            null,
+            null,
+            $tokenState,
+            $activatesAt,
+            $owner,
+            $source,
+            $objective,
+            $channel,
+            $alertOnFirstHit,
+            $dormancyAlertHours,
+            $redirectPoolJson,
+            $redirectStrategy
+        );
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -346,6 +437,12 @@ function handleSaveSettings(PDO $pdo): void
     $exportMinConfidenceInput  = strtolower(trim((string) ($_POST['export_min_confidence'] ?? 'suspicious')));
     $exportWindowHoursInput    = max(1, (int) ($_POST['export_window_hours'] ?? 168));
     $exportMinScoreInput       = max(0, min(100, (int) ($_POST['export_min_score'] ?? 0)));
+    $adaptiveDeceptionInput    = $isDemo
+                                    ? (string) getSetting($pdo, 'adaptive_deception_enabled', '0')
+                                    : (isset($_POST['adaptive_deception_enabled']) ? '1' : '0');
+    $staleTokenDaysInput       = $isDemo
+                                    ? (string) getSetting($pdo, 'stale_token_days', '30')
+                                    : (string) max(0, min(3650, (int) ($_POST['stale_token_days'] ?? 30)));
 
     if ($displayMinScoreInput === '' || !is_numeric($displayMinScoreInput)) {
         http_response_code(400);
@@ -472,6 +569,8 @@ function handleSaveSettings(PDO $pdo): void
     setSetting($pdo, 'export_min_confidence',   $exportMinConfidenceInput);
     setSetting($pdo, 'export_window_hours',     (string) $exportWindowHoursInput);
     setSetting($pdo, 'export_min_score',        (string) $exportMinScoreInput);
+    setSetting($pdo, 'adaptive_deception_enabled', $adaptiveDeceptionInput);
+    setSetting($pdo, 'stale_token_days', $staleTokenDaysInput);
 
     // AbuseIPDB — only update the key if a new one was submitted
     $abuseKeyInput   = trim((string) ($_POST['abuseipdb_api_key']   ?? ''));
@@ -481,8 +580,7 @@ function handleSaveSettings(PDO $pdo): void
     }
     setSetting($pdo, 'abuseipdb_daily_limit', (string) $abuseLimitInput);
 
-    header('Location: /admin', true, 302);
-    exit;
+    adminRedirectWithFlash('/admin?tab=settings', 'Settings saved.');
 }
 
 function handleSaveThreatFeedSettings(PDO $pdo): void
@@ -501,8 +599,7 @@ function handleSaveThreatFeedSettings(PDO $pdo): void
     setSetting($pdo, 'threat_feed_window_hours', (string) $windowHoursInput);
     setSetting($pdo, 'threat_feed_min_confidence', $minConfidenceInput);
 
-    header('Location: /admin', true, 302);
-    exit;
+    adminRedirectWithFlash('/admin?tab=settings', 'Threat feed settings saved.');
 }
 
 function handleSaveRetentionSettings(PDO $pdo): void
@@ -512,12 +609,17 @@ function handleSaveRetentionSettings(PDO $pdo): void
         exit('Not available in demo mode.');
     }
 
-    $retentionDaysInput = max(0, (int) ($_POST['data_retention_days'] ?? 0));
+    $clickDaysInput       = max(0, (int) ($_POST['data_retention_days'] ?? 0));
+    $authFailureDaysInput = max(0, (int) ($_POST['auth_retention_days'] ?? 0));
+    $enrichmentDaysInput  = max(0, (int) ($_POST['enrichment_retention_days'] ?? 0));
+    $archiveBeforeCleanup = isset($_POST['archive_before_cleanup']) ? '1' : '0';
 
-    setSetting($pdo, 'data_retention_days', (string) $retentionDaysInput);
+    setSetting($pdo, 'data_retention_days', (string) $clickDaysInput);
+    setSetting($pdo, 'auth_retention_days', (string) $authFailureDaysInput);
+    setSetting($pdo, 'enrichment_retention_days', (string) $enrichmentDaysInput);
+    setSetting($pdo, 'archive_before_cleanup', $archiveBeforeCleanup);
 
-    header('Location: /admin', true, 302);
-    exit;
+    adminRedirectWithFlash('/admin?tab=settings', 'Retention settings saved.');
 }
 
 function handleSaveRateLimitSettings(PDO $pdo): void
@@ -533,8 +635,7 @@ function handleSaveRateLimitSettings(PDO $pdo): void
     setSetting($pdo, 'redirect_rate_limit_count',  (string) $count);
     setSetting($pdo, 'redirect_rate_limit_window', (string) $window);
 
-    header('Location: /admin', true, 302);
-    exit;
+    adminRedirectWithFlash('/admin?tab=settings', 'Rate limit settings saved.');
 }
 
 function handleRunCleanup(PDO $pdo): void
@@ -546,15 +647,74 @@ function handleRunCleanup(PDO $pdo): void
 
     $days = (int) getSetting($pdo, 'data_retention_days', '0');
 
-    if ($days <= 0) {
-        header('Location: /admin', true, 302);
-        exit;
+    $authDays = (int) getSetting($pdo, 'auth_retention_days', '30');
+    $enrichmentDays = (int) getSetting($pdo, 'enrichment_retention_days', '90');
+    $archiveFirst = getSetting($pdo, 'archive_before_cleanup', '0') === '1';
+
+    if ($days <= 0 && $authDays <= 0 && $enrichmentDays <= 0) {
+        adminRedirectWithFlash('/admin?tab=settings', 'No retention window configured; nothing cleaned.', 'warning');
     }
 
-    cleanupOldClicks($pdo, $days);
+    $archivePath = '';
+    if ($archiveFirst && $days > 0) {
+        $archivePath = archiveOldClicksToCsv($pdo, $days);
+    }
 
-    header('Location: /admin', true, 302);
-    exit;
+    $deletedClicks = $days > 0 ? cleanupOldClicks($pdo, $days) : 0;
+    $deletedAuth = $authDays > 0 ? cleanupOldAuthFailures($pdo, $authDays) : 0;
+    $deletedEnrichment = $enrichmentDays > 0 ? cleanupOldIpEnrichment($pdo, $enrichmentDays) : 0;
+
+    $msg = 'Cleanup complete: '
+        . $deletedClicks . ' clicks, '
+        . $deletedAuth . ' auth failures, '
+        . $deletedEnrichment . ' enrichment rows removed.';
+    if ($archivePath !== '') {
+        $msg .= ' Click archive: ' . basename($archivePath) . '.';
+    }
+    adminRedirectWithFlash('/admin?tab=settings', $msg);
+}
+
+function handleRunDbMaintenance(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+    $runVacuum = isset($_POST['run_vacuum']) && $_POST['run_vacuum'] === '1';
+    runSqliteMaintenance($pdo);
+    setSetting($pdo, 'sqlite_maintenance_last_run_ts', (string) time());
+
+    if ($runVacuum) {
+        $pdo->exec('VACUUM;');
+        setSetting($pdo, 'sqlite_vacuum_last_run_ts', (string) time());
+    }
+
+    adminRedirectWithFlash(
+        '/admin?tab=settings',
+        $runVacuum
+            ? 'SQLite maintenance completed (ANALYZE + optimize + VACUUM).'
+            : 'SQLite maintenance completed (ANALYZE + optimize).'
+    );
+}
+
+function handleSaveDbMaintenanceSettings(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+
+    $enabled = isset($_POST['sqlite_maintenance_enabled']) ? '1' : '0';
+    $intervalMins = max(15, min(10080, (int) ($_POST['sqlite_maintenance_interval_mins'] ?? 360)));
+    $vacuumEnabled = isset($_POST['sqlite_vacuum_enabled']) ? '1' : '0';
+    $vacuumIntervalHours = max(6, min(720, (int) ($_POST['sqlite_vacuum_min_interval_hours'] ?? 24)));
+
+    setSetting($pdo, 'sqlite_maintenance_enabled', $enabled);
+    setSetting($pdo, 'sqlite_maintenance_interval_mins', (string) $intervalMins);
+    setSetting($pdo, 'sqlite_vacuum_enabled', $vacuumEnabled);
+    setSetting($pdo, 'sqlite_vacuum_min_interval_hours', (string) $vacuumIntervalHours);
+
+    adminRedirectWithFlash('/admin?tab=settings', 'SQLite maintenance settings saved.');
 }
 
 function handleCreateLink(PDO $pdo): void
@@ -568,6 +728,20 @@ function handleCreateLink(PDO $pdo): void
     $includeInEmail        = isset($_POST['include_in_email'])         && $_POST['include_in_email']         === '1';
     $campaignIdRaw         = trim((string) ($_POST['campaign_id'] ?? ''));
     $campaignId            = ($campaignIdRaw !== '' && ctype_digit($campaignIdRaw)) ? (int) $campaignIdRaw : null;
+    $tokenState            = strtolower(trim((string) ($_POST['token_state'] ?? 'active')));
+    $activatesAtRaw        = trim((string) ($_POST['activates_at'] ?? ''));
+    $expiresAtRaw          = trim((string) ($_POST['expires_at'] ?? ''));
+    $owner                 = trim((string) ($_POST['owner'] ?? ''));
+    $source                = trim((string) ($_POST['source'] ?? ''));
+    $objective             = trim((string) ($_POST['objective'] ?? ''));
+    $channel               = trim((string) ($_POST['channel'] ?? ''));
+    $alertOnFirstHit       = isset($_POST['alert_on_first_hit']) && $_POST['alert_on_first_hit'] === '1';
+    $dormancyAlertHours    = max(0, (int) ($_POST['dormancy_alert_hours'] ?? 0));
+    $redirectStrategy      = strtolower(trim((string) ($_POST['redirect_strategy'] ?? 'single')));
+    $redirectPoolRaw       = trim((string) ($_POST['redirect_pool'] ?? ''));
+    $activatesAt           = $activatesAtRaw !== '' ? str_replace('T', ' ', $activatesAtRaw) : null;
+    $expiresAt             = $expiresAtRaw !== '' ? str_replace('T', ' ', $expiresAtRaw) : null;
+    $redirectPoolJson      = buildRedirectPoolJson($redirectPoolRaw);
 
     if ($token === '' || $destination === '') {
         http_response_code(400);
@@ -589,7 +763,35 @@ function handleCreateLink(PDO $pdo): void
     }
 
     try {
-        createLink($pdo, $token, $destination, $description, $excludeFromFeed, $includeInTokenWebhook, $includeInEmail, $forceIncludeInFeed, $campaignId);
+        createLink(
+            $pdo,
+            $token,
+            $destination,
+            $description,
+            $excludeFromFeed,
+            $includeInTokenWebhook,
+            $includeInEmail,
+            $forceIncludeInFeed,
+            $campaignId,
+            'link',
+            '',
+            '',
+            '',
+            false,
+            $expiresAt,
+            null,
+            null,
+            $tokenState,
+            $activatesAt,
+            $owner,
+            $source,
+            $objective,
+            $channel,
+            $alertOnFirstHit,
+            $dormancyAlertHours,
+            $redirectPoolJson,
+            $redirectStrategy
+        );
         header('Location: /admin?tab=links', true, 302);
         exit;
     } catch (Throwable $e) {
@@ -597,6 +799,115 @@ function handleCreateLink(PDO $pdo): void
         echo 'Unable to create link. It may already exist.';
         exit;
     }
+}
+
+function handleCreateDecoyPack(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+
+    $pack = strtolower(trim((string) ($_POST['pack'] ?? '')));
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+    if ($destination === '' || !isSafeRedirectUrl($destination)) {
+        http_response_code(400);
+        exit('Valid destination URL required.');
+    }
+    $created = createDecoyPack($pdo, $pack, $destination);
+    adminRedirectWithFlash('/admin?tab=links', 'Decoy pack created: ' . $created . ' tokens.');
+}
+
+function buildRedirectPoolJson(string $raw): ?string
+{
+    if ($raw === '') {
+        return null;
+    }
+    $rows = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+    $pool = [];
+    foreach ($rows as $line) {
+        $line = trim($line);
+        if ($line === '') {
+            continue;
+        }
+        $parts = array_map('trim', explode('|', $line, 2));
+        $url = $parts[0] ?? '';
+        $weight = isset($parts[1]) ? max(1, (int) $parts[1]) : 1;
+        if ($url !== '' && isSafeRedirectUrl($url)) {
+            $pool[] = ['url' => $url, 'weight' => $weight];
+        }
+    }
+    if (empty($pool)) {
+        return null;
+    }
+    return json_encode($pool, JSON_UNESCAPED_SLASHES) ?: null;
+}
+
+function handleCreateFilterPreset(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+    $name = trim((string) ($_POST['preset_name'] ?? ''));
+    if ($name === '') {
+        adminRedirectWithFlash('/admin?tab=dashboard', 'Preset name is required.', 'warning');
+    }
+    $query = [
+        'token' => trim((string) ($_POST['token'] ?? '')),
+        'ip' => trim((string) ($_POST['ip'] ?? '')),
+        'visitor' => trim((string) ($_POST['visitor'] ?? '')),
+        'campaign' => trim((string) ($_POST['campaign'] ?? '')),
+        'host' => trim((string) ($_POST['host'] ?? '')),
+        'known' => isset($_POST['known']) && $_POST['known'] === '1' ? '1' : '',
+        'date_from' => trim((string) ($_POST['date_from'] ?? '')),
+        'date_to' => trim((string) ($_POST['date_to'] ?? '')),
+    ];
+    createFilterPreset($pdo, $name, array_filter($query, static fn($v) => $v !== ''));
+    adminRedirectWithFlash('/admin?tab=dashboard', 'Filter preset saved.');
+}
+
+function handleDeleteFilterPreset(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+    $id = (int) ($_POST['id'] ?? 0);
+    if ($id > 0) {
+        deleteFilterPreset($pdo, $id);
+    }
+    adminRedirectWithFlash('/admin?tab=dashboard', 'Filter preset deleted.');
+}
+
+function handleCheckLinkHealth(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        http_response_code(403);
+        exit('Not available in demo mode.');
+    }
+    $id = (int) ($_POST['id'] ?? 0);
+    $link = $id > 0 ? getLinkById($pdo, $id) : null;
+    if (!$link) {
+        adminRedirectWithFlash('/admin?tab=links', 'Invalid token id.', 'warning');
+    }
+    $url = (string) ($link['destination'] ?? '');
+    if (!isSafeRedirectUrl($url)) {
+        adminRedirectWithFlash('/admin?tab=links', 'Cannot check an invalid destination URL.', 'warning');
+    }
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_NOBODY => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT_MS => 4000,
+        CURLOPT_CONNECTTIMEOUT_MS => 2500,
+        CURLOPT_FOLLOWLOCATION => false,
+    ]);
+    curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    recordLinkHealth($pdo, (int) $link['id'], $code);
+    adminRedirectWithFlash('/admin?tab=links', 'Health check complete (HTTP ' . $code . ').');
 }
 
 function handleDeleteLink(PDO $pdo): void

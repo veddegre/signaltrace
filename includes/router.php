@@ -415,6 +415,27 @@ function handleAdminPage(PDO $pdo, array $settings): void
     $hideBehavioral = isset($_GET['hide_behavioral']) && $_GET['hide_behavioral'] === '1';
     $hideSubdomains = isset($_GET['hide_subdomains']) && $_GET['hide_subdomains'] === '1';
     $showHidden     = isset($_GET['show_hidden'])     && $_GET['show_hidden']     === '1';
+    $presetId       = max(0, (int) ($_GET['preset_id'] ?? 0));
+
+    if ($presetId > 0) {
+        foreach (getFilterPresets($pdo) as $preset) {
+            if ((int) ($preset['id'] ?? 0) !== $presetId) {
+                continue;
+            }
+            $query = json_decode((string) ($preset['query_json'] ?? '{}'), true);
+            if (is_array($query)) {
+                $tokenFilter = trim((string) ($query['token'] ?? $tokenFilter));
+                $ipFilter = trim((string) ($query['ip'] ?? $ipFilter));
+                $visitorFilter = trim((string) ($query['visitor'] ?? $visitorFilter));
+                $campaignFilter = max(0, (int) ($query['campaign'] ?? $campaignFilter));
+                $hostFilter = trim((string) ($query['host'] ?? $hostFilter));
+                $knownOnly = (($query['known'] ?? '') === '1') || $knownOnly;
+                $dateFrom = trim((string) ($query['date_from'] ?? $dateFrom));
+                $dateTo = trim((string) ($query['date_to'] ?? $dateTo));
+            }
+            break;
+        }
+    }
     $asnRules       = getAsnRules($pdo);
 
     // Pagination
@@ -540,7 +561,7 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
         maybeFireEmailAlert($pdo, $requestData);
         maybeRunAutoCleanup($pdo);
 
-        $destination = (string) ($link['destination'] ?? '');
+        $destination = resolveDestinationForLink($link);
         if (!isSafeRedirectUrl($destination)) {
             error_log('SignalTrace: unsafe destination for token ' . $token . ': ' . $destination);
             redirectOr404($unknownPathBehavior, $defaultRedirectUrl);
@@ -581,6 +602,10 @@ function handleTrackedRequest(PDO $pdo, string $path, array $settings, array $sk
             fetchAndCacheEnrichment($pdo, $enrichIp);
             fetchAndCacheAbuseIpDb($pdo, $enrichIp);
         }
+    }
+
+    if (maybeServeAdaptiveDeception($pdo, $requestData, $path)) {
+        exit;
     }
 
     redirectOr404($unknownPathBehavior, $defaultRedirectUrl);

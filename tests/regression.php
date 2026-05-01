@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/classification.php';
+require_once __DIR__ . '/integration_feed_overrides.php';
+require_once __DIR__ . '/scheduler_regression.php';
 
 function assertSameStrict(mixed $expected, mixed $actual, string $message): void
 {
@@ -75,4 +77,6 @@ function runRegressionTests(): void
 }
 
 runRegressionTests();
+runFeedOverrideIntegrationTests();
+runSchedulerRegressionTests();
 echo "Regression tests passed.\n";

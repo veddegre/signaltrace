@@ -636,6 +636,78 @@ function redirectOr404(string $behavior, string $fallbackUrl): void
     exit;
 }
 
+function resolveDestinationForLink(array $link): string
+{
+    $base = (string) ($link['destination'] ?? '');
+    $strategy = (string) ($link['redirect_strategy'] ?? 'single');
+    $poolJson = (string) ($link['redirect_pool_json'] ?? '');
+    if ($strategy !== 'weighted' || $poolJson === '') {
+        return $base;
+    }
+
+    $pool = json_decode($poolJson, true);
+    if (!is_array($pool) || empty($pool)) {
+        return $base;
+    }
+
+    $totalWeight = 0;
+    foreach ($pool as $row) {
+        $w = max(0, (int) ($row['weight'] ?? 0));
+        $totalWeight += $w;
+    }
+    if ($totalWeight <= 0) {
+        return $base;
+    }
+
+    $pick = random_int(1, $totalWeight);
+    $cursor = 0;
+    foreach ($pool as $row) {
+        $url = (string) ($row['url'] ?? '');
+        $w = max(0, (int) ($row['weight'] ?? 0));
+        if ($url === '' || $w <= 0) {
+            continue;
+        }
+        $cursor += $w;
+        if ($pick <= $cursor && isSafeRedirectUrl($url)) {
+            return $url;
+        }
+    }
+
+    return $base;
+}
+
+function maybeServeAdaptiveDeception(PDO $pdo, array $requestData, string $path): bool
+{
+    if (getSetting($pdo, 'adaptive_deception_enabled', '0') !== '1') {
+        return false;
+    }
+    $label = strtolower((string) ($requestData['confidence_label'] ?? ''));
+    $query = strtolower((string) ($requestData['query_string'] ?? ''));
+    $pathLower = strtolower($path);
+    $suspicious = in_array($label, ['bot', 'suspicious'], true) || hasExploitLikeQuery($query);
+    if (!$suspicious) {
+        return false;
+    }
+
+    header('Cache-Control: no-store');
+    if (str_contains($pathLower, '.env')) {
+        header('Content-Type: text/plain');
+        echo "APP_ENV=production\nAPP_DEBUG=false\nDB_CONNECTION=mysql\n";
+        return true;
+    }
+    if (str_contains($pathLower, 'wp-login') || str_contains($pathLower, 'admin')) {
+        header('Content-Type: text/html; charset=UTF-8');
+        echo "<!doctype html><html><body><h1>Sign in</h1><form><input name='user'><input type='password' name='pass'></form></body></html>";
+        return true;
+    }
+    if (str_contains($pathLower, 'api/') || str_contains($pathLower, 'graphql')) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Unauthorized', 'code' => 401]);
+        return true;
+    }
+    return false;
+}
+
 /* ======================================================
    WEBHOOK ALERTING
    Fires asynchronously (non-blocking curl) so it never
@@ -892,7 +964,34 @@ function maybeFireTokenAlert(PDO $pdo, array $requestData): void
         return;
     }
 
-    fireTokenWebhookAlert($pdo, $requestData);
+    $augmented = $requestData;
+    $context = getTokenAlertContext($pdo, $linkId);
+    $extraReasons = [];
+    $latestFirst = (int) ($context['latest_first_for_token'] ?? 0) === 1;
+    $prevTs = (int) ($context['previous_clicked_at_unix_ms'] ?? 0);
+    $latestTs = (int) ($context['latest_clicked_at_unix_ms'] ?? 0);
+
+    if ((int) ($context['alert_on_first_hit'] ?? 0) === 1 && $latestFirst) {
+        $extraReasons[] = 'token_first_hit';
+    }
+
+    $dormancyHours = max(0, (int) ($context['dormancy_alert_hours'] ?? 0));
+    if ($dormancyHours > 0 && $latestTs > 0 && $prevTs > 0) {
+        $dormancyMs = $dormancyHours * 3600 * 1000;
+        if (($latestTs - $prevTs) >= $dormancyMs) {
+            $extraReasons[] = 'token_dormant_reactivation';
+        }
+    }
+
+    if (!empty($extraReasons)) {
+        $existing = trim((string) ($augmented['confidence_reason'] ?? ''));
+        $augmented['confidence_reason'] = trim(
+            implode(', ', array_filter([$existing, implode(', ', $extraReasons)])),
+            ', '
+        );
+    }
+
+    fireTokenWebhookAlert($pdo, $augmented);
 }
 
 function shouldSendTokenAlert(PDO $pdo, string $token, string $visitorHash): bool

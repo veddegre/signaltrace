@@ -202,6 +202,13 @@ function renderSnippetBox(string $title, string $content, string $copyLabel = 'C
         . '</div>';
 }
 
+function renderActionMenuTrigger(string $ariaLabel): string
+{
+    return '<button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="'
+        . h($ariaLabel)
+        . '">⋯</button>';
+}
+
 function buildTokenDeploymentSnippets(string $baseUrl, array $link): array
 {
     $token = (string) ($link['token'] ?? '');
@@ -249,6 +256,10 @@ function renderAdminPage(
     $pdo       = db();
     $csrfToken = generateCsrfToken();
     $isDemo    = defined('DEMO_MODE') && DEMO_MODE;
+    $flash     = $_SESSION['admin_flash'] ?? null;
+    if (isset($_SESSION['admin_flash'])) {
+        unset($_SESSION['admin_flash']);
+    }
 
     $autoRefreshSecs  = max(0, (int) getSetting($pdo, 'auto_refresh_secs', '0'));
     $webhookUrl       = (string) getSetting($pdo, 'webhook_url', '');
@@ -326,6 +337,18 @@ function renderAdminPage(
         + (int) $showAll
         + (int) $showHidden
         + (int) $showTopTokens;
+
+    $dashboardKpis = getDashboardKpis(
+        $pdo,
+        $tokenFilter !== '' ? $tokenFilter : null,
+        $ipFilter !== '' ? $ipFilter : null,
+        $visitorFilter !== '' ? $visitorFilter : null,
+        $knownOnly,
+        $dateFrom !== '' ? $dateFrom : null,
+        $dateTo !== '' ? $dateTo : null,
+        $hostFilter !== '' ? $hostFilter : null,
+        $campaignFilter > 0 ? $campaignFilter : null
+    );
     $filterDrawerOpen = $secondaryFilterCount > 0;
 
     $threatFeedEnabled = getSetting($pdo, 'threat_feed_enabled', '1') === '1';
@@ -333,6 +356,21 @@ function renderAdminPage(
     $threatFeedMinConfidence = (string) (getSetting($pdo, 'threat_feed_min_confidence', 'suspicious') ?? 'suspicious');
     $threatFeedMinHits = (string) (getSetting($pdo, 'threat_feed_min_hits', '1') ?? '1');
     $dataRetentionDays = (string) (getSetting($pdo, 'data_retention_days', '0') ?? '0');
+    $authRetentionDays = (string) (getSetting($pdo, 'auth_retention_days', '30') ?? '30');
+    $enrichmentRetentionDays = (string) (getSetting($pdo, 'enrichment_retention_days', '90') ?? '90');
+    $archiveBeforeCleanup = getSetting($pdo, 'archive_before_cleanup', '0') === '1';
+    $sqliteMaintenanceEnabled = getSetting($pdo, 'sqlite_maintenance_enabled', '1') === '1';
+    $sqliteMaintenanceIntervalMins = (string) (getSetting($pdo, 'sqlite_maintenance_interval_mins', '360') ?? '360');
+    $sqliteVacuumEnabled = getSetting($pdo, 'sqlite_vacuum_enabled', '0') === '1';
+    $sqliteVacuumIntervalHours = (string) (getSetting($pdo, 'sqlite_vacuum_min_interval_hours', '24') ?? '24');
+    $sqliteMaintenanceLastRunTs = max(0, (int) getSetting($pdo, 'sqlite_maintenance_last_run_ts', '0'));
+    $sqliteVacuumLastRunTs = max(0, (int) getSetting($pdo, 'sqlite_vacuum_last_run_ts', '0'));
+    $sqliteMaintenanceLastRun = $sqliteMaintenanceLastRunTs > 0 ? date('Y-m-d H:i:s T', $sqliteMaintenanceLastRunTs) : 'Never';
+    $sqliteVacuumLastRun = $sqliteVacuumLastRunTs > 0 ? date('Y-m-d H:i:s T', $sqliteVacuumLastRunTs) : 'Never';
+    $adaptiveDeceptionEnabled = getSetting($pdo, 'adaptive_deception_enabled', '0') === '1';
+    $staleTokenDays = max(0, (int) getSetting($pdo, 'stale_token_days', '30'));
+    $serverFilterPresets = getFilterPresets($pdo);
+    $dbStats = getSqliteDatabaseStats($pdo);
 
     $behavioralWindowHours = max(1, (int) getSetting($pdo, 'behavioral_window_hours', '24'));
     $behavioralMaxRows     = max(1, (int) getSetting($pdo, 'behavioral_max_rows', '25'));
@@ -492,6 +530,11 @@ function renderAdminPage(
             </button>
         </header>
         <div class="page-body">
+        <?php if (is_array($flash) && !empty($flash['message'])): ?>
+            <div class="admin-flash admin-flash--<?= h((string) ($flash['type'] ?? 'success')) ?>">
+                <?= h((string) $flash['message']) ?>
+            </div>
+        <?php endif; ?>
 
         <div class="tabs">
             <div class="tab" id="tab-dashboard" data-tab="dashboard">Dashboard</div>
@@ -533,6 +576,70 @@ function renderAdminPage(
                     <a class="button-link" href="<?= h(str_replace('/export/json', '/export/csv', $exportHref)) ?>" target="_blank" rel="noopener">Export CSV</a>
                         </div>
                     </div>
+
+                    <div class="filter-quick-row">
+                        <div class="filter-quick-dates">
+                            <span class="small">Quick range:</span>
+                            <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['date_from' => date('Y-m-d', strtotime('-1 day')), 'date_to' => date('Y-m-d'), 'page' => null])) ?>">24h</a>
+                            <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['date_from' => date('Y-m-d', strtotime('-7 days')), 'date_to' => date('Y-m-d'), 'page' => null])) ?>">7d</a>
+                            <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['date_from' => date('Y-m-d', strtotime('-30 days')), 'date_to' => date('Y-m-d'), 'page' => null])) ?>">30d</a>
+                        </div>
+                        <div class="filter-presets">
+                            <select id="filter-preset-select" style="margin-bottom:0;">
+                                <option value="">Saved presets</option>
+                            </select>
+                            <button type="button" class="btn-small" id="filter-preset-save">Save current</button>
+                            <button type="button" class="btn-small" id="filter-preset-delete">Delete</button>
+                            <button type="button" class="btn-small" id="density-toggle">Density: comfy</button>
+                        </div>
+                    </div>
+
+                    <div class="filter-quick-row" style="margin-top:4px;">
+                        <div class="filter-presets">
+                            <span class="small">Triage views:</span>
+                            <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['known' => null, 'show_all' => '1', 'date_from' => date('Y-m-d', strtotime('-1 day')), 'date_to' => date('Y-m-d'), 'page' => null])) ?>">Suspicious now</a>
+                            <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['known' => null, 'token' => null, 'show_all' => '1', 'page' => null])) ?>">Unknown paths</a>
+                            <a class="button-link btn-small" href="<?= h($buildAdminUrl(['tab' => 'links'])) ?>">Failing links</a>
+                        </div>
+                    </div>
+
+                    <div class="filter-quick-row" style="margin-top:6px;">
+                        <?php if (!$isDemo): ?>
+                        <form method="post" action="/admin/create-filter-preset" class="inline-form" style="display:flex; gap:6px; align-items:center;">
+                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                            <input type="hidden" name="token" value="<?= h($tokenFilter) ?>">
+                            <input type="hidden" name="ip" value="<?= h($ipFilter) ?>">
+                            <input type="hidden" name="visitor" value="<?= h($visitorFilter) ?>">
+                            <input type="hidden" name="campaign" value="<?= h((string) $campaignFilter) ?>">
+                            <input type="hidden" name="host" value="<?= h($hostFilter) ?>">
+                            <input type="hidden" name="known" value="<?= $knownOnly ? '1' : '' ?>">
+                            <input type="hidden" name="date_from" value="<?= h($dateFrom) ?>">
+                            <input type="hidden" name="date_to" value="<?= h($dateTo) ?>">
+                            <input type="text" name="preset_name" placeholder="Server preset name" style="margin-bottom:0;">
+                            <button type="submit" class="btn-small">Save server preset</button>
+                        </form>
+                        <?php else: ?>
+                        <p class="muted demo-lock-note">Server filter presets are read-only in demo mode.</p>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if (!empty($serverFilterPresets)): ?>
+                    <div class="filter-quick-row" style="margin-top:4px;">
+                        <div class="filter-presets">
+                            <span class="small">Server presets:</span>
+                            <?php foreach ($serverFilterPresets as $serverPreset): ?>
+                                <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['preset_id' => (string) ((int) $serverPreset['id']), 'page' => null])) ?>"><?= h((string) $serverPreset['name']) ?></a>
+                                <?php if (!$isDemo): ?>
+                                <form method="post" action="/admin/delete-filter-preset" class="inline-action-form">
+                                    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                    <input type="hidden" name="id" value="<?= (int) $serverPreset['id'] ?>">
+                                    <button type="submit" class="btn-small">Delete</button>
+                                </form>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
 
                     <details class="filter-more" <?= $filterDrawerOpen ? 'open' : '' ?>>
                         <summary class="filter-more-summary">
@@ -586,6 +693,29 @@ function renderAdminPage(
                     </details>
 		</div>
             </form>
+
+            <div class="kpi-strip">
+                <div class="kpi-card">
+                    <div class="kpi-label">Events</div>
+                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['total_events']) ?></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Unique IPs</div>
+                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['unique_ips']) ?></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Known hits</div>
+                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['known_hits']) ?></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Bot/suspicious rate</div>
+                    <div class="kpi-value"><?= h((string) $dashboardKpis['risky_rate_pct']) ?>%</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Feed candidates</div>
+                    <div class="kpi-value"><?= number_format((int) $dashboardKpis['feed_candidates']) ?></div>
+                </div>
+            </div>
 
             <?php if ($hasActiveFilter): ?>
                 <div class="active-filters">
@@ -770,6 +900,73 @@ function renderAdminPage(
 	    </div>
             <?php endif; ?>
 
+            <?php
+            $tokenWatchlist = [];
+            $staleMs = $staleTokenDays > 0 ? ($staleTokenDays * 86400000) : 0;
+            foreach ($links as $watchLink) {
+                $lastHitMs = (int) ($watchLink['last_clicked_at_unix_ms'] ?? 0);
+                $isStale = $staleMs > 0 && $lastHitMs > 0 && ((currentUnixMs() - $lastHitMs) > $staleMs);
+                $healthCode = (int) ($watchLink['last_health_http_code'] ?? 0);
+                $healthFailing = $healthCode >= 400;
+                if ($isStale || $healthFailing) {
+                    $watchLink['_is_stale'] = $isStale;
+                    $watchLink['_health_failing'] = $healthFailing;
+                    $tokenWatchlist[] = $watchLink;
+                }
+            }
+            ?>
+            <?php if ($ipFilter === ''): ?>
+            <h2>Token watchlist</h2>
+            <p class="muted">Shows stale tokens and links with failing health checks for quick triage.</p>
+            <?php if (!empty($tokenWatchlist)): ?>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <tr>
+                        <th>Token</th>
+                        <th>State</th>
+                        <th>Last hit</th>
+                        <th>Health</th>
+                        <th>Issues</th>
+                        <th>Actions</th>
+                    </tr>
+                    <?php foreach ($tokenWatchlist as $watch): ?>
+                        <tr>
+                            <td class="mono">
+                                <a class="table-link mono-link" href="<?= h($buildDashboardUrl(['token' => (string) $watch['token'], 'show_all' => '1'])) ?>">
+                                    <?= h((string) $watch['token']) ?>
+                                </a>
+                            </td>
+                            <td><?= h((string) ($watch['token_state'] ?? 'active')) ?></td>
+                            <td><?= !empty($watch['last_clicked_at_unix_ms']) ? h(date('Y-m-d H:i:s', (int) ($watch['last_clicked_at_unix_ms'] / 1000))) : '—' ?></td>
+                            <td>
+                                <?php $hc = (int) ($watch['last_health_http_code'] ?? 0); ?>
+                                <?= $hc > 0 ? h((string) $hc) : '—' ?>
+                            </td>
+                            <td>
+                                <?php if (!empty($watch['_is_stale'])): ?><span class="badge badge-suspicious">stale</span><?php endif; ?>
+                                <?php if (!empty($watch['_health_failing'])): ?><span class="badge badge-bot">health fail</span><?php endif; ?>
+                            </td>
+                            <td>
+                                <a class="button-link btn-small" href="<?= h($buildAdminUrl(['tab' => 'links', 'edit_link_id' => (string) ((int) $watch['id'])])) ?>">Edit token</a>
+                                <?php if (!$isDemo): ?>
+                                <form method="post" action="/admin/check-link-health" class="inline-action-form">
+                                    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                    <input type="hidden" name="id" value="<?= (int) $watch['id'] ?>">
+                                    <button type="submit" class="btn-small">↻ Recheck health</button>
+                                </form>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php else: ?>
+            <div class="empty-state">
+                No stale or failing tokens right now. This panel auto-populates when tokens cross the stale threshold or health checks return HTTP 4xx/5xx.
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+
             <?php if (!empty($behavioralFlags) && $ipFilter === ''): ?>
             <?php
             // Hidden state: URL param overrides the settings default.
@@ -837,7 +1034,7 @@ function renderAdminPage(
                                     <?php endif; ?>
                                 <?php endif; ?>
                                 <div class="action-menu" data-action-menu>
-                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Override actions for IP">⋯</button>
+                                    <?= renderActionMenuTrigger('Override actions for IP') ?>
                                     <div class="action-menu-panel" hidden>
                                         <div class="action-menu-inner">
                                             <?php if ($existingOverride === null): ?>
@@ -1063,7 +1260,7 @@ function renderAdminPage(
 			        <span class="score-pill"><?= $rowScore ?></span>
 			    </td>
 			    <td class="details-col">
-                                <button type="button" class="details-button" data-details="<?= h($detailsId) ?>">Details</button>
+                                <button type="button" class="details-button" data-details="<?= h($detailsId) ?>">Details ▾</button>
                             </td>
                         </tr>
                         <tr id="<?= h($detailsId) ?>" class="details-row">
@@ -1189,7 +1386,7 @@ function renderAdminPage(
                                         $existingOverrideMode = $existingOverride['mode'] ?? null;
                                         ?>
                                         <div class="action-menu" data-action-menu>
-                                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Event row actions">⋯</button>
+                                            <?= renderActionMenuTrigger('Event row actions') ?>
                                             <div class="action-menu-panel" hidden>
                                                 <div class="action-menu-inner">
                                                     <form method="post" action="/admin/delete-click" class="inline-action-form action-menu-form" data-confirm="Delete this click?">
@@ -1326,7 +1523,7 @@ function renderAdminPage(
                     <td><?= ((int) $campaign['active'] === 1) ? 'Yes' : 'No' ?></td>
                     <td class="actions-col actions-col--menu campaign-actions-cell">
                         <div class="action-menu" data-action-menu>
-                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Campaign actions">⋯</button>
+                            <?= renderActionMenuTrigger('Campaign actions') ?>
                             <div class="action-menu-panel" hidden>
                                 <div class="action-menu-inner">
                                     <a class="action-menu-link button-link" href="<?= h($buildDashboardUrl(['campaign' => (string) $campaign['id'], 'hide_behavioral' => '1', 'hide_subdomains' => '1'])) ?>">View activity</a>
@@ -1430,6 +1627,41 @@ function renderAdminPage(
 	        <label for="edit_description">Description</label>
 	        <input id="edit_description" type="text" name="description" value="<?= h((string) ($editLink['description'] ?? '')) ?>">
 
+            <label for="edit_token_state">Lifecycle state</label>
+            <select id="edit_token_state" name="token_state">
+                <?php $editState = (string) ($editLink['token_state'] ?? 'active'); ?>
+                <?php foreach (['draft', 'active', 'paused', 'expired', 'archived'] as $state): ?>
+                    <option value="<?= h($state) ?>" <?= $editState === $state ? 'selected' : '' ?>><?= h(ucfirst($state)) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <label for="edit_activates_at">Activate at (optional)</label>
+            <input id="edit_activates_at" type="datetime-local" name="activates_at" value="<?= h((string) (!empty($editLink['activates_at']) ? str_replace(' ', 'T', substr((string) $editLink['activates_at'], 0, 16)) : '')) ?>">
+
+            <label for="edit_expires_at">Expire at (optional)</label>
+            <input id="edit_expires_at" type="datetime-local" name="expires_at" value="<?= h((string) (!empty($editLink['expires_at']) ? str_replace(' ', 'T', substr((string) $editLink['expires_at'], 0, 16)) : '')) ?>">
+
+            <label for="edit_owner">Owner</label>
+            <input id="edit_owner" type="text" name="owner" value="<?= h((string) ($editLink['owner'] ?? '')) ?>" placeholder="SOC / Team / Operator">
+            <label for="edit_source">Source</label>
+            <input id="edit_source" type="text" name="source" value="<?= h((string) ($editLink['source'] ?? '')) ?>" placeholder="Email campaign / web form / integration">
+            <label for="edit_objective">Objective</label>
+            <input id="edit_objective" type="text" name="objective" value="<?= h((string) ($editLink['objective'] ?? '')) ?>" placeholder="Detection / validation / monitoring">
+            <label for="edit_channel">Channel</label>
+            <input id="edit_channel" type="text" name="channel" value="<?= h((string) ($editLink['channel'] ?? '')) ?>" placeholder="Email / SMS / web / API">
+
+            <label for="edit_redirect_strategy">Redirect strategy</label>
+            <select id="edit_redirect_strategy" name="redirect_strategy">
+                <?php $editRedirectStrategy = (string) ($editLink['redirect_strategy'] ?? 'single'); ?>
+                <option value="single" <?= $editRedirectStrategy === 'single' ? 'selected' : '' ?>>Single destination</option>
+                <option value="weighted" <?= $editRedirectStrategy === 'weighted' ? 'selected' : '' ?>>Weighted pool</option>
+            </select>
+            <label for="edit_redirect_pool">Weighted redirect pool (one per line: URL|weight)</label>
+            <textarea id="edit_redirect_pool" name="redirect_pool" rows="4" placeholder="https://a.example.com|3&#10;https://b.example.com|1"><?= h((string) implode("\n", array_map(
+                static fn(array $row): string => (string) ($row['url'] ?? '') . '|' . (int) ($row['weight'] ?? 1),
+                is_array(json_decode((string) ($editLink['redirect_pool_json'] ?? ''), true)) ? json_decode((string) ($editLink['redirect_pool_json'] ?? ''), true) : []
+            ))) ?></textarea>
+
             <?php if (!empty($campaigns)): ?>
             <label for="edit_campaign_id">Campaign</label>
             <select id="edit_campaign_id" name="campaign_id">
@@ -1474,6 +1706,17 @@ function renderAdminPage(
 	            <p class="muted" style="margin: 4px 0 0 0;">When enabled, an email fires each time this token is hit regardless of classification (deduped per IP per the configured window). Requires Email Alerting configured in Settings.</p>
 	        </div>
 
+            <div style="margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" name="alert_on_first_hit" value="1" <?= ((int) ($editLink['alert_on_first_hit'] ?? 0) === 1) ? 'checked' : '' ?>>
+                    <span>Flag first-hit alert context</span>
+                </label>
+                <p class="muted" style="margin: 4px 0 0 0;">Adds `token_first_hit` marker to webhook payload reasons on the first observed hit.</p>
+            </div>
+            <label for="edit_dormancy_alert_hours">Dormancy reactivation threshold (hours)</label>
+            <input id="edit_dormancy_alert_hours" type="number" min="0" name="dormancy_alert_hours" value="<?= (int) ($editLink['dormancy_alert_hours'] ?? 0) ?>">
+            <p class="muted" style="margin: 4px 0 12px 0;">When set, emits `token_dormant_reactivation` marker after this inactivity window.</p>
+
 	        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 	            <button type="submit">Save token</button>
 	            <form method="get" action="/admin" class="inline-action-form">
@@ -1507,6 +1750,37 @@ function renderAdminPage(
 
                 <label for="description">Description</label>
                 <input id="description" type="text" name="description" placeholder="Optional description">
+
+                <label for="token_state">Lifecycle state</label>
+                <select id="token_state" name="token_state">
+                    <option value="active" selected>Active</option>
+                    <option value="draft">Draft</option>
+                    <option value="paused">Paused</option>
+                    <option value="archived">Archived</option>
+                </select>
+
+                <label for="activates_at">Activate at (optional)</label>
+                <input id="activates_at" type="datetime-local" name="activates_at">
+
+                <label for="expires_at">Expire at (optional)</label>
+                <input id="expires_at" type="datetime-local" name="expires_at">
+
+                <label for="owner">Owner</label>
+                <input id="owner" type="text" name="owner" placeholder="SOC / Team / Operator">
+                <label for="source">Source</label>
+                <input id="source" type="text" name="source" placeholder="Email campaign / web form / integration">
+                <label for="objective">Objective</label>
+                <input id="objective" type="text" name="objective" placeholder="Detection / validation / monitoring">
+                <label for="channel">Channel</label>
+                <input id="channel" type="text" name="channel" placeholder="Email / SMS / web / API">
+
+                <label for="redirect_strategy">Redirect strategy</label>
+                <select id="redirect_strategy" name="redirect_strategy">
+                    <option value="single" selected>Single destination</option>
+                    <option value="weighted">Weighted pool</option>
+                </select>
+                <label for="redirect_pool">Weighted redirect pool (one per line: URL|weight)</label>
+                <textarea id="redirect_pool" name="redirect_pool" rows="4" placeholder="https://a.example.com|3&#10;https://b.example.com|1"></textarea>
 
                 <?php if (!empty($campaigns)): ?>
                 <label for="campaign_id">Campaign</label>
@@ -1550,8 +1824,42 @@ function renderAdminPage(
                     <p class="muted" style="margin: 4px 0 0 0;">When enabled, an email fires each time this token is hit regardless of classification (deduped per IP per the configured window). Requires Email Alerting configured in Settings.</p>
                 </div>
 
+                <div style="margin-bottom: 12px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" name="alert_on_first_hit" value="1">
+                        <span>Flag first-hit alert context</span>
+                    </label>
+                </div>
+                <label for="dormancy_alert_hours">Dormancy reactivation threshold (hours)</label>
+                <input id="dormancy_alert_hours" type="number" min="0" name="dormancy_alert_hours" value="0">
+
                 <button type="submit">Create token</button>
             </form>
+
+            <?php if ($isDemo): ?>
+                <div class="admin-advanced" style="padding: 12px;">
+                    <h2>Create decoy endpoint pack</h2>
+                    <p class="muted demo-lock-note">Not available in demo mode.</p>
+                </div>
+            <?php else: ?>
+                <form method="post" action="/admin/create-decoy-pack">
+                    <h2>Create decoy endpoint pack</h2>
+                    <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                    <label for="decoy_pack">Preset</label>
+                    <select id="decoy_pack" name="pack">
+                        <option value="baseline">Baseline</option>
+                        <option value="wordpress">WordPress</option>
+                        <option value="laravel">Laravel</option>
+                        <option value="phpmyadmin">phpMyAdmin</option>
+                        <option value="k8s">Kubernetes</option>
+                        <option value="git">Git exposure</option>
+                    </select>
+                    <label for="decoy_destination">Destination URL</label>
+                    <input id="decoy_destination" type="url" name="destination" required placeholder="https://www.example.com/">
+                    <p class="muted">Creates multiple decoy tokens with forced threat-feed inclusion and token webhook enabled.</p>
+                    <button type="submit">Create decoy pack</button>
+                </form>
+            <?php endif; ?>
 
             <h2>Token summary</h2>
             <div class="table-wrap">
@@ -1561,13 +1869,16 @@ function renderAdminPage(
                         <th>Token / Path</th>
                         <th>Description</th>
                         <th>Campaign</th>
+                        <th>State</th>
                         <th>Destination</th>
                         <th>Active</th>
 			<th>Clicks</th>
                         <th>Excl. Feed</th>
                         <th>Force Feed</th>
-                        <th>Token Webhook</th>
-                        <th>Email Alert</th>
+                        <th>Webhook</th>
+                        <th>Email</th>
+                        <th>Health</th>
+                        <th>Stale</th>
                         <th class="actions-col">Actions</th>
                     </tr>
 		    <?php foreach ($links as $link): ?>
@@ -1591,6 +1902,7 @@ function renderAdminPage(
 		            —
 		        <?php endif; ?>
 		    </td>
+                    <td><?= h((string) ($link['token_state'] ?? 'active')) ?></td>
 		    <td class="wrap"><?= h((string) $link['destination']) ?></td>
 		    <td><?= ((int) $link['active'] === 1) ? 'Yes' : 'No' ?></td>
 		    <td><?= (int) $link['click_count'] ?></td>
@@ -1622,10 +1934,25 @@ function renderAdminPage(
 		            No
 		        <?php endif; ?>
 		    </td>
+                    <td>
+                        <?php $healthCode = (int) ($link['last_health_http_code'] ?? 0); ?>
+                        <?= $healthCode > 0 ? h((string) $healthCode) : '—' ?>
+                    </td>
+                    <td>
+                        <?php
+                        $lastHitMs = (int) ($link['last_clicked_at_unix_ms'] ?? 0);
+                        $stale = ($staleTokenDays > 0 && $lastHitMs > 0) ? ((currentUnixMs() - $lastHitMs) > ($staleTokenDays * 86400000)) : false;
+                        ?>
+                        <?php if ($stale): ?>
+                            <span class="badge badge-suspicious">stale</span>
+                        <?php else: ?>
+                            —
+                        <?php endif; ?>
+                    </td>
 
 		    <td class="actions-col actions-col--menu token-actions-cell">
                         <div class="action-menu" data-action-menu>
-                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Token actions">⋯</button>
+                            <?= renderActionMenuTrigger('Token actions') ?>
                             <div class="action-menu-panel" hidden>
                                 <div class="action-menu-inner">
                                     <form method="get" action="/admin" class="inline-action-form action-menu-form">
@@ -1634,6 +1961,13 @@ function renderAdminPage(
                                         <button type="submit" class="action-menu-submit">Edit token</button>
                                     </form>
                                     <button type="button" class="action-menu-item" data-toggle-row="token-templates-<?= (int) $link['id'] ?>">Deployment templates</button>
+                                    <?php if (!$isDemo): ?>
+                                        <form method="post" action="/admin/check-link-health" class="inline-action-form action-menu-form">
+                                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                            <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
+                                            <button type="submit" class="action-menu-submit">↻ Check link health</button>
+                                        </form>
+                                    <?php endif; ?>
                                     <?php if ((int) $link['active'] === 1): ?>
                                         <form method="post" action="/admin/deactivate-link" class="inline-action-form action-menu-form">
                                             <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
@@ -1757,7 +2091,7 @@ function renderAdminPage(
 	                    </td>
 	                    <td class="actions-col actions-col--menu">
 	                        <div class="action-menu" data-action-menu>
-	                            <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="ASN rule actions">⋯</button>
+	                            <?= renderActionMenuTrigger('ASN rule actions') ?>
 	                            <div class="action-menu-panel" hidden>
 	                                <div class="action-menu-inner">
 	                                    <form method="get" action="/admin" class="inline-action-form action-menu-form">
@@ -1855,7 +2189,7 @@ function renderAdminPage(
                             <td><?= h((string) ($rule['created_at'] ?? '')) ?></td>
                             <td class="actions-col actions-col--menu">
                                 <div class="action-menu" data-action-menu>
-                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Country rule actions">⋯</button>
+                                    <?= renderActionMenuTrigger('Country rule actions') ?>
                                     <div class="action-menu-panel" hidden>
                                         <div class="action-menu-inner">
                                             <form method="get" action="/admin" class="inline-action-form action-menu-form">
@@ -1996,7 +2330,7 @@ function renderAdminPage(
                             <td><?= h((string) ($override['created_at'] ?? '')) ?></td>
                             <td class="actions-col actions-col--menu">
                                 <div class="action-menu" data-action-menu>
-                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="IP override actions">⋯</button>
+                                    <?= renderActionMenuTrigger('IP override actions') ?>
                                     <div class="action-menu-panel" hidden>
                                         <div class="action-menu-inner">
                                             <form method="get" action="/admin" class="inline-action-form action-menu-form">
@@ -2061,6 +2395,27 @@ function renderAdminPage(
                         <option value="redirect" <?= $unknownPathBehavior === 'redirect' ? 'selected' : '' ?>>Redirect</option>
                         <option value="404" <?= $unknownPathBehavior === '404' ? 'selected' : '' ?>>404</option>
                     </select>
+
+                    <?php if ($isDemo): ?>
+                        <div class="demo-locked-field">
+                            Adaptive deception responses: <?= $adaptiveDeceptionEnabled ? 'Enabled' : 'Disabled' ?>
+                            <span class="demo-lock-note">Not configurable in demo mode</span>
+                        </div>
+                    <?php else: ?>
+                        <label style="display: inline-flex; align-items: center; gap: 6px; margin: 8px 0;">
+                            <input type="checkbox" name="adaptive_deception_enabled" value="1" <?= $adaptiveDeceptionEnabled ? 'checked' : '' ?>>
+                            <span>Adaptive deception responses for suspicious unknown hits</span>
+                        </label>
+                    <?php endif; ?>
+                    <p class="muted">When enabled, suspicious scans can receive realistic decoy responses (fake env/login/API errors) instead of redirect/404.</p>
+
+                    <label for="stale_token_days">Stale token threshold (days)</label>
+                    <?php if ($isDemo): ?>
+                        <div class="demo-locked-field"><?= (int) $staleTokenDays ?> days <span class="demo-lock-note">Not configurable in demo mode</span></div>
+                    <?php else: ?>
+                        <input id="stale_token_days" type="number" min="0" max="3650" name="stale_token_days" value="<?= (int) $staleTokenDays ?>">
+                    <?php endif; ?>
+                    <p class="muted">Used by token summary watchdog badges. Set 0 to disable stale detection.</p>
 
 		    <div style="margin-bottom: 12px;">
                          <label style="display: inline-flex; align-items: center; gap: 6px; margin-right: 16px;">
@@ -2502,6 +2857,13 @@ function renderAdminPage(
                             <h2>Manual cleanup</h2>
                             <p class="muted demo-lock-note">Not available in demo mode.</p>
                         </div>
+                        <div>
+                            <h2>Database maintenance</h2>
+                            <p class="muted demo-lock-note">Not available in demo mode.</p>
+                            <div class="demo-locked-field">Scheduled maintenance: <?= $sqliteMaintenanceEnabled ? 'Enabled' : 'Disabled' ?> <span class="demo-lock-note">Not configurable in demo mode</span></div>
+                            <div class="demo-locked-field">Last maintenance: <?= h($sqliteMaintenanceLastRun) ?> <span class="demo-lock-note">Read-only</span></div>
+                            <div class="demo-locked-field">Last VACUUM: <?= h($sqliteVacuumLastRun) ?> <span class="demo-lock-note">Read-only</span></div>
+                        </div>
                         </details>
                     <?php else: ?>
                     <details class="admin-advanced">
@@ -2512,9 +2874,18 @@ function renderAdminPage(
                         <label for="data_retention_days">Delete click data older than this many days</label>
                         <input id="data_retention_days" type="number" min="0" name="data_retention_days" value="<?= h($dataRetentionDays) ?>">
 
-                        <p class="muted">
-                            Set to 0 to disable automatic cleanup.
-                        </p>
+                        <label for="auth_retention_days">Delete auth failure records older than this many days</label>
+                        <input id="auth_retention_days" type="number" min="0" name="auth_retention_days" value="<?= h($authRetentionDays) ?>">
+
+                        <label for="enrichment_retention_days">Delete IP enrichment cache older than this many days</label>
+                        <input id="enrichment_retention_days" type="number" min="0" name="enrichment_retention_days" value="<?= h($enrichmentRetentionDays) ?>">
+
+                        <label style="display:inline-flex;align-items:center;gap:6px;">
+                            <input type="checkbox" name="archive_before_cleanup" value="1" <?= $archiveBeforeCleanup ? 'checked' : '' ?>>
+                            <span>Archive click rows to CSV before cleanup</span>
+                        </label>
+
+                        <p class="muted">Set any value to 0 to disable cleanup for that data set.</p>
 
                         <button type="submit">Save retention settings</button>
                     </form>
@@ -2524,6 +2895,54 @@ function renderAdminPage(
                         <p class="muted">Run cleanup now using the saved retention setting.</p>
                         <button type="submit" class="warning-button">Run cleanup now</button>
                     </form>
+
+                    <form method="post" action="/admin/run-db-maintenance" data-confirm="Run SQLite maintenance now?">
+                        <h2>Database maintenance</h2>
+                        <p class="muted">Runs ANALYZE and PRAGMA optimize for SQLite planner health.</p>
+
+                        <label style="display:inline-flex;align-items:center;gap:6px;">
+                            <input type="checkbox" name="run_vacuum" value="1">
+                            <span>Also run VACUUM now (can be slower)</span>
+                        </label>
+                        <button type="submit">Run SQLite maintenance</button>
+                    </form>
+
+                    <form method="post" action="/admin/save-db-maintenance-settings">
+                        <h2>Scheduled maintenance</h2>
+                        <label style="display:inline-flex;align-items:center;gap:6px;">
+                            <input type="checkbox" name="sqlite_maintenance_enabled" value="1" <?= $sqliteMaintenanceEnabled ? 'checked' : '' ?>>
+                            <span>Enable scheduled SQLite maintenance</span>
+                        </label>
+
+                        <label for="sqlite_maintenance_interval_mins">Maintenance interval (minutes)</label>
+                        <input id="sqlite_maintenance_interval_mins" type="number" min="15" max="10080" name="sqlite_maintenance_interval_mins" value="<?= h($sqliteMaintenanceIntervalMins) ?>">
+
+                        <label style="display:inline-flex;align-items:center;gap:6px;">
+                            <input type="checkbox" name="sqlite_vacuum_enabled" value="1" <?= $sqliteVacuumEnabled ? 'checked' : '' ?>>
+                            <span>Allow scheduled VACUUM</span>
+                        </label>
+
+                        <label for="sqlite_vacuum_min_interval_hours">VACUUM minimum interval (hours)</label>
+                        <input id="sqlite_vacuum_min_interval_hours" type="number" min="6" max="720" name="sqlite_vacuum_min_interval_hours" value="<?= h($sqliteVacuumIntervalHours) ?>">
+                        <p class="muted">Safe policy: VACUUM is optional, off by default, and interval-limited.</p>
+                        <button type="submit">Save maintenance settings</button>
+                    </form>
+
+                    <div class="admin-advanced" style="padding: 12px;">
+                        <h2>Database stats</h2>
+                        <div class="details-grid">
+                            <div>
+                                <div><span class="mono">DB size:</span> <?= h((string) $dbStats['size_mb']) ?> MB</div>
+                                <div><span class="mono">Total clicks:</span> <?= (int) $dbStats['total_clicks'] ?></div>
+                                <div><span class="mono">Last maintenance:</span> <?= h($sqliteMaintenanceLastRun) ?></div>
+                            </div>
+                            <div>
+                                <div><span class="mono">Clicks (24h):</span> <?= (int) $dbStats['clicks_24h'] ?></div>
+                                <div><span class="mono">Clicks (7d):</span> <?= (int) $dbStats['clicks_7d'] ?></div>
+                                <div><span class="mono">Last VACUUM:</span> <?= h($sqliteVacuumLastRun) ?></div>
+                            </div>
+                        </div>
+                    </div>
                     </details>
                     <?php endif; ?>
                 </div>
@@ -2565,7 +2984,7 @@ function renderAdminPage(
                             <td><?= ((int) $pattern['active'] === 1) ? 'Yes' : 'No' ?></td>
                             <td class="skip-actions-col actions-col--menu">
                                 <div class="action-menu" data-action-menu>
-                                    <button type="button" class="action-menu-trigger" aria-expanded="false" aria-haspopup="true" aria-label="Skip pattern actions">⋯</button>
+                                    <?= renderActionMenuTrigger('Skip pattern actions') ?>
                                     <div class="action-menu-panel" hidden>
                                         <div class="action-menu-inner">
                                             <?php if ((int) $pattern['active'] === 1): ?>
@@ -2676,7 +3095,7 @@ function renderAdminPage(
             var row  = document.getElementById(id);
             if (!row) return;
             var open = row.classList.toggle('open');
-            if (button) { button.textContent = open ? 'Hide' : 'Details'; }
+            if (button) { button.textContent = open ? 'Hide ▴' : 'Details ▾'; }
             if (open) { loadShodanEnrichment(row); }
         }
 
@@ -3142,6 +3561,104 @@ function renderAdminPage(
                         });
                 });
             });
+
+            /* ── Saved dashboard filter presets ───────────────────────── */
+            var presetSelect = document.getElementById('filter-preset-select');
+            var presetSave = document.getElementById('filter-preset-save');
+            var presetDelete = document.getElementById('filter-preset-delete');
+            var densityToggle = document.getElementById('density-toggle');
+            var presetKey = 'signaltrace-filter-presets-v1';
+            var densityKey = 'signaltrace-density-v1';
+
+            function readPresets() {
+                try {
+                    var raw = localStorage.getItem(presetKey);
+                    var parsed = raw ? JSON.parse(raw) : {};
+                    return (parsed && typeof parsed === 'object') ? parsed : {};
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function writePresets(presets) {
+                localStorage.setItem(presetKey, JSON.stringify(presets));
+            }
+
+            function refreshPresetSelect() {
+                if (!presetSelect) return;
+                var presets = readPresets();
+                presetSelect.innerHTML = '<option value="">Saved presets</option>';
+                Object.keys(presets).sort().forEach(function (name) {
+                    var opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    presetSelect.appendChild(opt);
+                });
+            }
+
+            function currentFilterParams() {
+                var p = new URLSearchParams(window.location.search);
+                var keys = ['token', 'ip', 'visitor', 'campaign', 'host', 'known', 'show_top_tokens', 'show_all', 'show_hidden', 'date_from', 'date_to'];
+                var out = {};
+                keys.forEach(function (k) {
+                    if (p.has(k) && p.get(k) !== '') out[k] = p.get(k);
+                });
+                return out;
+            }
+
+            if (presetSelect) {
+                refreshPresetSelect();
+                presetSelect.addEventListener('change', function () {
+                    if (!presetSelect.value) return;
+                    var presets = readPresets();
+                    var selected = presets[presetSelect.value];
+                    if (!selected) return;
+                    var url = new URL(window.location.href);
+                    var keys = ['token', 'ip', 'visitor', 'campaign', 'host', 'known', 'show_top_tokens', 'show_all', 'show_hidden', 'date_from', 'date_to', 'page'];
+                    keys.forEach(function (k) { url.searchParams.delete(k); });
+                    Object.keys(selected).forEach(function (k) { url.searchParams.set(k, selected[k]); });
+                    window.location.href = url.pathname + '?' + url.searchParams.toString();
+                });
+            }
+
+            if (presetSave) {
+                presetSave.addEventListener('click', function () {
+                    var name = prompt('Preset name');
+                    if (!name) return;
+                    var presets = readPresets();
+                    presets[name.trim()] = currentFilterParams();
+                    writePresets(presets);
+                    refreshPresetSelect();
+                });
+            }
+
+            if (presetDelete) {
+                presetDelete.addEventListener('click', function () {
+                    if (!presetSelect || !presetSelect.value) return;
+                    var presets = readPresets();
+                    delete presets[presetSelect.value];
+                    writePresets(presets);
+                    refreshPresetSelect();
+                });
+            }
+
+            function applyDensity(mode) {
+                var compact = mode === 'compact';
+                document.body.classList.toggle('density-compact', compact);
+                if (densityToggle) {
+                    densityToggle.textContent = compact ? 'Density: compact' : 'Density: comfy';
+                }
+            }
+
+            var savedDensity = localStorage.getItem(densityKey) || 'comfy';
+            applyDensity(savedDensity);
+            if (densityToggle) {
+                densityToggle.addEventListener('click', function () {
+                    var next = document.body.classList.contains('density-compact') ? 'comfy' : 'compact';
+                    localStorage.setItem(densityKey, next);
+                    applyDensity(next);
+                });
+            }
         });
         </script>
     </div><!-- /.page-body -->

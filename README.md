@@ -244,11 +244,11 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 ## Features at a Glance
 
 * **Tracking:** request logging, redirect handling, visitor fingerprinting, tracking pixel support, and GeoIP/ASN enrichment applied to every hit.
-* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, date range filtering, classification badges with scores, bulk delete by filter, dark mode, mobile layout, and progressive disclosure controls to reduce visual noise.
+* **Admin dashboard:** paginated activity feed, expandable request details, per-IP summary panel with VT/Abuse/Info links and Block/Allow/Hide actions, KPI strip, triage view chips, density toggle (comfy/compact), sticky table context, date range filtering, classification badges with scores, token watchlist triage panel, bulk delete by filter, dark mode, mobile layout, and progressive disclosure controls.
 * **Campaigns:** group tokens into a single tracking scenario with aggregated stats (total hits, unique visitors, first/last hit), campaign-level activity filtering, and webhook fallback.
 * **IP Reputation:** inline enrichment from Shodan InternetDB (open ports, CVEs, tags — no API key) and AbuseIPDB (abuse confidence, report history — optional free key). Cached permanently on first sight. Rescan button for on-demand refresh.
 * **Signal reason labels:** confidence signals displayed as color-coded pill tags with friendly descriptions.
-* **Token management:** create/edit/activate/deactivate/delete tokens, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
+* **Token management:** create/edit/activate/deactivate/delete tokens, lifecycle states (draft/active/paused/expired/archived), optional activation/expiration windows, owner/source/objective/channel attribution, weighted redirect pools, deployment templates (URL, HTML, markdown, pixel, email-safe button), feed inclusion/exclusion, force-include controls, and per-token webhook/email alerting.
 * **ASN rules:** scoring penalties, feed exclusion, edit in place.
 * **Country rules:** per-country score penalties by ISO code.
 * **IP overrides:** five modes — Block (always bot, score 0), Allow (always human, score 100), None (scoring unchanged), Feed include (always include in threat feeds), or Feed exclude (never include in threat feeds). Any override can independently hide an IP from the dashboard activity feed while still logging and scoring all traffic from it. The **Show Hidden IPs** toggle reveals suppressed activity on demand.
@@ -257,16 +257,21 @@ SMTP credentials are written by the Docker entrypoint into `config.local.php` as
 * **Threat feed:** ten endpoints covering IPv4 and IPv6 in plain text, Nginx deny, iptables, CIDR, MISP event, and STIX 2.1 bundle formats.
 * **Threat webhook:** fires when an unknown-path hit meets the configured classification threshold. Platform presets for Slack, Discord, Teams, PagerDuty, and custom JSON. Inline test button. Custom payload templates with `{{placeholder}}` syntax.
 * **Token webhook:** fires when a known tracked token is hit. Per-token opt-in, with campaign-level fallback when a token is not opted in but belongs to a campaign with webhook enabled.
+* **Token event context:** first-hit and dormancy-reactivation markers can be embedded in token alert reason strings for downstream automation.
 * **Email alerting:** plain text SMTP alerts for threats and tracked token hits. Per-token opt-in. Configurable threshold and deduplication window.
+* **Adaptive deception:** optional realistic decoy responses for suspicious unknown-path probes (e.g. fake env/login/API responses) to improve observation depth.
+* **Decoy packs:** one-click honeypot token bundles for common probe surfaces (WordPress, Laravel, phpMyAdmin, Kubernetes, Git, baseline).
 * **Redirect rate limiting:** per IP per token, configurable count and window.
 * **Cleanup tools:** delete by token, IP, filter, or unknown-token hits.
-* **Data retention:** configurable retention window with manual trigger and automatic cleanup.
+* **Data retention:** per-table retention windows for clicks, auth failures, and enrichment cache; optional archive-before-cleanup CSV; and manual cleanup from Settings.
 * **Wildcard DNS mode:** subdomain column, host filter, and subdomain activity panel for wildcard DNS honeypots.
 * **Grafana integration:** pre-built 16-panel dashboard using the Infinity datasource with nine aggregation export endpoints.
 * **Splunk integration:** scripted input with incremental fetching, two Dashboard Studio dashboards, props.conf with CIM field aliases and multivalue signal splitting.
 * **MISP and STIX 2.1 export:** threat intelligence exports for consumption by TI platforms.
 * **Cloudflare Access:** optional Cloudflare Zero Trust identity layer for the admin panel. When enabled, unauthorized `/admin` access attempts are denied with a generic 403 and automatically logged as tracked SignalTrace events — scored as high-confidence bot activity and visible in the dashboard alongside normal traffic.
-* **Regression coverage:** no-dependency regression script at `tests/regression.php` validating confidence threshold expansion and token/campaign webhook fallback behavior, with CI execution via `.github/workflows/regression.yml`.
+* **Regression coverage:** no-dependency regression script at `tests/regression.php` validating confidence threshold expansion, token/campaign webhook fallback behavior, and feed override eligibility logic, with CI execution via `.github/workflows/regression.yml`.
+* **SQLite operations:** settings-level maintenance control for `ANALYZE`/`PRAGMA optimize`, plus dashboard visibility into DB size and row-growth counters.
+* **Campaign and traffic attribution:** UTM fields are captured and stored per click (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`) for downstream analysis.
 
 ---
 

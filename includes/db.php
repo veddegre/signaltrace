@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/classification.php';
+require_once __DIR__ . '/scheduler.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 function db(): PDO
@@ -145,6 +146,16 @@ function initializeDatabase(PDO $pdo): void
         )
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS filter_presets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            query_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    ");
+
     // SECURITY: ensureColumn now validates table and column names against a strict
     // whitelist before interpolating them into SQL. The $definition argument uses
     // a predefined map instead of being passed as a free string.
@@ -177,6 +188,19 @@ function initializeDatabase(PDO $pdo): void
         'expires_at'               => 'TEXT',
         'document_kind'            => 'TEXT',
         'document_label'           => 'TEXT',
+        'token_state'              => "TEXT NOT NULL DEFAULT 'active'",
+        'activates_at'             => 'TEXT',
+        'owner'                    => 'TEXT',
+        'source'                   => 'TEXT',
+        'objective'                => 'TEXT',
+        'channel'                  => 'TEXT',
+        'alert_on_first_hit'       => 'INTEGER NOT NULL DEFAULT 0',
+        'dormancy_alert_hours'     => 'INTEGER NOT NULL DEFAULT 0',
+        'last_clicked_at_unix_ms'  => 'INTEGER',
+        'redirect_pool_json'       => 'TEXT',
+        'redirect_strategy'        => "TEXT NOT NULL DEFAULT 'single'",
+        'last_health_check_at'     => 'TEXT',
+        'last_health_http_code'    => 'INTEGER',
     ];
 
     foreach ($linksColumnDefinitions as $column => $definition) {
@@ -213,6 +237,11 @@ function initializeDatabase(PDO $pdo): void
         'sec_fetch_dest'         => 'TEXT',
         'sec_ch_ua'              => 'TEXT',
         'sec_ch_ua_platform'     => 'TEXT',
+        'utm_source'             => 'TEXT',
+        'utm_medium'             => 'TEXT',
+        'utm_campaign'           => 'TEXT',
+        'utm_term'               => 'TEXT',
+        'utm_content'            => 'TEXT',
     ];
 
     foreach ($clickColumnDefinitions as $column => $definition) {
@@ -228,6 +257,8 @@ function initializeDatabase(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_ip ON clicks(ip)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_confidence_label ON clicks(confidence_label)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_is_bot ON clicks(is_bot)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clicks_utm_campaign ON clicks(utm_campaign)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_links_token_state ON links(token_state, active)");
 
     // Compound indexes for high-frequency query patterns:
     // Threat feed query filters on event_type + unix_ms + confidence_label simultaneously.
@@ -340,6 +371,17 @@ function seedDefaultSettings(PDO $pdo): void
         'threat_feed_min_confidence' => 'suspicious',
         'threat_feed_min_hits'       => '1',
         'data_retention_days'        => '0',
+        'auth_retention_days'        => '30',
+        'enrichment_retention_days'  => '90',
+        'archive_before_cleanup'     => '0',
+        'sqlite_maintenance_enabled' => '1',
+        'sqlite_maintenance_interval_mins' => '360',
+        'sqlite_vacuum_enabled'      => '0',
+        'sqlite_vacuum_min_interval_hours' => '24',
+        'sqlite_maintenance_last_run_ts' => '0',
+        'sqlite_vacuum_last_run_ts'  => '0',
+        'adaptive_deception_enabled' => '0',
+        'stale_token_days'           => '30',
         'display_min_score'          => '20',
         'page_size'                  => '50',
         'webhook_url'                => '',
@@ -583,11 +625,26 @@ function getDistinctTokenCountForIp(PDO $pdo, string $ip, int $windowSeconds = 3
 
 function getLinkByToken(PDO $pdo, string $token): ?array
 {
+    // Keep lifecycle state synchronized for expired tokens.
+    $expireStmt = $pdo->prepare("
+        UPDATE links
+        SET token_state = 'expired',
+            active = 0
+        WHERE token = :token
+          AND (token_state IS NULL OR token_state != 'archived')
+          AND expires_at IS NOT NULL
+          AND expires_at != ''
+          AND expires_at <= datetime('now')
+    ");
+    $expireStmt->execute([':token' => $token]);
+
     $stmt = $pdo->prepare("
         SELECT *
         FROM links
         WHERE token = :token
           AND active = 1
+          AND COALESCE(token_state, 'active') = 'active'
+          AND (activates_at IS NULL OR activates_at = '' OR activates_at <= datetime('now'))
           AND (expires_at IS NULL OR expires_at = '' OR expires_at > datetime('now'))
         LIMIT 1
     ");
@@ -627,19 +684,33 @@ function createLink(
     bool $burnAfterFirstHit = false,
     ?string $expiresAt = null,
     ?string $documentKind = null,
-    ?string $documentLabel = null
+    ?string $documentLabel = null,
+    string $tokenState = 'active',
+    ?string $activatesAt = null,
+    string $owner = '',
+    string $source = '',
+    string $objective = '',
+    string $channel = '',
+    bool $alertOnFirstHit = false,
+    int $dormancyAlertHours = 0,
+    ?string $redirectPoolJson = null,
+    string $redirectStrategy = 'single'
 ): bool
 {
     $stmt = $pdo->prepare("
         INSERT INTO links (
             token, destination, description, active, exclude_from_feed, force_include_in_feed,
             include_in_token_webhook, include_in_email, campaign_id, type, recipient_name,
-            recipient_email, notes, burn_after_first_hit, expires_at, document_kind, document_label, created_at
+            recipient_email, notes, burn_after_first_hit, expires_at, document_kind, document_label,
+            token_state, activates_at, owner, source, objective, channel, alert_on_first_hit, dormancy_alert_hours,
+            redirect_pool_json, redirect_strategy, created_at
         )
         VALUES (
             :token, :destination, :description, 1, :exclude_from_feed, :force_include_in_feed,
             :include_in_token_webhook, :include_in_email, :campaign_id, :type, :recipient_name,
-            :recipient_email, :notes, :burn_after_first_hit, :expires_at, :document_kind, :document_label, :created_at
+            :recipient_email, :notes, :burn_after_first_hit, :expires_at, :document_kind, :document_label,
+            :token_state, :activates_at, :owner, :source, :objective, :channel, :alert_on_first_hit, :dormancy_alert_hours,
+            :redirect_pool_json, :redirect_strategy, :created_at
         )
     ");
 
@@ -660,6 +731,16 @@ function createLink(
         ':expires_at'               => $expiresAt,
         ':document_kind'            => $documentKind,
         ':document_label'           => $documentLabel,
+        ':token_state'              => in_array($tokenState, ['draft', 'active', 'paused', 'expired', 'archived'], true) ? $tokenState : 'active',
+        ':activates_at'             => $activatesAt,
+        ':owner'                    => $owner !== '' ? $owner : null,
+        ':source'                   => $source !== '' ? $source : null,
+        ':objective'                => $objective !== '' ? $objective : null,
+        ':channel'                  => $channel !== '' ? $channel : null,
+        ':alert_on_first_hit'       => $alertOnFirstHit ? 1 : 0,
+        ':dormancy_alert_hours'     => max(0, $dormancyAlertHours),
+        ':redirect_pool_json'       => $redirectPoolJson,
+        ':redirect_strategy'        => in_array($redirectStrategy, ['single', 'weighted'], true) ? $redirectStrategy : 'single',
         ':created_at'               => date('c'),
     ]);
 }
@@ -682,7 +763,17 @@ function updateLink(
     bool $burnAfterFirstHit = false,
     ?string $expiresAt = null,
     ?string $documentKind = null,
-    ?string $documentLabel = null
+    ?string $documentLabel = null,
+    string $tokenState = 'active',
+    ?string $activatesAt = null,
+    string $owner = '',
+    string $source = '',
+    string $objective = '',
+    string $channel = '',
+    bool $alertOnFirstHit = false,
+    int $dormancyAlertHours = 0,
+    ?string $redirectPoolJson = null,
+    string $redirectStrategy = 'single'
 ): bool
 {
     $stmt = $pdo->prepare("
@@ -702,7 +793,17 @@ function updateLink(
             burn_after_first_hit     = :burn_after_first_hit,
             expires_at               = :expires_at,
             document_kind            = :document_kind,
-            document_label           = :document_label
+            document_label           = :document_label,
+            token_state              = :token_state,
+            activates_at             = :activates_at,
+            owner                    = :owner,
+            source                   = :source,
+            objective                = :objective,
+            channel                  = :channel,
+            alert_on_first_hit       = :alert_on_first_hit,
+            dormancy_alert_hours     = :dormancy_alert_hours,
+            redirect_pool_json       = :redirect_pool_json,
+            redirect_strategy        = :redirect_strategy
         WHERE id = :id
     ");
 
@@ -724,18 +825,41 @@ function updateLink(
         ':expires_at'               => $expiresAt,
         ':document_kind'            => $documentKind,
         ':document_label'           => $documentLabel,
+        ':token_state'              => in_array($tokenState, ['draft', 'active', 'paused', 'expired', 'archived'], true) ? $tokenState : 'active',
+        ':activates_at'             => $activatesAt,
+        ':owner'                    => $owner !== '' ? $owner : null,
+        ':source'                   => $source !== '' ? $source : null,
+        ':objective'                => $objective !== '' ? $objective : null,
+        ':channel'                  => $channel !== '' ? $channel : null,
+        ':alert_on_first_hit'       => $alertOnFirstHit ? 1 : 0,
+        ':dormancy_alert_hours'     => max(0, $dormancyAlertHours),
+        ':redirect_pool_json'       => $redirectPoolJson,
+        ':redirect_strategy'        => in_array($redirectStrategy, ['single', 'weighted'], true) ? $redirectStrategy : 'single',
     ]);
 }
 
 function deactivateLink(PDO $pdo, int $id): bool
 {
-    $stmt = $pdo->prepare("UPDATE links SET active = 0 WHERE id = :id");
+    $stmt = $pdo->prepare("
+        UPDATE links
+        SET active = 0,
+            token_state = CASE
+                WHEN token_state IN ('expired', 'archived') THEN token_state
+                ELSE 'paused'
+            END
+        WHERE id = :id
+    ");
     return $stmt->execute([':id' => $id]);
 }
 
 function activateLink(PDO $pdo, int $id): bool
 {
-    $stmt = $pdo->prepare("UPDATE links SET active = 1 WHERE id = :id");
+    $stmt = $pdo->prepare("
+        UPDATE links
+        SET active = 1,
+            token_state = 'active'
+        WHERE id = :id
+    ");
     return $stmt->execute([':id' => $id]);
 }
 
@@ -784,6 +908,12 @@ function logClick(PDO $pdo, array $link, array $requestData): void
         'ip_country' => null,
     ];
 
+    $queryString = (string) ($requestData['query_string'] ?? '');
+    $utm = [];
+    if ($queryString !== '') {
+        parse_str($queryString, $utm);
+    }
+
     $stmt = $pdo->prepare("
         INSERT INTO clicks (
             link_id, token, event_type, clicked_at, clicked_at_unix_ms,
@@ -794,7 +924,8 @@ function logClick(PDO $pdo, array $link, array $requestData): void
             accept_language, accept, accept_encoding, request_method,
             host, scheme, request_uri, query_string, remote_port,
             sec_fetch_site, sec_fetch_mode, sec_fetch_dest,
-            sec_ch_ua, sec_ch_ua_platform, is_bot, bot_reason
+            sec_ch_ua, sec_ch_ua_platform, is_bot, bot_reason,
+            utm_source, utm_medium, utm_campaign, utm_term, utm_content
         ) VALUES (
             :link_id, :token, :event_type, :clicked_at, :clicked_at_unix_ms,
             :ip, :ip_asn, :ip_org, :ip_country, :visitor_hash,
@@ -804,7 +935,8 @@ function logClick(PDO $pdo, array $link, array $requestData): void
             :accept_language, :accept, :accept_encoding, :request_method,
             :host, :scheme, :request_uri, :query_string, :remote_port,
             :sec_fetch_site, :sec_fetch_mode, :sec_fetch_dest,
-            :sec_ch_ua, :sec_ch_ua_platform, :is_bot, :bot_reason
+            :sec_ch_ua, :sec_ch_ua_platform, :is_bot, :bot_reason,
+            :utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content
         )
     ");
 
@@ -843,11 +975,127 @@ function logClick(PDO $pdo, array $link, array $requestData): void
         ':sec_ch_ua_platform' => $requestData['sec_ch_ua_platform'] ?? null,
         ':is_bot' => !empty($requestData['is_bot']) ? 1 : 0,
         ':bot_reason' => $requestData['bot_reason'] ?? null,
+        ':utm_source' => isset($utm['utm_source']) ? (string) $utm['utm_source'] : null,
+        ':utm_medium' => isset($utm['utm_medium']) ? (string) $utm['utm_medium'] : null,
+        ':utm_campaign' => isset($utm['utm_campaign']) ? (string) $utm['utm_campaign'] : null,
+        ':utm_term' => isset($utm['utm_term']) ? (string) $utm['utm_term'] : null,
+        ':utm_content' => isset($utm['utm_content']) ? (string) $utm['utm_content'] : null,
     ]);
+
+    if (!empty($link['id'])) {
+        $up = $pdo->prepare("UPDATE links SET last_clicked_at_unix_ms = :ts WHERE id = :id");
+        $up->execute([':ts' => currentUnixMs(), ':id' => (int) $link['id']]);
+    }
 
     if ((int) ($link['burn_after_first_hit'] ?? 0) === 1 && $firstForToken === 1 && !empty($link['id'])) {
         deactivateLink($pdo, (int) $link['id']);
     }
+}
+
+function getTokenAlertContext(PDO $pdo, int $linkId): array
+{
+    $stmt = $pdo->prepare("
+        SELECT
+            l.alert_on_first_hit,
+            l.dormancy_alert_hours,
+            c1.first_for_token AS latest_first_for_token,
+            c1.clicked_at_unix_ms AS latest_clicked_at_unix_ms,
+            (
+                SELECT c2.clicked_at_unix_ms
+                FROM clicks c2
+                WHERE c2.link_id = l.id
+                ORDER BY c2.id DESC
+                LIMIT 1 OFFSET 1
+            ) AS previous_clicked_at_unix_ms
+        FROM links l
+        LEFT JOIN clicks c1 ON c1.id = (
+            SELECT id FROM clicks WHERE link_id = l.id ORDER BY id DESC LIMIT 1
+        )
+        WHERE l.id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([':id' => $linkId]);
+    return $stmt->fetch() ?: [];
+}
+
+function createDecoyPack(PDO $pdo, string $pack, string $destination): int
+{
+    $templates = match ($pack) {
+        'wordpress' => ['wp-admin/login', 'wp-login.php', 'wp-content/uploads/debug.log'],
+        'laravel' => ['.env', 'storage/logs/laravel.log', '_ignition/execute-solution'],
+        'phpmyadmin' => ['phpmyadmin', 'phpMyAdmin/index.php'],
+        'k8s' => ['.kube/config', 'kubernetes/secrets.yaml'],
+        'git' => ['.git/config', '.git/HEAD'],
+        default => ['admin/login', '.env', 'api/internal/status'],
+    };
+
+    $created = 0;
+    foreach ($templates as $token) {
+        try {
+            createLink(
+                $pdo,
+                $token,
+                $destination,
+                'Decoy pack: ' . $pack,
+                false,
+                true,
+                false,
+                true,
+                null,
+                'decoy'
+            );
+            $created++;
+        } catch (Throwable $e) {
+            // Ignore duplicates while creating packs.
+        }
+    }
+
+    return $created;
+}
+
+function getFilterPresets(PDO $pdo): array
+{
+    $stmt = $pdo->query("SELECT * FROM filter_presets ORDER BY name ASC");
+    return $stmt->fetchAll();
+}
+
+function createFilterPreset(PDO $pdo, string $name, array $query): bool
+{
+    $json = json_encode($query, JSON_UNESCAPED_SLASHES);
+    $stmt = $pdo->prepare("
+        INSERT INTO filter_presets (name, query_json, created_at, updated_at)
+        VALUES (:name, :query_json, :created_at, :updated_at)
+        ON CONFLICT(name) DO UPDATE SET
+            query_json = excluded.query_json,
+            updated_at = excluded.updated_at
+    ");
+    return $stmt->execute([
+        ':name' => $name,
+        ':query_json' => $json ?: '{}',
+        ':created_at' => date('c'),
+        ':updated_at' => date('c'),
+    ]);
+}
+
+function deleteFilterPreset(PDO $pdo, int $id): bool
+{
+    $stmt = $pdo->prepare("DELETE FROM filter_presets WHERE id = :id");
+    return $stmt->execute([':id' => $id]);
+}
+
+function recordLinkHealth(PDO $pdo, int $linkId, int $statusCode): void
+{
+    $stmt = $pdo->prepare("
+        UPDATE links
+        SET last_health_check_at = :ts,
+            last_health_http_code = :code
+        WHERE id = :id
+    ");
+    $stmt->execute([
+        ':ts' => date('c'),
+        ':code' => $statusCode,
+        ':id' => $linkId,
+    ]);
 }
 
 function getRecentClicks(PDO $pdo, int $limit = 100): array
@@ -945,6 +1193,80 @@ function getClickCountsByToken(PDO $pdo, bool $knownOnly = false, ?string $dateF
     $stmt->execute();
 
     return $stmt->fetchAll();
+}
+
+function getDashboardKpis(
+    PDO $pdo,
+    ?string $tokenFilter = null,
+    ?string $ipFilter = null,
+    ?string $visitorFilter = null,
+    bool $knownOnly = false,
+    ?string $dateFrom = null,
+    ?string $dateTo = null,
+    ?string $hostFilter = null,
+    ?int $campaignId = null
+): array {
+    $where = ['1=1'];
+    $params = [];
+
+    if ($tokenFilter !== null && $tokenFilter !== '') {
+        $where[] = 'c.token LIKE :token';
+        $params[':token'] = '%' . $tokenFilter . '%';
+    }
+    if ($ipFilter !== null && $ipFilter !== '') {
+        $where[] = 'c.ip = :ip';
+        $params[':ip'] = $ipFilter;
+    }
+    if ($visitorFilter !== null && $visitorFilter !== '') {
+        $where[] = 'c.visitor_hash = :visitor';
+        $params[':visitor'] = $visitorFilter;
+    }
+    if ($knownOnly) {
+        $where[] = 'c.link_id IS NOT NULL';
+    }
+    if ($dateFrom !== null && $dateFrom !== '') {
+        $where[] = 'c.clicked_at >= :date_from';
+        $params[':date_from'] = $dateFrom;
+    }
+    if ($dateTo !== null && $dateTo !== '') {
+        $where[] = 'c.clicked_at <= :date_to';
+        $params[':date_to'] = $dateTo . ' 23:59:59';
+    }
+    if ($hostFilter !== null && $hostFilter !== '') {
+        $where[] = 'c.host LIKE :host';
+        $params[':host'] = '%' . $hostFilter . '%';
+    }
+    if ($campaignId !== null && $campaignId > 0) {
+        $where[] = 'l.campaign_id = :campaign_id';
+        $params[':campaign_id'] = $campaignId;
+    }
+
+    $sql = "
+        SELECT
+            COUNT(*) AS total_events,
+            COUNT(DISTINCT c.ip) AS unique_ips,
+            SUM(CASE WHEN c.link_id IS NOT NULL THEN 1 ELSE 0 END) AS known_hits,
+            SUM(CASE WHEN c.confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS risky_hits,
+            SUM(CASE WHEN c.confidence_label IN ('bot','suspicious') THEN 1 ELSE 0 END) AS feed_candidates
+        FROM clicks c
+        LEFT JOIN links l ON l.id = c.link_id
+        WHERE " . implode(' AND ', $where);
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch() ?: [];
+
+    $total = (int) ($row['total_events'] ?? 0);
+    $risky = (int) ($row['risky_hits'] ?? 0);
+    $riskRate = $total > 0 ? round(($risky / $total) * 100, 1) : 0.0;
+
+    return [
+        'total_events' => $total,
+        'unique_ips' => (int) ($row['unique_ips'] ?? 0),
+        'known_hits' => (int) ($row['known_hits'] ?? 0),
+        'risky_rate_pct' => $riskRate,
+        'feed_candidates' => (int) ($row['feed_candidates'] ?? 0),
+    ];
 }
 
 function getAllLinks(PDO $pdo): array
@@ -1758,19 +2080,20 @@ function getIpSummary(PDO $pdo, string $ip): array
  */
 function maybeRunAutoCleanup(PDO $pdo): void
 {
-    $days = (int) getSetting($pdo, 'data_retention_days', '0');
-    if ($days <= 0) {
+    if (defined('DEMO_MODE') && DEMO_MODE) {
         return;
     }
-    // ~1% of requests trigger cleanup.
-    if (random_int(1, 100) !== 1) {
-        return;
-    }
-    cleanupOldClicks($pdo, $days);
 
-    // Also prune expired auth failure records on the same probabilistic schedule
-    // rather than on every failed login attempt, keeping the auth hot path lean.
-    pruneExpiredAuthFailures($pdo);
+    $days = (int) getSetting($pdo, 'data_retention_days', '0');
+    if ($days > 0 && random_int(1, 100) === 1) {
+        cleanupOldClicks($pdo, $days);
+        // Also prune expired auth failure records on the same probabilistic schedule
+        // rather than on every failed login attempt, keeping the auth hot path lean.
+        pruneExpiredAuthFailures($pdo);
+    }
+
+    // Opportunistic scheduled DB maintenance (separate from cleanup settings).
+    maybeRunScheduledSqliteMaintenance($pdo);
 }
 
 function cleanupOldClicks(PDO $pdo, int $days): int
@@ -1788,6 +2111,160 @@ function cleanupOldClicks(PDO $pdo, int $days): int
     ]);
 
     return $stmt->rowCount();
+}
+
+function cleanupOldAuthFailures(PDO $pdo, int $days): int
+{
+    if ($days <= 0) {
+        return 0;
+    }
+
+    // auth_failures.failed_at is unix seconds
+    $cutoff = time() - ($days * 86400);
+    $stmt = $pdo->prepare("DELETE FROM auth_failures WHERE failed_at < :cutoff");
+    $stmt->execute([':cutoff' => $cutoff]);
+    return $stmt->rowCount();
+}
+
+function cleanupOldIpEnrichment(PDO $pdo, int $days): int
+{
+    if ($days <= 0) {
+        return 0;
+    }
+
+    $stmt = $pdo->prepare("
+        DELETE FROM ip_enrichment
+        WHERE fetched_at < datetime('now', :window)
+    ");
+    $stmt->execute([':window' => '-' . $days . ' days']);
+    return $stmt->rowCount();
+}
+
+/**
+ * Archives click rows older than the retention window to CSV.
+ * Returns absolute path to archive file, or empty string when nothing archived.
+ */
+function archiveOldClicksToCsv(PDO $pdo, int $days): string
+{
+    if ($days <= 0) {
+        return '';
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT * FROM clicks
+        WHERE clicked_at < datetime('now', :window)
+        ORDER BY id ASC
+    ");
+    $stmt->execute([':window' => '-' . $days . ' days']);
+    $rows = $stmt->fetchAll();
+    if (empty($rows)) {
+        return '';
+    }
+
+    $archiveDir = dirname(DB_PATH) . '/archives';
+    if (!is_dir($archiveDir)) {
+        @mkdir($archiveDir, 0775, true);
+    }
+    if (!is_dir($archiveDir) || !is_writable($archiveDir)) {
+        return '';
+    }
+
+    $file = $archiveDir . '/clicks-archive-' . date('Ymd-His') . '.csv';
+    $fh = @fopen($file, 'wb');
+    if (!$fh) {
+        return '';
+    }
+
+    fputcsv($fh, array_keys($rows[0]));
+    foreach ($rows as $row) {
+        fputcsv($fh, $row);
+    }
+    fclose($fh);
+    return $file;
+}
+
+function runSqliteMaintenance(PDO $pdo): void
+{
+    // Keep these explicit to avoid long-running or destructive behavior.
+    $pdo->exec('PRAGMA busy_timeout = 2000;');
+    $pdo->exec('ANALYZE;');
+    $pdo->exec('PRAGMA optimize;');
+}
+
+function maybeRunScheduledSqliteMaintenance(PDO $pdo): void
+{
+    if (defined('DEMO_MODE') && DEMO_MODE) {
+        return;
+    }
+
+    // Avoid checking timers on every request.
+    if (random_int(1, 20) !== 1) {
+        return;
+    }
+
+    $enabled = getSetting($pdo, 'sqlite_maintenance_enabled', '1') === '1';
+    if (!$enabled) {
+        return;
+    }
+
+    $intervalMinutes = (int) getSetting($pdo, 'sqlite_maintenance_interval_mins', '360');
+    $lastRunTs = max(0, (int) getSetting($pdo, 'sqlite_maintenance_last_run_ts', '0'));
+    $now = time();
+    if (!shouldRunSqliteMaintenanceWindow(true, $lastRunTs, $intervalMinutes, $now)) {
+        return;
+    }
+
+    try {
+        runSqliteMaintenance($pdo);
+        setSetting($pdo, 'sqlite_maintenance_last_run_ts', (string) $now);
+    } catch (Throwable $e) {
+        error_log('SignalTrace: scheduled SQLite maintenance failed - ' . $e->getMessage());
+        return;
+    }
+
+    $vacuumEnabled = getSetting($pdo, 'sqlite_vacuum_enabled', '0') === '1';
+    if (!$vacuumEnabled) {
+        return;
+    }
+    $vacuumIntervalHours = (int) getSetting($pdo, 'sqlite_vacuum_min_interval_hours', '24');
+    $lastVacuumTs = max(0, (int) getSetting($pdo, 'sqlite_vacuum_last_run_ts', '0'));
+    if (!shouldRunSqliteVacuumWindow(true, $lastVacuumTs, $vacuumIntervalHours, $now)) {
+        return;
+    }
+
+    try {
+        // Safe policy: optional + minimum interval + isolated error handling.
+        $pdo->exec('VACUUM;');
+        setSetting($pdo, 'sqlite_vacuum_last_run_ts', (string) $now);
+    } catch (Throwable $e) {
+        error_log('SignalTrace: scheduled SQLite VACUUM failed - ' . $e->getMessage());
+    }
+}
+
+function getSqliteDatabaseStats(PDO $pdo): array
+{
+    $dbPath = DB_PATH;
+    $sizeBytes = is_file($dbPath) ? (int) filesize($dbPath) : 0;
+    $sizeMb = round($sizeBytes / 1048576, 2);
+
+    $totalClicks = (int) $pdo->query("SELECT COUNT(*) FROM clicks")->fetchColumn();
+    $clicks24h = (int) $pdo->query("
+        SELECT COUNT(*) FROM clicks
+        WHERE clicked_at_unix_ms >= (strftime('%s','now') - 86400) * 1000
+    ")->fetchColumn();
+    $clicks7d = (int) $pdo->query("
+        SELECT COUNT(*) FROM clicks
+        WHERE clicked_at_unix_ms >= (strftime('%s','now') - 604800) * 1000
+    ")->fetchColumn();
+
+    return [
+        'db_path'      => $dbPath,
+        'size_bytes'   => $sizeBytes,
+        'size_mb'      => $sizeMb,
+        'total_clicks' => $totalClicks,
+        'clicks_24h'   => $clicks24h,
+        'clicks_7d'    => $clicks7d,
+    ];
 }
 
 function pruneExpiredAuthFailures(PDO $pdo): void
