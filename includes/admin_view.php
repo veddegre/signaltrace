@@ -895,9 +895,16 @@ function renderAdminPage(
             <?php if ($tokenFilter   !== ''): ?><input type="hidden" name="token"     value="<?= h($tokenFilter) ?>"><?php endif; ?>
             <?php if ($ipFilter      !== ''): ?><input type="hidden" name="ip"        value="<?= h($ipFilter) ?>"><?php endif; ?>
             <?php if ($visitorFilter !== ''): ?><input type="hidden" name="visitor"   value="<?= h($visitorFilter) ?>"><?php endif; ?>
+            <?php if ($campaignFilter > 0):   ?><input type="hidden" name="campaign"  value="<?= (int) $campaignFilter ?>"><?php endif; ?>
+            <?php if ($hostFilter    !== ''): ?><input type="hidden" name="host"      value="<?= h($hostFilter) ?>"><?php endif; ?>
             <?php if ($knownOnly):            ?><input type="hidden" name="known"     value="1"><?php endif; ?>
             <?php if ($dateFrom      !== ''): ?><input type="hidden" name="date_from" value="<?= h($dateFrom) ?>"><?php endif; ?>
             <?php if ($dateTo        !== ''): ?><input type="hidden" name="date_to"   value="<?= h($dateTo) ?>"><?php endif; ?>
+            <?php if ($showAll):              ?><input type="hidden" name="show_all" value="1"><?php endif; ?>
+            <?php if ($showHidden):           ?><input type="hidden" name="show_hidden" value="1"><?php endif; ?>
+            <?php if ($hideBehavioral):       ?><input type="hidden" name="hide_behavioral" value="1"><?php endif; ?>
+            <?php if ($hideSubdomains):      ?><input type="hidden" name="hide_subdomains" value="1"><?php endif; ?>
+            <?php if ($showTopTokens):       ?><input type="hidden" name="show_top_tokens" value="1"><?php endif; ?>
             <div class="filter-actions" style="margin-left: 0;">
                 <button type="submit"
                         class="danger-button"
@@ -1416,9 +1423,15 @@ function renderAdminPage(
                                         if ($ipFilter      !== '') $filterHiddens .= '<input type="hidden" name="_filter_ip"        value="' . h($ipFilter)      . '">';
                                         if ($visitorFilter !== '') $filterHiddens .= '<input type="hidden" name="_filter_visitor"   value="' . h($visitorFilter) . '">';
                                         if ($campaignFilter > 0)   $filterHiddens .= '<input type="hidden" name="_filter_campaign"  value="' . (int) $campaignFilter . '">';
+                                        if ($hostFilter    !== '') $filterHiddens .= '<input type="hidden" name="_filter_host"      value="' . h($hostFilter)    . '">';
                                         if ($knownOnly)            $filterHiddens .= '<input type="hidden" name="_filter_known"     value="1">';
                                         if ($dateFrom      !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_from" value="' . h($dateFrom)      . '">';
                                         if ($dateTo        !== '') $filterHiddens .= '<input type="hidden" name="_filter_date_to"   value="' . h($dateTo)        . '">';
+                                        if ($showAll)              $filterHiddens .= '<input type="hidden" name="_filter_show_all" value="1">';
+                                        if ($showHidden)           $filterHiddens .= '<input type="hidden" name="_filter_show_hidden" value="1">';
+                                        if ($hideBehavioral)       $filterHiddens .= '<input type="hidden" name="_filter_hide_behavioral" value="1">';
+                                        if ($hideSubdomains)      $filterHiddens .= '<input type="hidden" name="_filter_hide_subdomains" value="1">';
+                                        if ($showTopTokens)        $filterHiddens .= '<input type="hidden" name="_filter_show_top_tokens" value="1">';
                                         $existingOverride     = $ipOverrideMap[$rowIp] ?? null;
                                         $existingOverrideMode = $existingOverride['mode'] ?? null;
                                         ?>
@@ -1669,6 +1682,11 @@ function renderAdminPage(
         </div>
 
 	<div class="tab-content" id="content-links">
+        <?php
+        $linksTabReturnHiddens = $decoyPackFilter > 0
+            ? '<input type="hidden" name="_return_decoy_pack" value="' . (int) $decoyPackFilter . '">'
+            : '';
+        ?>
 
         <?php if (!empty($campaignStats)): ?>
         <h2>Campaigns</h2>
@@ -1707,6 +1725,7 @@ function renderAdminPage(
                                     <form method="post" action="/admin/delete-campaign" class="inline-action-form action-menu-form"
                                           data-confirm="Delete this campaign? Tokens will not be deleted but will be unassigned.">
                                         <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                        <?= $linksTabReturnHiddens ?>
                                         <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
                                         <button type="submit" class="danger-button action-menu-submit">Delete campaign</button>
                                     </form>
@@ -1722,6 +1741,7 @@ function renderAdminPage(
                             <div class="panel-title">Edit Campaign</div>
                             <form method="post" action="/admin/update-campaign" class="campaign-edit-form">
                                 <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                <?= $linksTabReturnHiddens ?>
                                 <input type="hidden" name="campaign_id" value="<?= (int) $campaign['id'] ?>">
 
                                 <div class="campaign-edit-grid">
@@ -1768,6 +1788,7 @@ function renderAdminPage(
         <form method="post" action="/admin/create-campaign" style="margin-bottom:2rem;">
             <h2>Create campaign</h2>
             <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+            <?= $linksTabReturnHiddens ?>
             <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
                 <div>
                     <label for="campaign_name" style="font-size:0.8125rem;">Name</label>
@@ -1796,6 +1817,7 @@ function renderAdminPage(
 	        <input type="hidden" name="link_type" value="<?= h((string) ($editLink['type'] ?? 'link')) ?>">
 	        <?php $editDecoyPackId = (int) ($editLink['decoy_pack_id'] ?? 0); ?>
 	        <input type="hidden" name="decoy_pack_id" value="<?= $editDecoyPackId > 0 ? (string) $editDecoyPackId : '' ?>">
+	        <?= $linksTabReturnHiddens ?>
 
 	        <label for="edit_token">Token / Path</label>
 	        <input id="edit_token" type="text" name="token" required value="<?= h((string) $editLink['token']) ?>">
@@ -1923,6 +1945,7 @@ function renderAdminPage(
             <form method="post" action="/admin/create-link">
                 <h2>Create token</h2>
                 <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                <?= $linksTabReturnHiddens ?>
                 <label for="token">Token / Path</label>
                 <input id="token" type="text" name="token" required placeholder="payroll or abc123">
 
@@ -2028,6 +2051,7 @@ function renderAdminPage(
                 <form method="post" action="/admin/create-decoy-pack">
                     <h2>Create decoy endpoint pack</h2>
                     <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                    <?= $linksTabReturnHiddens ?>
                     <label for="decoy_pack">Preset</label>
                     <select id="decoy_pack" name="pack">
                         <option value="baseline">Baseline</option>
@@ -2209,26 +2233,31 @@ function renderAdminPage(
                                     <?php if (!$isDemo): ?>
                                         <form method="post" action="/admin/check-link-health" class="inline-action-form action-menu-form">
                                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+                                            <?= $linksTabReturnHiddens ?>
                                             <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
                                             <button type="submit" class="action-menu-submit">↻ Check link health</button>
                                         </form>
                                     <?php endif; ?>
                                     <?php if ((int) $link['active'] === 1): ?>
                                         <form method="post" action="/admin/deactivate-link" class="inline-action-form action-menu-form">
+                                            <?= $linksTabReturnHiddens ?>
                                             <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
                                             <button type="submit" class="action-menu-submit">Deactivate token</button>
                                         </form>
                                     <?php else: ?>
                                         <form method="post" action="/admin/activate-link" class="inline-action-form action-menu-form">
+                                            <?= $linksTabReturnHiddens ?>
                                             <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
                                             <button type="submit" class="action-menu-submit">Activate token</button>
                                         </form>
                                     <?php endif; ?>
                                     <form method="post" action="/admin/delete-link" class="inline-action-form action-menu-form" data-confirm="Delete this token/path?">
+                                        <?= $linksTabReturnHiddens ?>
                                         <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
                                         <button type="submit" class="action-menu-submit">Delete token</button>
                                     </form>
                                     <form method="post" action="/admin/delete-link" class="inline-action-form action-menu-form" data-confirm="Delete this token/path and all related clicks?">
+                                        <?= $linksTabReturnHiddens ?>
                                         <input type="hidden" name="id" value="<?= (int) $link['id'] ?>">
                                         <input type="hidden" name="delete_clicks" value="1">
                                         <button type="submit" class="danger-button action-menu-submit">Delete token + clicks</button>

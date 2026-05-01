@@ -17,16 +17,119 @@ function adminRedirectUrl(string $tab = ''): string
     $known   = trim((string) ($_POST['_filter_known']   ?? ''));
     $from    = trim((string) ($_POST['_filter_date_from'] ?? ''));
     $to      = trim((string) ($_POST['_filter_date_to']   ?? ''));
+    $host    = trim((string) ($_POST['_filter_host']    ?? ''));
+    $campaign = trim((string) ($_POST['_filter_campaign'] ?? ''));
 
-    if ($tab !== '')     $params['tab']       = $tab;
-    if ($token !== '')   $params['token']     = $token;
-    if ($ip !== '')      $params['ip']        = $ip;
-    if ($visitor !== '') $params['visitor']   = $visitor;
-    if ($known === '1')  $params['known']     = '1';
-    if ($from !== '')    $params['date_from'] = $from;
-    if ($to !== '')      $params['date_to']   = $to;
+    if ($tab !== '') {
+        $params['tab'] = $tab;
+    }
+    if ($token !== '') {
+        $params['token'] = $token;
+    }
+    if ($ip !== '') {
+        $params['ip'] = $ip;
+    }
+    if ($visitor !== '') {
+        $params['visitor'] = $visitor;
+    }
+    if ($known === '1') {
+        $params['known'] = '1';
+    }
+    if ($from !== '') {
+        $params['date_from'] = $from;
+    }
+    if ($to !== '') {
+        $params['date_to'] = $to;
+    }
+    if ($host !== '') {
+        $params['host'] = $host;
+    }
+    if ($campaign !== '' && ctype_digit($campaign)) {
+        $params['campaign'] = $campaign;
+    }
+    if (trim((string) ($_POST['_filter_show_all'] ?? '')) === '1') {
+        $params['show_all'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_show_hidden'] ?? '')) === '1') {
+        $params['show_hidden'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_hide_behavioral'] ?? '')) === '1') {
+        $params['hide_behavioral'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_hide_subdomains'] ?? '')) === '1') {
+        $params['hide_subdomains'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_show_top_tokens'] ?? '')) === '1') {
+        $params['show_top_tokens'] = '1';
+    }
 
-    return '/admin' . (!empty($params) ? '?' . http_build_query($params) : '');
+    if ($tab === '' && $params !== []) {
+        $params['tab'] = 'dashboard';
+    }
+
+    return '/admin' . ($params !== [] ? '?' . http_build_query($params) : '');
+}
+
+/**
+ * Merge dashboard query keys from POSTed _filter_* hiddens (activity feed action forms).
+ *
+ * @param array<string, string> $base
+ * @return array<string, string>
+ */
+function adminMergeDashboardContextFromHiddenPost(array $base): array
+{
+    $pairs = [
+        '_filter_token' => 'token',
+        '_filter_ip' => 'ip',
+        '_filter_visitor' => 'visitor',
+        '_filter_host' => 'host',
+        '_filter_date_from' => 'date_from',
+        '_filter_date_to' => 'date_to',
+    ];
+    foreach ($pairs as $postKey => $queryKey) {
+        $v = trim((string) ($_POST[$postKey] ?? ''));
+        if ($v !== '') {
+            $base[$queryKey] = $v;
+        }
+    }
+    $campaign = trim((string) ($_POST['_filter_campaign'] ?? ''));
+    if ($campaign !== '' && ctype_digit($campaign)) {
+        $base['campaign'] = $campaign;
+    }
+    if (trim((string) ($_POST['_filter_known'] ?? '')) === '1') {
+        $base['known'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_show_all'] ?? '')) === '1') {
+        $base['show_all'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_show_hidden'] ?? '')) === '1') {
+        $base['show_hidden'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_hide_behavioral'] ?? '')) === '1') {
+        $base['hide_behavioral'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_hide_subdomains'] ?? '')) === '1') {
+        $base['hide_subdomains'] = '1';
+    }
+    if (trim((string) ($_POST['_filter_show_top_tokens'] ?? '')) === '1') {
+        $base['show_top_tokens'] = '1';
+    }
+
+    return $base;
+}
+
+/**
+ * Redirect target for token CRUD actions on the Tokens tab (preserves decoy-pack drilldown).
+ */
+function adminLinksRedirectUrl(): string
+{
+    $params = ['tab' => 'links'];
+    $decoyPack = trim((string) ($_POST['_return_decoy_pack'] ?? ''));
+    if ($decoyPack !== '' && ctype_digit($decoyPack)) {
+        $params['decoy_pack'] = $decoyPack;
+    }
+
+    return '/admin?' . http_build_query($params);
 }
 
 function adminSetFlash(string $message, string $type = 'success'): void
@@ -381,7 +484,7 @@ function handleUpdateLink(PDO $pdo): void
             $redirectStrategy,
             $decoyPackId
         );
-        header('Location: /admin?tab=links', true, 302);
+        header('Location: ' . adminLinksRedirectUrl(), true, 302);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);
@@ -803,7 +906,7 @@ function handleCreateLink(PDO $pdo): void
             $redirectStrategy,
             null
         );
-        header('Location: /admin?tab=links', true, 302);
+        header('Location: ' . adminLinksRedirectUrl(), true, 302);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);
@@ -828,12 +931,12 @@ function handleCreateDecoyPack(PDO $pdo): void
     $created = createDecoyPack($pdo, $pack, $destination);
     if ($created === 0) {
         adminRedirectWithFlash(
-            '/admin?tab=links',
+            adminLinksRedirectUrl(),
             'No new decoy tokens were created (those paths may already exist).',
             'warning'
         );
     }
-    adminRedirectWithFlash('/admin?tab=links', 'Decoy pack created: ' . $created . ' new tokens.');
+    adminRedirectWithFlash(adminLinksRedirectUrl(), 'Decoy pack created: ' . $created . ' new tokens.');
 }
 
 function handleDeleteDecoyPack(PDO $pdo): void
@@ -896,11 +999,11 @@ function handleCheckLinkHealth(PDO $pdo): void
     $id = (int) ($_POST['id'] ?? 0);
     $link = $id > 0 ? getLinkById($pdo, $id) : null;
     if (!$link) {
-        adminRedirectWithFlash('/admin?tab=links', 'Invalid token id.', 'warning');
+        adminRedirectWithFlash(adminLinksRedirectUrl(), 'Invalid token id.', 'warning');
     }
     $url = (string) ($link['destination'] ?? '');
     if (!isSafeRedirectUrl($url)) {
-        adminRedirectWithFlash('/admin?tab=links', 'Cannot check an invalid destination URL.', 'warning');
+        adminRedirectWithFlash(adminLinksRedirectUrl(), 'Cannot check an invalid destination URL.', 'warning');
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -914,7 +1017,7 @@ function handleCheckLinkHealth(PDO $pdo): void
     $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     recordLinkHealth($pdo, (int) $link['id'], $code);
-    adminRedirectWithFlash('/admin?tab=links', 'Health check complete (HTTP ' . $code . ').');
+    adminRedirectWithFlash(adminLinksRedirectUrl(), 'Health check complete (HTTP ' . $code . ').');
 }
 
 function handleDeleteLink(PDO $pdo): void
@@ -929,7 +1032,7 @@ function handleDeleteLink(PDO $pdo): void
     }
 
     deleteLink($pdo, $id, $deleteClicks);
-    header('Location: /admin', true, 302);
+    header('Location: ' . adminLinksRedirectUrl(), true, 302);
     exit;
 }
 
@@ -944,7 +1047,7 @@ function handleDeactivateLink(PDO $pdo): void
     }
 
     deactivateLink($pdo, $id);
-    header('Location: /admin', true, 302);
+    header('Location: ' . adminLinksRedirectUrl(), true, 302);
     exit;
 }
 
@@ -959,7 +1062,7 @@ function handleActivateLink(PDO $pdo): void
     }
 
     activateLink($pdo, $id);
-    header('Location: /admin', true, 302);
+    header('Location: ' . adminLinksRedirectUrl(), true, 302);
     exit;
 }
 
@@ -981,7 +1084,7 @@ function handleCreateSkipPattern(PDO $pdo): void
     }
 
     createSkipPattern($pdo, $type, $pattern);
-    header('Location: /admin', true, 302);
+    header('Location: /admin?tab=skip', true, 302);
     exit;
 }
 
@@ -1013,7 +1116,7 @@ function handleDeleteSkipPattern(PDO $pdo): void
     }
 
     deleteSkipPattern($pdo, $id);
-    header('Location: /admin', true, 302);
+    header('Location: /admin?tab=skip', true, 302);
     exit;
 }
 
@@ -1028,7 +1131,7 @@ function handleToggleSkipPattern(PDO $pdo, bool $active): void
     }
 
     setSkipPatternActive($pdo, $id, $active);
-    header('Location: /admin', true, 302);
+    header('Location: /admin?tab=skip', true, 302);
     exit;
 }
 
@@ -1081,7 +1184,12 @@ function handleDeleteTokenClicks(PDO $pdo): void
         $stmt->execute([':token' => $token]);
     }
 
-    header('Location: ' . adminRedirectUrl(), true, 302);
+    $q = ['tab' => 'dashboard'];
+    if ($token !== '') {
+        $q['token'] = $token;
+    }
+    $q = adminMergeDashboardContextFromHiddenPost($q);
+    header('Location: /admin?' . http_build_query($q), true, 302);
     exit;
 }
 
@@ -1212,7 +1320,9 @@ function handleDeleteIpClicks(PDO $pdo): void
         $stmt->execute([':ip' => $ip]);
     }
 
-    header('Location: ' . adminRedirectUrl(), true, 302);
+    $q = ['tab' => 'dashboard', 'ip' => $ip];
+    $q = adminMergeDashboardContextFromHiddenPost($q);
+    header('Location: /admin?' . http_build_query($q), true, 302);
     exit;
 }
 
@@ -1357,8 +1467,37 @@ function handleDeleteFilteredClicks(PDO $pdo): void
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 
-    // Redirect back to dashboard with filters cleared
-    header('Location: /admin', true, 302);
+    $q = ['tab' => 'dashboard'];
+    foreach (['token', 'ip', 'visitor', 'host', 'date_from', 'date_to'] as $key) {
+        $v = trim((string) ($_POST[$key] ?? ''));
+        if ($v !== '') {
+            $q[$key] = $v;
+        }
+    }
+    $campaign = (int) ($_POST['campaign'] ?? 0);
+    if ($campaign > 0) {
+        $q['campaign'] = (string) $campaign;
+    }
+    if (isset($_POST['known']) && $_POST['known'] === '1') {
+        $q['known'] = '1';
+    }
+    if (isset($_POST['show_all']) && $_POST['show_all'] === '1') {
+        $q['show_all'] = '1';
+    }
+    if (isset($_POST['show_hidden']) && $_POST['show_hidden'] === '1') {
+        $q['show_hidden'] = '1';
+    }
+    if (isset($_POST['hide_behavioral']) && $_POST['hide_behavioral'] === '1') {
+        $q['hide_behavioral'] = '1';
+    }
+    if (isset($_POST['hide_subdomains']) && $_POST['hide_subdomains'] === '1') {
+        $q['hide_subdomains'] = '1';
+    }
+    if (isset($_POST['show_top_tokens']) && $_POST['show_top_tokens'] === '1') {
+        $q['show_top_tokens'] = '1';
+    }
+
+    header('Location: /admin?' . http_build_query($q), true, 302);
     exit;
 }
 
@@ -1498,7 +1637,7 @@ function handleCreateCampaign(PDO $pdo): void
 
     try {
         createCampaign($pdo, $name, $description, $webhookEnabled);
-        header('Location: /admin?tab=links', true, 302);
+        header('Location: ' . adminLinksRedirectUrl(), true, 302);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);
@@ -1529,7 +1668,7 @@ function handleUpdateCampaign(PDO $pdo): void
 
     try {
         updateCampaign($pdo, $id, $name, $description, $active, $webhookEnabled);
-        header('Location: /admin?tab=links', true, 302);
+        header('Location: ' . adminLinksRedirectUrl(), true, 302);
         exit;
     } catch (Throwable $e) {
         http_response_code(500);
@@ -1549,6 +1688,6 @@ function handleDeleteCampaign(PDO $pdo): void
     }
 
     deleteCampaign($pdo, $id);
-    header('Location: /admin?tab=links', true, 302);
+    header('Location: ' . adminLinksRedirectUrl(), true, 302);
     exit;
 }
