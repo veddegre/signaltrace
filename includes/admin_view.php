@@ -676,14 +676,6 @@ function renderAdminPage(
                             <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['date_from' => date('Y-m-d', strtotime('-7 days')), 'date_to' => date('Y-m-d'), 'page' => null])) ?>">7d</a>
                             <a class="button-link btn-small" href="<?= h($buildDashboardUrl(['date_from' => date('Y-m-d', strtotime('-30 days')), 'date_to' => date('Y-m-d'), 'page' => null])) ?>">30d</a>
                         </div>
-                        <div class="filter-presets">
-                            <select id="filter-preset-select" style="margin-bottom:0;">
-                                <option value="">Saved presets</option>
-                            </select>
-                            <button type="button" class="btn-small" id="filter-preset-save">Save current</button>
-                            <button type="button" class="btn-small" id="filter-preset-delete">Delete</button>
-                            <button type="button" class="btn-small" id="density-toggle">Density: comfy</button>
-                        </div>
                     </div>
 
                     <div class="filter-quick-row" style="margin-top:4px;">
@@ -2539,6 +2531,13 @@ function renderAdminPage(
             <div class="two-column-settings">
                 <form method="post" action="/admin/save-settings">
                     <h2>Settings</h2>
+                    <div class="admin-advanced" style="padding:10px 12px; margin:0 0 10px 0;">
+                        <strong style="display:block; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:0.5rem;">Display density</strong>
+                        <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                            <button type="button" class="button-link btn-small" id="density-toggle-settings">Row density: comfortable</button>
+                            <span class="muted small">Adjusts the visual density of dashboard tables and detail panels. Comfortable improves readability with larger spacing, while Compact increases information density by reducing row and panel padding.</span>
+                        </div>
+                    </div>
 
                     <label for="app_name">App Name</label>
                     <?php if ($isDemo): ?>
@@ -3733,91 +3732,15 @@ function renderAdminPage(
                 });
             });
 
-            /* ── Saved dashboard filter presets ───────────────────────── */
-            var presetSelect = document.getElementById('filter-preset-select');
-            var presetSave = document.getElementById('filter-preset-save');
-            var presetDelete = document.getElementById('filter-preset-delete');
-            var densityToggle = document.getElementById('density-toggle');
-            var presetKey = 'signaltrace-filter-presets-v1';
+            /* ── Display density preference ───────────────────────────── */
+            var densityToggle = document.getElementById('density-toggle-settings');
             var densityKey = 'signaltrace-density-v1';
-
-            function readPresets() {
-                try {
-                    var raw = localStorage.getItem(presetKey);
-                    var parsed = raw ? JSON.parse(raw) : {};
-                    return (parsed && typeof parsed === 'object') ? parsed : {};
-                } catch (e) {
-                    return {};
-                }
-            }
-
-            function writePresets(presets) {
-                localStorage.setItem(presetKey, JSON.stringify(presets));
-            }
-
-            function refreshPresetSelect() {
-                if (!presetSelect) return;
-                var presets = readPresets();
-                presetSelect.innerHTML = '<option value="">Saved presets</option>';
-                Object.keys(presets).sort().forEach(function (name) {
-                    var opt = document.createElement('option');
-                    opt.value = name;
-                    opt.textContent = name;
-                    presetSelect.appendChild(opt);
-                });
-            }
-
-            function currentFilterParams() {
-                var p = new URLSearchParams(window.location.search);
-                var keys = ['token', 'ip', 'visitor', 'campaign', 'host', 'known', 'show_top_tokens', 'show_all', 'show_hidden', 'date_from', 'date_to'];
-                var out = {};
-                keys.forEach(function (k) {
-                    if (p.has(k) && p.get(k) !== '') out[k] = p.get(k);
-                });
-                return out;
-            }
-
-            if (presetSelect) {
-                refreshPresetSelect();
-                presetSelect.addEventListener('change', function () {
-                    if (!presetSelect.value) return;
-                    var presets = readPresets();
-                    var selected = presets[presetSelect.value];
-                    if (!selected) return;
-                    var url = new URL(window.location.href);
-                    var keys = ['token', 'ip', 'visitor', 'campaign', 'host', 'known', 'show_top_tokens', 'show_all', 'show_hidden', 'date_from', 'date_to', 'page'];
-                    keys.forEach(function (k) { url.searchParams.delete(k); });
-                    Object.keys(selected).forEach(function (k) { url.searchParams.set(k, selected[k]); });
-                    window.location.href = url.pathname + '?' + url.searchParams.toString();
-                });
-            }
-
-            if (presetSave) {
-                presetSave.addEventListener('click', function () {
-                    var name = prompt('Preset name');
-                    if (!name) return;
-                    var presets = readPresets();
-                    presets[name.trim()] = currentFilterParams();
-                    writePresets(presets);
-                    refreshPresetSelect();
-                });
-            }
-
-            if (presetDelete) {
-                presetDelete.addEventListener('click', function () {
-                    if (!presetSelect || !presetSelect.value) return;
-                    var presets = readPresets();
-                    delete presets[presetSelect.value];
-                    writePresets(presets);
-                    refreshPresetSelect();
-                });
-            }
 
             function applyDensity(mode) {
                 var compact = mode === 'compact';
                 document.body.classList.toggle('density-compact', compact);
                 if (densityToggle) {
-                    densityToggle.textContent = compact ? 'Density: compact' : 'Density: comfy';
+                    densityToggle.textContent = compact ? 'Row density: compact' : 'Row density: comfortable';
                 }
             }
 
