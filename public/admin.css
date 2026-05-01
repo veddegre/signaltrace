@@ -1600,11 +1600,22 @@ body.density-compact .detail-box {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
+.reports-kpi-grid {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
 .report-card {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.75rem;
     background: var(--surface-alt);
+}
+
+.report-kpi-card {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface-alt) 75%, var(--surface) 25%), var(--surface-alt));
+    border-color: var(--border-strong);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 6px 16px rgba(0, 0, 0, 0.06);
 }
 
 .report-value {
@@ -1650,6 +1661,11 @@ body.density-compact .detail-box {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
+    min-height: 220px;
+}
+
+.report-map [data-map-panel][hidden] {
+    display: none;
 }
 
 .report-map svg {
