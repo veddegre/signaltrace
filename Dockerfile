@@ -2,6 +2,9 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Install geoipupdate from MaxMind's official release (the Launchpad PPA does not support Ubuntu 24.04).
+COPY --from=ghcr.io/maxmind/geoipupdate:7.1.1 /usr/bin/geoipupdate /usr/bin/geoipupdate
+
 # Install Apache, PHP, and system dependencies
 RUN apt-get update && apt-get install -y \
         apache2 \
@@ -17,9 +20,6 @@ RUN apt-get update && apt-get install -y \
         curl \
         sqlite3 \
         vim \
-        software-properties-common \
-    && add-apt-repository ppa:maxmind/ppa \
-    && apt-get update && apt-get install -y geoipupdate \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
