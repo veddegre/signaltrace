@@ -1071,6 +1071,7 @@ function renderAdminPage(
                                 $existingOverride = $ipOverrideMap[$flagIp] ?? null;
                                 $existingMode     = $existingOverride['mode'] ?? null;
                                 ?>
+                                <div class="actions-cell-inner">
                                 <?php if ($existingOverride !== null): ?>
                                     <span class="badge <?= $existingMode === 'block' ? 'badge-bot' : ($existingMode === 'allow' ? 'badge-human' : 'badge-muted') ?>"><?= h((string) $existingMode) ?></span>
                                     <?php if ((int) ($existingOverride['hide_from_dashboard'] ?? 0) === 1): ?>
@@ -1106,6 +1107,7 @@ function renderAdminPage(
                                             <?php endif; ?>
                                         </div>
                                     </div>
+                                </div>
                                 </div>
                             </td>
                         </tr>
@@ -3563,10 +3565,60 @@ function renderAdminPage(
         function closeAllActionMenus() {
             document.querySelectorAll('.action-menu-panel').forEach(function (p) {
                 p.setAttribute('hidden', '');
+                resetActionMenuPanel(p);
             });
             document.querySelectorAll('.action-menu-trigger').forEach(function (t) {
                 t.setAttribute('aria-expanded', 'false');
             });
+        }
+
+        function resetActionMenuPanel(panel) {
+            panel.classList.remove('action-menu-panel--fixed', 'action-menu-panel--above');
+            panel.style.left = '';
+            panel.style.top = '';
+            panel.style.maxHeight = '';
+            panel.style.overflowY = '';
+        }
+
+        function positionActionMenuPanel(panel, trigger) {
+            resetActionMenuPanel(panel);
+            panel.classList.add('action-menu-panel--fixed');
+
+            var gap = 4;
+            var viewportPadding = 8;
+            var triggerRect = trigger.getBoundingClientRect();
+            var panelRect = panel.getBoundingClientRect();
+            var panelWidth = panelRect.width;
+            var panelHeight = panelRect.height;
+
+            var left = triggerRect.right - panelWidth;
+            if (left < viewportPadding) {
+                left = viewportPadding;
+            }
+            if (left + panelWidth > window.innerWidth - viewportPadding) {
+                left = Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding);
+            }
+
+            var top = triggerRect.bottom + gap;
+            var spaceBelow = window.innerHeight - top - viewportPadding;
+            var spaceAbove = triggerRect.top - gap - viewportPadding;
+
+            if (panelHeight > spaceBelow && spaceAbove > spaceBelow) {
+                top = triggerRect.top - gap - panelHeight;
+                panel.classList.add('action-menu-panel--above');
+            }
+
+            var maxHeight = window.innerHeight - (2 * viewportPadding);
+            if (panelHeight > maxHeight) {
+                panel.style.maxHeight = maxHeight + 'px';
+                panel.style.overflowY = 'auto';
+                if (panel.classList.contains('action-menu-panel--above')) {
+                    top = viewportPadding;
+                }
+            }
+
+            panel.style.left = Math.round(left) + 'px';
+            panel.style.top = Math.round(Math.max(viewportPadding, top)) + 'px';
         }
 
         document.addEventListener('click', function (e) {
@@ -3585,6 +3637,7 @@ function renderAdminPage(
                     closeAllActionMenus();
                     if (wasHidden) {
                         panel.removeAttribute('hidden');
+                        positionActionMenuPanel(panel, menuTrigger);
                         menuTrigger.setAttribute('aria-expanded', 'true');
                     }
                 }
@@ -3682,6 +3735,9 @@ function renderAdminPage(
                 closeAllActionMenus();
             }
         });
+
+        window.addEventListener('scroll', closeAllActionMenus, true);
+        window.addEventListener('resize', closeAllActionMenus);
 
         /* --------------------------------------------------------
            DOMContentLoaded — tab restore, CSRF re-injection,

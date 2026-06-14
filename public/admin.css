@@ -335,7 +335,7 @@ code, .mono { font-family: var(--font-mono); font-size: 0.84rem; }
     border-radius: var(--radius);
     padding: 0.875rem 1rem;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .detail-box strong {
@@ -398,6 +398,8 @@ code, .mono { font-family: var(--font-mono); font-size: 0.84rem; }
     padding: 1rem 1.25rem;
     background: var(--surface-alt);
     border-top: 1px solid var(--border);
+    overflow: visible;
+    white-space: normal;
 }
 
 /* IP summary panel */
@@ -718,7 +720,7 @@ button[type="submit"]:hover {
    ============================================================ */
 .table-wrap {
     overflow-x: auto;
-    overflow-y: auto;
+    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
     border-radius: var(--radius-lg);
     border: 1px solid var(--border);
@@ -1112,6 +1114,8 @@ tr:hover td { background: var(--surface-alt); }
 .template-cell {
     background: var(--surface);
     padding: 1rem;
+    overflow: visible;
+    white-space: normal;
 }
 
 .snippet-grid {
@@ -1249,6 +1253,8 @@ button.template-toggle-button:hover,
 /* Campaign inline edit layout */
 .edit-row-cell {
     padding-top: 12px !important;
+    overflow: visible;
+    white-space: normal;
 }
 
 .inline-edit-panel {
@@ -1560,7 +1566,7 @@ body.density-compact .detail-box {
     position: absolute;
     right: 0;
     top: 100%;
-    z-index: 90;
+    z-index: 200;
     margin-top: 4px;
     min-width: 200px;
     max-width: min(280px, 92vw);
@@ -1570,6 +1576,18 @@ body.density-compact .detail-box {
     box-shadow: var(--shadow);
     transform-origin: top right;
     animation: menu-pop-in 0.12s ease-out;
+}
+
+.action-menu-panel.action-menu-panel--fixed {
+    position: fixed;
+    right: auto;
+    top: auto;
+    margin-top: 0;
+    transform-origin: top right;
+}
+
+.action-menu-panel.action-menu-panel--above {
+    transform-origin: bottom right;
 }
 
 .action-menu-panel[hidden] {
@@ -1777,6 +1795,7 @@ body.density-compact .detail-box {
     text-align: center;
     vertical-align: middle;
     white-space: normal;
+    overflow: visible;
 }
 
 /* Behavioral flags: badge + menu — allow column to grow */
@@ -1784,11 +1803,16 @@ body.density-compact .detail-box {
     min-width: 120px;
     max-width: 200px;
     text-align: left;
-    display: flex;
+    overflow: visible;
+}
+
+.actions-cell-inner {
+    display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     justify-content: flex-end;
+    max-width: 100%;
 }
 
 .compact-table th.skip-actions-col,
@@ -1797,4 +1821,5 @@ body.density-compact .detail-box {
     min-width: 56px;
     max-width: 72px;
     text-align: center;
+    overflow: visible;
 }
