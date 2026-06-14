@@ -2,6 +2,27 @@
 
 ---
 
+## [v2.12.0] — Admin Action Menu and Docker Build Fixes
+
+### Dashboard Details action menus
+
+Fixed cropped and unclickable **⋯** action menus inside expanded activity **Details** rows on the dashboard:
+
+- The details cell inherited `.compact-table td` constraints (`max-width: 180px`, `overflow: hidden`), which clipped menus wider than the cell — often leaving only a sliver of the first red action button visible.
+- Details cells now override those table defaults so the expanded panel spans the full table width.
+- Open menus are mounted on `document.body`, positioned with `position: fixed` beside the trigger, flipped upward when near the bottom of the viewport, and scrollable when taller than the screen.
+- Overflow handling was tightened across action columns, detail boxes, and table wrappers so kebab menus are not clipped in other tables (tokens, campaigns, behavioral flags, etc.).
+
+### Docker image build (Ubuntu 24.04)
+
+Fixed the GitHub Actions Docker build failing while installing GeoIP tooling:
+
+- Removed the MaxMind Launchpad PPA (`ppa:maxmind/ppa`), which does not support Ubuntu 24.04 Noble and caused `apt-get install geoipupdate` to fail in CI.
+- `geoipupdate` is now installed from MaxMind's official GitHub release `.deb` during the image build (supports `amd64` and `arm64`).
+- Container entrypoint behavior is unchanged: GeoIP databases are still downloaded on first start when `MAXMIND_ACCOUNT_ID` and `MAXMIND_LICENSE_KEY` are set.
+
+---
+
 ## [v2.11.0] —  Honeypot Expansion, Token Lifecycle, and Dashboard Polish
 
 ### UI declutter and consistency pass
