@@ -1,11 +1,11 @@
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG GEOIPUPDATE_VERSION=7.1.1
 
-# Install geoipupdate from MaxMind's official release (the Launchpad PPA does not support Ubuntu 24.04).
-COPY --from=ghcr.io/maxmind/geoipupdate:7.1.1 /usr/bin/geoipupdate /usr/bin/geoipupdate
-
-# Install Apache, PHP, and system dependencies
+# Install Apache, PHP, and system dependencies.
+# geoipupdate: MaxMind's Launchpad PPA does not support Ubuntu 24.04, so install
+# the official release .deb instead (supports amd64 and arm64).
 RUN apt-get update && apt-get install -y \
         apache2 \
         php \
@@ -18,8 +18,14 @@ RUN apt-get update && apt-get install -y \
         libapache2-mod-php \
         unzip \
         curl \
+        ca-certificates \
         sqlite3 \
         vim \
+    && ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/maxmind/geoipupdate/releases/download/v${GEOIPUPDATE_VERSION}/geoipupdate_${GEOIPUPDATE_VERSION}_linux_${ARCH}.deb" \
+        -o /tmp/geoipupdate.deb \
+    && apt-get install -y /tmp/geoipupdate.deb \
+    && rm -f /tmp/geoipupdate.deb \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
