@@ -402,6 +402,14 @@ code, .mono { font-family: var(--font-mono); font-size: 0.84rem; }
     white-space: normal;
 }
 
+/* Details row spans the full table — override compact-table cell constraints */
+.compact-table td.details-cell {
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+}
+
 /* IP summary panel */
 .ip-summary {
     background: var(--surface);
@@ -1583,6 +1591,7 @@ body.density-compact .detail-box {
     right: auto;
     top: auto;
     margin-top: 0;
+    z-index: 1000;
     transform-origin: top right;
 }
 

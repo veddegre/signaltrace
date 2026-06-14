@@ -3566,10 +3566,45 @@ function renderAdminPage(
             document.querySelectorAll('.action-menu-panel').forEach(function (p) {
                 p.setAttribute('hidden', '');
                 resetActionMenuPanel(p);
+                restoreActionMenuPanel(p);
             });
             document.querySelectorAll('.action-menu-trigger').forEach(function (t) {
                 t.setAttribute('aria-expanded', 'false');
             });
+        }
+
+        function restoreActionMenuPanel(panel) {
+            if (!panel._actionMenuHome) {
+                return;
+            }
+            if (panel._actionMenuNext && panel._actionMenuNext.parentNode === panel._actionMenuHome) {
+                panel._actionMenuHome.insertBefore(panel, panel._actionMenuNext);
+            } else {
+                panel._actionMenuHome.appendChild(panel);
+            }
+            if (panel._actionMenuWrap) {
+                panel._actionMenuWrap._actionMenuPanel = null;
+                panel._actionMenuWrap = null;
+            }
+            panel._actionMenuHome = null;
+            panel._actionMenuNext = null;
+        }
+
+        function getActionMenuPanel(wrap) {
+            if (!wrap) {
+                return null;
+            }
+            return wrap._actionMenuPanel || wrap.querySelector('.action-menu-panel');
+        }
+
+        function mountActionMenuPanel(panel, wrap) {
+            if (panel.parentNode !== document.body) {
+                panel._actionMenuHome = panel.parentNode;
+                panel._actionMenuNext = panel.nextSibling;
+                panel._actionMenuWrap = wrap;
+                wrap._actionMenuPanel = panel;
+                document.body.appendChild(panel);
+            }
         }
 
         function resetActionMenuPanel(panel) {
@@ -3588,8 +3623,8 @@ function renderAdminPage(
             var viewportPadding = 8;
             var triggerRect = trigger.getBoundingClientRect();
             var panelRect = panel.getBoundingClientRect();
-            var panelWidth = panelRect.width;
-            var panelHeight = panelRect.height;
+            var panelWidth = panelRect.width || panel.offsetWidth;
+            var panelHeight = panelRect.height || panel.offsetHeight;
 
             var left = triggerRect.right - panelWidth;
             if (left < viewportPadding) {
@@ -3621,9 +3656,17 @@ function renderAdminPage(
             panel.style.top = Math.round(Math.max(viewportPadding, top)) + 'px';
         }
 
+        function openActionMenuPanel(panel, trigger, wrap) {
+            mountActionMenuPanel(panel, wrap);
+            panel.removeAttribute('hidden');
+            requestAnimationFrame(function () {
+                positionActionMenuPanel(panel, trigger);
+            });
+        }
+
         document.addEventListener('click', function (e) {
             // Close row action menus on outside click
-            if (!e.target.closest('.action-menu')) {
+            if (!e.target.closest('.action-menu') && !e.target.closest('.action-menu-panel')) {
                 closeAllActionMenus();
             }
 
@@ -3631,13 +3674,12 @@ function renderAdminPage(
             if (menuTrigger) {
                 e.preventDefault();
                 var wrap = menuTrigger.closest('.action-menu');
-                var panel = wrap ? wrap.querySelector('.action-menu-panel') : null;
+                var panel = getActionMenuPanel(wrap);
                 if (panel) {
                     var wasHidden = panel.hasAttribute('hidden');
                     closeAllActionMenus();
                     if (wasHidden) {
-                        panel.removeAttribute('hidden');
-                        positionActionMenuPanel(panel, menuTrigger);
+                        openActionMenuPanel(panel, menuTrigger, wrap);
                         menuTrigger.setAttribute('aria-expanded', 'true');
                     }
                 }
